@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(curl -s http://localhost:8000/admin/login)",
-      "Bash(curl -s -c /tmp/cookies.txt -L http://localhost:8000/admin/login -d \"_token=$\\(curl -s http://localhost:8000/admin/login)",
-      "Bash(npx next:*)"
-    ]
-  }
-}
