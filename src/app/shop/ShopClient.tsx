@@ -1,0 +1,137 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { FiSearch } from "react-icons/fi";
+import ProductCard from "@/components/ProductCard";
+import { mapApiProduct } from "@/data/products";
+import type { Product } from "@/data/products";
+import { api } from "@/lib/api";
+import { toBn } from "@/utils/toBn";
+import { useChannel } from "@/lib/useChannel";
+
+type SortOption = "default" | "price_asc" | "price_desc" | "newest" | "popular";
+
+interface ShopClientProps {
+  initialProducts: Product[];
+  apiCategories: { id: number; name: string; slug: string }[];
+}
+
+export default function ShopClient({ initialProducts, apiCategories }: ShopClientProps) {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [sort, setSort] = useState<SortOption>("default");
+  const [search, setSearch] = useState("");
+
+  const reloadProducts = useCallback(() => {
+    api.getProducts()
+      .then((res) => {
+        const data = res.data || res;
+        if (Array.isArray(data) && data.length > 0) {
+          setProducts(data.map(mapApiProduct));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Real-time: auto-refresh shop when admin changes a product
+  useChannel("products", ".product.changed", () => { reloadProducts(); });
+
+  // Build category list from API categories
+  const categoryButtons = [
+    { name: "সকল পণ্য", slug: "all" },
+    ...apiCategories.map((c) => ({ name: c.name, slug: c.slug })),
+  ];
+
+  let filtered = activeCategory === "all"
+    ? products
+    : products.filter((p) => {
+        const cat = p.categoryBn || p.category || "";
+        const target = categoryButtons.find((c) => c.slug === activeCategory);
+        return target ? cat === target.name || cat.toLowerCase().includes(activeCategory.replace(/-/g, " ")) : false;
+      });
+
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter((p) =>
+      (p.nameBn || "").toLowerCase().includes(q) ||
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.descriptionBn || "").toLowerCase().includes(q)
+    );
+  }
+
+  if (sort === "price_asc") filtered = [...filtered].sort((a, b) => a.price - b.price);
+  if (sort === "price_desc") filtered = [...filtered].sort((a, b) => b.price - a.price);
+  if (sort === "newest") filtered = [...filtered].sort((a, b) => b.id - a.id);
+  if (sort === "popular") filtered = [...filtered].sort((a, b) => (b.originalPrice ? 1 : 0) - (a.originalPrice ? 1 : 0));
+
+  return (
+    <section className="py-8 md:py-12 bg-background-alt min-h-[70vh]">
+      <div className="container mx-auto px-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-8">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">সকল পণ্য</h1>
+              <p className="text-text-muted text-sm mt-1">{toBn(filtered.length)}টি পণ্য পাওয়া গেছে</p>
+            </div>
+            {/* Search */}
+            <div className="relative w-full md:w-72">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="পণ্য খুঁজুন..."
+                className="w-full pl-10 pr-4 py-2.5 border border-border rounded-xl text-sm bg-white focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Filters + Sort */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+            <div className="flex flex-wrap gap-2">
+              {categoryButtons.map((cat) => (
+                <button
+                  key={cat.slug}
+                  onClick={() => setActiveCategory(cat.slug)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeCategory === cat.slug ? "bg-primary text-white" : "bg-white text-foreground border border-border hover:border-primary hover:text-primary"}`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortOption)}
+              className="px-4 py-2.5 border border-border rounded-xl text-sm bg-white focus:border-primary focus:outline-none"
+            >
+              <option value="default">ডিফল্ট সর্টিং</option>
+              <option value="price_asc">দাম: কম থেকে বেশি</option>
+              <option value="price_desc">দাম: বেশি থেকে কম</option>
+              <option value="newest">নতুন পণ্য</option>
+              <option value="popular">জনপ্রিয়</option>
+            </select>
+          </div>
+
+          {/* Products Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {filtered.map((product, i) => (
+              <motion.div key={product.id} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+                <ProductCard product={product} />
+              </motion.div>
+            ))}
+          </div>
+
+          {filtered.length === 0 && (
+            <div className="text-center py-16 text-text-muted">
+              <p className="text-lg">কোনো পণ্য পাওয়া যায়নি</p>
+              <button onClick={() => { setActiveCategory("all"); setSearch(""); }} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
+                সব পণ্য দেখুন
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    </section>
+  );
+}

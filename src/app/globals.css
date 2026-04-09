@@ -1,0 +1,279 @@
+@import "tailwindcss";
+
+/* ==================== CUSTOM FONT ==================== */
+
+@font-face {
+  font-family: "LiAbuJMAkkas";
+  src: url("/fonts/LiAbuJMAkkas.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+09E6-09EF, U+09F3;
+  /* ০১২৩৪৫৬৭৮৯ and ৳ — only Bangla digits & taka sign use this font */
+}
+
+/* ==================== THEME VARIABLES ==================== */
+
+:root {
+  --primary: #0f5931;
+  --primary-light: #12693a;
+  --primary-dark: #0a3d22;
+  --primary-darker: #072b18;
+  --white: #ffffff;
+  --background: #ffffff;
+  --background-alt: #f7f7f7;
+  --foreground: #333333;
+  --text-body: #555555;
+  --text-muted: #888888;
+  --text-light: #aaaaaa;
+  --border: #e8e8e8;
+  --sale-red: #e91024;
+  --badge-green: #4caf50;
+  --facebook: #3b5998;
+  --instagram: #8a3ab9;
+  --youtube: #cd201f;
+  --whatsapp: #25d366;
+}
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-darker: var(--primary-darker);
+  --color-background: var(--background);
+  --color-background-alt: var(--background-alt);
+  --color-foreground: var(--foreground);
+  --color-text-body: var(--text-body);
+  --color-text-muted: var(--text-muted);
+  --color-text-light: var(--text-light);
+  --color-border: var(--border);
+  --color-sale-red: var(--sale-red);
+  --color-badge-green: var(--badge-green);
+  --color-facebook: var(--facebook);
+  --color-instagram: var(--instagram);
+  --color-youtube: var(--youtube);
+  --color-whatsapp: var(--whatsapp);
+  --font-sans: var(--font-hind-siliguri);
+  --font-bangla: var(--font-hind-siliguri);
+}
+
+/* ==================== LANGUAGE FONT SWITCHING ==================== */
+
+/* Bangla mode (default) — Hind Siliguri for everything */
+.lang-bn body {
+  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), system-ui, sans-serif;
+}
+
+/* English mode — Manrope for body, Playfair Display for headings */
+.lang-en body {
+  font-family: var(--font-manrope), system-ui, -apple-system, sans-serif;
+}
+
+.lang-en h1,
+.lang-en h2,
+.lang-en h3,
+.lang-en h4 {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+/* ==================== KEYFRAMES ==================== */
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+  70% { box-shadow: 0 0 0 14px rgba(37, 211, 102, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes countdown-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(60px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ==================== BASE STYLES ==================== */
+
+* {
+  /* scroll-behavior is set via data-scroll-behavior attr on <html> — required by Next.js 16 */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "LiAbuJMAkkas", var(--font-sans), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(15, 89, 49, 0.15);
+  color: var(--foreground);
+}
+
+/* ==================== SCROLLBAR ==================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dark);
+}
+
+/* ==================== FADE-IN ANIMATIONS ==================== */
+
+/* Only hide content for animation when JS is confirmed active.
+   Without .js-ready (no JS / slow connection), content stays visible. */
+.js-ready .fade-in {
+  opacity: 0;
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  will-change: opacity, transform;
+}
+
+.js-ready .fade-in-up { transform: translateY(20px); }
+.js-ready .fade-in-down { transform: translateY(-20px); }
+.js-ready .fade-in-left { transform: translateX(20px); }
+.js-ready .fade-in-right { transform: translateX(-20px); }
+
+.js-ready .fade-in-visible {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+/* ==================== UTILITY ==================== */
+
+.font-bangla {
+  font-family: var(--font-bangla), sans-serif;
+}
+
+.font-num {
+  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), sans-serif;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ==================== PRODUCT IMAGE PLACEHOLDER ==================== */
+
+.product-placeholder {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 50%, #a5d6a7 100%);
+  background-size: 200% 200%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* ==================== SWIPER OVERRIDES ==================== */
+
+.swiper-pagination-bullet {
+  background: var(--border) !important;
+  opacity: 1 !important;
+  width: 10px !important;
+  height: 10px !important;
+  transition: all 0.3s ease !important;
+}
+
+.swiper-pagination-bullet-active {
+  background: var(--primary) !important;
+  width: 26px !important;
+  border-radius: 5px !important;
+}
+
+.swiper-button-next,
+.swiper-button-prev {
+  color: var(--primary) !important;
+  background: var(--white);
+  border: 1px solid var(--border);
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.swiper-button-next::after,
+.swiper-button-prev::after {
+  font-size: 14px !important;
+  font-weight: bold !important;
+}
+
+.swiper-button-next:hover,
+.swiper-button-prev:hover {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+}
+
+/* ==================== SECTION HEADING ==================== */
+
+.section-heading {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 12px;
+}
+
+.section-heading::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+/* ==================== HIDE SCROLLBAR ==================== */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
