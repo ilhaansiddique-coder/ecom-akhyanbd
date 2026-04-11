@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiX } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
+import Modal from "@/components/Modal";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
+import { theme } from "@/lib/theme";
+import { useLang } from "@/lib/LanguageContext";
 
 interface FlashSale {
   id: number;
@@ -38,6 +41,7 @@ function formatDateTime(dt: string) {
 }
 
 export default function FlashSalesPage() {
+  const { t } = useLang();
   const [items, setItems] = useState<FlashSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -58,7 +62,7 @@ export default function FlashSalesPage() {
     if (!background) setLoading(true);
     api.admin.getFlashSales()
       .then((res) => setItems(res.data || res || []))
-      .catch(() => { if (!background) showToast("ডেটা লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -89,16 +93,16 @@ export default function FlashSalesPage() {
         const res = await api.admin.updateFlashSale(editId, form);
         const updated = res.data || res;
         setItems((prev) => prev.map((x) => (x.id === editId ? { ...x, ...updated } : x)));
-        showToast("ফ্ল্যাশ সেল আপডেট হয়েছে!");
+        showToast(t("toast.updated"));
       } else {
         const res = await api.admin.createFlashSale(form);
         const created = res.data || res;
         setItems((prev) => [created, ...prev]);
-        showToast("নতুন ফ্ল্যাশ সেল তৈরি হয়েছে!");
+        showToast(t("toast.created"));
       }
       setModalOpen(false);
     } catch {
-      showToast("সমস্যা হয়েছে, আবার চেষ্টা করুন", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -110,10 +114,10 @@ export default function FlashSalesPage() {
     try {
       await api.admin.deleteFlashSale(deleteId);
       setItems((prev) => prev.filter((x) => x.id !== deleteId));
-      showToast("ফ্ল্যাশ সেল মুছে ফেলা হয়েছে!");
+      showToast(t("toast.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("মুছতে সমস্যা হয়েছে", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setDeleting(false);
     }
@@ -123,15 +127,15 @@ export default function FlashSalesPage() {
     item.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none";
-  const labelCls = "block text-xs font-medium text-gray-600 mb-1";
+  const inputCls = theme.input;
+  const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="ফ্ল্যাশ সেল">
+    <DashboardLayout title={t("flash.title")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="এই ফ্ল্যাশ সেলটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।"
+        message={t("flash.deleteConfirm")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -143,7 +147,7 @@ export default function FlashSalesPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="ফ্ল্যাশ সেল খুঁজুন..."
+              placeholder={t("flash.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -154,7 +158,7 @@ export default function FlashSalesPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            নতুন ফ্ল্যাশ সেল
+            {t("flash.addNew")}
           </button>
         </div>
 
@@ -166,7 +170,7 @@ export default function FlashSalesPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {["শিরোনাম", "শুরু", "শেষ", "পণ্য সংখ্যা", "স্ট্যাটাস", ""].map((h) => (
+                    {[t("flash.name"), t("flash.start"), t("flash.end"), t("flash.productCount"), t("th.status"), ""].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -174,7 +178,7 @@ export default function FlashSalesPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-gray-400">কোনো ফ্ল্যাশ সেল পাওয়া যায়নি</td>
+                      <td colSpan={6} className="py-12 text-center text-gray-400">{t("flash.empty")}</td>
                     </tr>
                   ) : (
                     filtered.map((item) => (
@@ -190,7 +194,7 @@ export default function FlashSalesPage() {
                         <td className="px-4 py-3 text-gray-600">{toBn(item.products_count ?? 0)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {item.is_active ? "সক্রিয়" : "নিষ্ক্রিয়"}
+                            {item.is_active ? t("common.active") : t("common.inactive")}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -213,60 +217,36 @@ export default function FlashSalesPage() {
         </div>
       </motion.div>
 
-      <AnimatePresence>
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/50" onMouseDown={() => setModalOpen(false)}
-              onClick={() => setModalOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="text-base font-bold text-gray-800">{editId ? "ফ্ল্যাশ সেল সম্পাদনা" : "নতুন ফ্ল্যাশ সেল"}</h2>
-                <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div>
-                  <label className={labelCls}>শিরোনাম *</label>
-                  <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputCls} />
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>শুরুর সময় *</label>
-                    <input required type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>শেষের সময় *</label>
-                    <input required type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} className={inputCls} />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
-                  সক্রিয়
-                </label>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    বাতিল
-                  </button>
-                  <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-                    {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("flash.editFlash") : t("flash.newFlash")} size="lg">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className={labelCls}>{t("flash.name")} *</label>
+            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputCls} />
           </div>
-        )}
-      </AnimatePresence>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>{t("flash.start")} *</label>
+              <input required type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{t("flash.end")} *</label>
+              <input required type="datetime-local" value={form.ends_at} onChange={(e) => setForm({ ...form, ends_at: e.target.value })} className={inputCls} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
+            {t("form.active")}
+          </label>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              {t("btn.cancel")}
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
+              {saving ? t("btn.saving") : editId ? t("btn.update") : t("btn.create")}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardLayout>
   );
 }

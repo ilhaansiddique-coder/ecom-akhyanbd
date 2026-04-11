@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiSearch, FiX } from "react-icons/fi";
-import Image from "next/image";
 import Link from "next/link";
+import { SafeNextImage } from "@/components/SafeImage";
 import { toBn } from "@/utils/toBn";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+const API_URL = "/api/v1";
 
 interface SearchResult {
   id: number;
@@ -129,7 +129,7 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
                     >
                       <div className="w-12 h-12 rounded-lg bg-background-alt overflow-hidden shrink-0 relative">
                         {p.image ? (
-                          <Image src={p.image} alt={p.name} fill className="object-cover" sizes="48px" unoptimized={p.image.includes("/storage/")} />
+                          <SafeNextImage src={p.image || "/placeholder.svg"} alt={p.name} fill className="object-cover" sizes="48px" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-text-muted">
                             <FiSearch className="w-4 h-4" />

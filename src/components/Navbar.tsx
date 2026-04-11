@@ -153,7 +153,7 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
                 aria-label={t("nav.cart")}
               >
                 <FiShoppingCart className="w-5 h-5" />
-                {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-sale-red text-white text-[10px] font-bold rounded-full flex items-center justify-center">{lang === "bn" ? toBn(totalItems) : totalItems}</span>}
+                {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-sale-red text-white text-[10px] font-bold rounded-full flex items-center justify-center" suppressHydrationWarning>{toBn(totalItems)}</span>}
               </button>
               <AuthButton onAuthOpen={onAuthOpen} />
             </div>

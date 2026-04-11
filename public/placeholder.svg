@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#f3f4f6"/>
+  <g transform="translate(200,185)" text-anchor="middle">
+    <rect x="-40" y="-40" width="80" height="60" rx="8" fill="none" stroke="#d1d5db" stroke-width="2.5"/>
+    <circle cx="15" cy="-20" r="7" fill="none" stroke="#d1d5db" stroke-width="2"/>
+    <polyline points="-30,15 -10,-5 5,10 15,0 30,15" fill="none" stroke="#d1d5db" stroke-width="2.5" stroke-linejoin="round"/>
+    <text y="55" font-family="sans-serif" font-size="14" fill="#9ca3af">ছবি নেই</text>
+  </g>
+</svg>

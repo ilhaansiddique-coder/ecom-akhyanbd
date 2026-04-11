@@ -15,5 +15,5 @@ export default function T({ k, tag: Tag, className }: { k: string; tag?: "h1" | 
 /** Returns number formatted per current language (Bangla digits or English) */
 export function TNum({ value }: { value: number | string }) {
   const { lang } = useLang();
-  return <>{lang === "bn" ? toBn(value) : value}</>;
+  return <>{toBn(value)}</>;
 }

@@ -8,47 +8,29 @@ import "swiper/css/pagination";
 import MotionFadeIn from "./MotionFadeIn";
 import { useLang } from "@/lib/LanguageContext";
 
-const reviews = [
-  {
-    name: "মোঃ বেলাল শেখ",
-    review:
-      "খুবই ভালো মানের মধু পেয়েছি। টেস্ট অসাধারণ এবং একদম খাঁটি। ডেলিভারিও খুব দ্রুত হয়েছে। ধন্যবাদ মা ভেষজ বাণিজ্যালয়!",
-    rating: 5,
-    initials: "বশ",
-    color: "bg-primary",
-  },
-  {
-    name: "মোঃ মিলন মাহমুদ",
-    review:
-      "কাজু বাদাম অর্ডার করেছিলাম। একদম ফ্রেশ এবং ভালো মানের। প্যাকেজিংও অনেক সুন্দর ছিল। আবারও অর্ডার করব ইনশাআল্লাহ।",
-    rating: 5,
-    initials: "মম",
-    color: "bg-amber-600",
-  },
-  {
-    name: "শুহেভ আহমেদ",
-    review:
-      "মসলা কম্বো প্যাক নিয়েছিলাম। সব কিছু অনেক ফ্রেশ ও সুগন্ধযুক্ত। বাজারের চেয়ে অনেক ভালো মান। রিকমেন্ড করছি সবাইকে।",
-    rating: 5,
-    initials: "শআ",
-    color: "bg-emerald-600",
-  },
-  {
-    name: "মোঃ আতিকুর রহমান",
-    review:
-      "মা ভেষজ বাণিজ্যালয় থেকে প্রথম অর্ডার করলাম। খাঁটি পণ্য পেয়েছি। একদিনের মধ্যে ডেলিভারি পেয়ে অবাক হয়েছি। ভালো সার্ভিস!",
-    rating: 5,
-    initials: "আর",
-    color: "bg-blue-600",
-  },
-  {
-    name: "সামির আহমেদ",
-    review:
-      "কালোজিরা মধু নিয়েছিলাম। একদম খাঁটি, কোনো ভেজাল নেই। দামও অনেক রিজনেবল। এরকম খাঁটি পণ্য পাওয়া এখন কঠিন।",
-    rating: 5,
-    initials: "সআ",
-    color: "bg-purple-600",
-  },
+interface Review {
+  id: number;
+  customer_name: string;
+  rating: number;
+  review: string;
+  product_name?: string;
+}
+
+const avatarColors = [
+  "bg-primary", "bg-amber-600", "bg-emerald-600", "bg-blue-600",
+  "bg-purple-600", "bg-rose-600", "bg-teal-600", "bg-indigo-600",
+];
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return parts[0][0] + parts[1][0];
+  return name.slice(0, 2);
+}
+
+const fallbackReviews: Review[] = [
+  { id: 1, customer_name: "মোঃ বেলাল শেখ", review: "খুবই ভালো মানের পণ্য পেয়েছি। একদম খাঁটি। ডেলিভারিও খুব দ্রুত হয়েছে।", rating: 5 },
+  { id: 2, customer_name: "মোঃ মিলন মাহমুদ", review: "একদম ফ্রেশ এবং ভালো মানের পণ্য। প্যাকেজিংও অনেক সুন্দর ছিল।", rating: 5 },
+  { id: 3, customer_name: "শুহেভ আহমেদ", review: "বাজারের চেয়ে অনেক ভালো মান। রিকমেন্ড করছি সবাইকে।", rating: 5 },
 ];
 
 function StarRating({ rating }: { rating: number }) {
@@ -64,8 +46,10 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export default function CustomerReviews() {
+export default function CustomerReviews({ reviews }: { reviews?: Review[] }) {
   const { t } = useLang();
+  const items = reviews && reviews.length > 0 ? reviews : fallbackReviews;
+
   return (
     <section className="py-12 md:py-16 bg-background-alt">
       <div className="container mx-auto px-4">
@@ -89,25 +73,22 @@ export default function CustomerReviews() {
             }}
             className="pb-14"
           >
-            {reviews.map((review) => (
-              <SwiperSlide key={review.name}>
+            {items.map((review, idx) => (
+              <SwiperSlide key={review.id}>
                 <div className="bg-white rounded-2xl p-6 border border-border shadow-sm h-full">
-                  {/* Header */}
                   <div className="flex items-center gap-3 mb-4">
                     <div
-                      className={`w-12 h-12 rounded-full ${review.color} flex items-center justify-center text-white font-bold text-sm shrink-0`}
+                      className={`w-12 h-12 rounded-full ${avatarColors[idx % avatarColors.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}
                     >
-                      {review.initials}
+                      {getInitials(review.customer_name)}
                     </div>
                     <div className="min-w-0">
                       <h4 className="font-semibold text-foreground text-sm truncate">
-                        {review.name}
+                        {review.customer_name}
                       </h4>
                       <StarRating rating={review.rating} />
                     </div>
                   </div>
-
-                  {/* Review text */}
                   <p className="text-text-body text-sm leading-relaxed line-clamp-3">
                     {review.review}
                   </p>

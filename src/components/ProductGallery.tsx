@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { SafeNextImage } from "@/components/SafeImage";
 
 interface ProductGalleryProps {
   mainImage: string;
@@ -16,7 +16,7 @@ export default function ProductGallery({ mainImage, images, alt }: ProductGaller
   if (allImages.length <= 1) {
     return (
       <div className="relative aspect-square rounded-2xl overflow-hidden bg-white border border-border">
-        <Image src={mainImage} alt={alt} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority unoptimized={mainImage.includes("/storage/")} />
+        <SafeNextImage src={mainImage} alt={alt} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority />
       </div>
     );
   }
@@ -24,7 +24,7 @@ export default function ProductGallery({ mainImage, images, alt }: ProductGaller
   return (
     <div className="space-y-3">
       <div className="relative aspect-square rounded-2xl overflow-hidden bg-white border border-border">
-        <Image src={allImages[selected]} alt={alt} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority unoptimized={allImages[selected].includes("/storage/")} />
+        <SafeNextImage src={allImages[selected]} alt={alt} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority />
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {allImages.map((img, i) => (
@@ -33,7 +33,7 @@ export default function ProductGallery({ mainImage, images, alt }: ProductGaller
             onClick={() => setSelected(i)}
             className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-colors ${selected === i ? "border-primary" : "border-border hover:border-primary/50"}`}
           >
-            <Image src={img} alt={`${alt} ${i + 1}`} fill className="object-cover" sizes="64px" unoptimized={img.includes("/storage/")} />
+            <SafeNextImage src={img} alt={`${alt} ${i + 1}`} fill className="object-cover" sizes="64px" />
           </button>
         ))}
       </div>

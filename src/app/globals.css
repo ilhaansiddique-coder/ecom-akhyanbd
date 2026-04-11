@@ -64,17 +64,7 @@
   font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), system-ui, sans-serif;
 }
 
-/* English mode — Manrope for body, Playfair Display for headings */
-.lang-en body {
-  font-family: var(--font-manrope), system-ui, -apple-system, sans-serif;
-}
-
-.lang-en h1,
-.lang-en h2,
-.lang-en h3,
-.lang-en h4 {
-  font-family: var(--font-playfair), Georgia, serif;
-}
+/* English font overrides moved to after body rule for proper cascade */
 
 /* ==================== KEYFRAMES ==================== */
 
@@ -123,11 +113,28 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "LiAbuJMAkkas", var(--font-sans), system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Default font — Bengali */
+body {
+  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), system-ui, sans-serif;
+}
+
+/* English font override — must come AFTER default body font */
+html.lang-en body,
+html.lang-en body * {
+  font-family: var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
+}
+
+html.lang-en h1,
+html.lang-en h2,
+html.lang-en h3,
+html.lang-en h4 {
+  font-family: var(--font-bricolage), "Bricolage Grotesque", Georgia, serif !important;
 }
 
 ::selection {

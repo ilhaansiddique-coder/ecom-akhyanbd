@@ -1,0 +1,278 @@
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
+import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
+import { requireAdmin } from "@/lib/auth-helpers";
+import {
+  sendToSteadfast,
+  checkDeliveryStatus,
+  checkBalance,
+  checkCourierScore,
+  formatPhone,
+  generateInvoice,
+  isSteadfastConfigured,
+  clearKeyCache,
+  isValidBDPhone,
+} from "@/lib/steadfast";
+
+/**
+ * GET /api/v1/admin/courier?action=balance
+ * GET /api/v1/admin/courier?action=status&consignment_id=XXX
+ * GET /api/v1/admin/courier?action=score&phone=01XXXXXXXXX
+ */
+export async function GET(request: NextRequest) {
+  let admin;
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+
+  const action = request.nextUrl.searchParams.get("action");
+
+  // Test action — must run before configured check (it clears cache to re-read from DB)
+  if (action === "test") {
+    clearKeyCache();
+    try {
+      const configured = await isSteadfastConfigured();
+      if (!configured) return jsonResponse({ success: false, message: "API keys not set. Go to Settings to add them." });
+      const result = await checkBalance();
+      if (result.status === 200) {
+        return jsonResponse({ success: true, balance: result.current_balance });
+      }
+      return jsonResponse({ success: false, message: "Unauthorized — check API keys" });
+    } catch {
+      return jsonResponse({ success: false, message: "Connection failed" });
+    }
+  }
+
+  if (!(await isSteadfastConfigured())) {
+    return errorResponse("Steadfast API keys not configured. Go to Settings → Courier to add them.", 400);
+  }
+
+  // Check balance (also clears cache to get fresh keys)
+  if (action === "balance") {
+    clearKeyCache();
+    try {
+      const result = await checkBalance();
+      if (result.status === 200) {
+        return jsonResponse({ balance: result.current_balance });
+      }
+      return errorResponse("Unauthorized — check API keys", 401);
+    } catch {
+      return errorResponse("Failed to check balance", 500);
+    }
+  }
+
+  // Check delivery status
+  if (action === "status") {
+    const consignmentId = request.nextUrl.searchParams.get("consignment_id");
+    if (!consignmentId) return errorResponse("consignment_id required", 400);
+
+    try {
+      const result = await checkDeliveryStatus(consignmentId);
+      if (result.status === 200) {
+        return jsonResponse({
+          delivery_status: result.delivery_status,
+          consignment: result.consignment,
+        });
+      }
+      return errorResponse("Failed to get status", 400);
+    } catch {
+      return errorResponse("Failed to check status", 500);
+    }
+  }
+
+  // Check courier score
+  if (action === "score") {
+    const phone = request.nextUrl.searchParams.get("phone");
+    if (!phone) return errorResponse("phone required", 400);
+
+    try {
+      const result = await checkCourierScore(phone);
+      return jsonResponse(result);
+    } catch {
+      return errorResponse("Failed to check score", 500);
+    }
+  }
+
+  return errorResponse("Invalid action. Use: balance, status, score, test", 400);
+}
+
+/**
+ * POST /api/v1/admin/courier
+ * Body: { order_id: number } — Send order to Steadfast
+ * Body: { order_ids: number[] } — Bulk send orders
+ * Body: { action: "check_status", order_id: number } — Check & update status
+ */
+export async function POST(request: NextRequest) {
+  let admin;
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+
+  if (!(await isSteadfastConfigured())) {
+    return errorResponse("Steadfast API keys not configured", 400);
+  }
+
+  const body = await request.json();
+
+  // Check & update delivery status for an order
+  if (body.action === "check_status" && body.order_id) {
+    const order = await prisma.order.findUnique({ where: { id: Number(body.order_id) } });
+    if (!order) return notFound("Order not found");
+    if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
+
+    try {
+      const result = await checkDeliveryStatus(order.consignmentId);
+      if (result.status === 200 && result.delivery_status) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { courierStatus: result.delivery_status },
+        });
+        return jsonResponse({
+          delivery_status: result.delivery_status,
+          consignment: result.consignment,
+        });
+      }
+      return errorResponse("Failed to get status", 400);
+    } catch {
+      return errorResponse("Failed to check status", 500);
+    }
+  }
+
+  // Check courier score for an order
+  if (body.action === "check_score" && body.order_id) {
+    const order = await prisma.order.findUnique({ where: { id: Number(body.order_id) } });
+    if (!order) return notFound("Order not found");
+
+    try {
+      const result = await checkCourierScore(order.customerPhone);
+      if (result.success_ratio) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { courierScore: result.success_ratio },
+        });
+      }
+      return jsonResponse(result);
+    } catch {
+      return errorResponse("Failed to check score", 500);
+    }
+  }
+
+  // Bulk send orders
+  if (body.order_ids && Array.isArray(body.order_ids)) {
+    const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+
+    for (const orderId of body.order_ids) {
+      const order = await prisma.order.findUnique({
+        where: { id: Number(orderId) },
+        include: { items: true },
+      });
+
+      if (!order) {
+        results.push({ order_id: orderId, status: "not_found" });
+        continue;
+      }
+
+      if (order.courierSent) {
+        results.push({ order_id: orderId, status: "already_sent", consignment_id: order.consignmentId || undefined });
+        continue;
+      }
+
+      if (!isValidBDPhone(order.customerPhone)) {
+        results.push({ order_id: orderId, status: "error", error: `Invalid phone: ${order.customerPhone}` });
+        continue;
+      }
+
+      try {
+        const res = await sendToSteadfast({
+          invoice: generateInvoice(order.id),
+          recipient_name: order.customerName,
+          recipient_phone: formatPhone(order.customerPhone),
+          recipient_address: `${order.customerAddress}, ${order.city}${order.zipCode ? "-" + order.zipCode : ""}`,
+          cod_amount: order.total,
+          note: order.notes || "",
+        });
+
+        if (res.status === 200 && res.consignment) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              courierSent: true,
+              consignmentId: String(res.consignment.consignment_id),
+              courierStatus: "pending",
+            },
+          });
+          results.push({ order_id: orderId, status: "success", consignment_id: res.consignment.consignment_id });
+        } else {
+          const errMsg = res.errors
+            ? Object.values(res.errors).flat().join(", ")
+            : res.message || "Failed";
+          results.push({ order_id: orderId, status: "error", error: errMsg });
+        }
+      } catch (err) {
+        results.push({ order_id: orderId, status: "error", error: "Request failed" });
+      }
+    }
+
+    return jsonResponse({ results });
+  }
+
+  // Single order send
+  if (body.order_id) {
+    const order = await prisma.order.findUnique({
+      where: { id: Number(body.order_id) },
+      include: { items: true },
+    });
+
+    if (!order) return notFound("Order not found");
+    if (order.courierSent) {
+      return jsonResponse({
+        message: "Already sent to courier",
+        consignment_id: order.consignmentId,
+      });
+    }
+
+    // Validate phone
+    if (!isValidBDPhone(order.customerPhone)) {
+      return errorResponse(`Invalid phone number: ${order.customerPhone}. Must be a valid BD number (01XXXXXXXXX)`, 422);
+    }
+
+    try {
+      const payload = {
+        invoice: generateInvoice(order.id),
+        recipient_name: order.customerName,
+        recipient_phone: formatPhone(order.customerPhone),
+        recipient_address: `${order.customerAddress}, ${order.city}${order.zipCode ? "-" + order.zipCode : ""}`,
+        cod_amount: Math.round(Number(order.total)),
+        note: order.notes || "",
+      };
+      console.log("Sending to Steadfast:", JSON.stringify(payload));
+      const res = await sendToSteadfast(payload);
+      console.log("Steadfast response:", JSON.stringify(res));
+
+      if (res.status === 200 && res.consignment) {
+        const updated = await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            courierSent: true,
+            consignmentId: String(res.consignment.consignment_id),
+            courierStatus: "pending",
+          },
+          include: { items: true },
+        });
+
+        return jsonResponse({
+          message: "Order sent to Steadfast courier",
+          consignment_id: res.consignment.consignment_id,
+          order: serialize(updated),
+        });
+      }
+
+      const errMsg = res.errors
+        ? Object.values(res.errors).flat().join(", ")
+        : res.message || "Failed to send";
+      return errorResponse(errMsg, 400);
+    } catch (err) {
+      console.error("Steadfast send error:", err);
+      return errorResponse("Failed to send order to courier: " + (err instanceof Error ? err.message : "Unknown error"), 500);
+    }
+  }
+
+  return errorResponse("Provide order_id or order_ids", 400);
+}

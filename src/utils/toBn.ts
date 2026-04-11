@@ -1,10 +1,23 @@
 const bnDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
 
-export function toBn(num: number | string): string {
-  return String(num).replace(/[0-9]/g, (d) => bnDigits[parseInt(d)]);
+// Global language state — set by LanguageContext, read by toBn
+let currentLang: string = "bn";
+
+export function setNumberLang(lang: string) {
+  currentLang = lang;
 }
 
-/** Convert Bengali digits to English: "৫০০" → "500", "৳১,২৫০.৫০" → "1250.50" */
+/**
+ * Convert number to localized digits.
+ * Returns Bengali digits when language is "bn", English otherwise.
+ */
+export function toBn(num: number | string): string {
+  const str = String(num);
+  if (currentLang !== "bn") return str;
+  return str.replace(/[0-9]/g, (d) => bnDigits[parseInt(d)]);
+}
+
+/** Convert Bengali digits to English: "৫০০" → "500" */
 export function toEn(str: string): string {
   return str.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
 }

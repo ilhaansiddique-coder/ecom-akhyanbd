@@ -38,7 +38,7 @@ function Countdown({ endTime }: { endTime?: string }) {
       ].map((item, i) => (
         <div key={item.label} className="flex items-center gap-2">
           <div className="bg-primary text-white w-14 h-14 rounded-xl flex flex-col items-center justify-center shadow-md" style={{ animation: "countdown-pulse 1s ease-in-out infinite" }}>
-            <span className="text-lg font-bold leading-none">{lang === "bn" ? toBn(String(item.value).padStart(2, "0")) : String(item.value).padStart(2, "0")}</span>
+            <span className="text-lg font-bold leading-none" suppressHydrationWarning>{toBn(String(item.value).padStart(2, "0"))}</span>
             <span className="text-[9px] tracking-wider opacity-80">{item.label}</span>
           </div>
           {i < 2 && <span className="text-2xl font-bold text-primary">:</span>}

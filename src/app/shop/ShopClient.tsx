@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { FiSearch } from "react-icons/fi";
 import ProductCard from "@/components/ProductCard";
@@ -18,10 +19,39 @@ interface ShopClientProps {
 }
 
 export default function ShopClient({ initialProducts, apiCategories }: ShopClientProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [activeBrand, setActiveBrand] = useState<string>("");
   const [sort, setSort] = useState<SortOption>("default");
   const [search, setSearch] = useState("");
+
+  // Read URL params on mount: ?category=ID or ?brand=ID
+  useEffect(() => {
+    const catId = searchParams.get("category");
+    const brandId = searchParams.get("brand");
+
+    if (catId) {
+      const cat = apiCategories.find((c) => String(c.id) === catId);
+      if (cat) setActiveCategory(cat.slug);
+    }
+    if (brandId) {
+      setActiveBrand(brandId);
+    }
+  }, [searchParams, apiCategories]);
+
+  const handleCategoryClick = (slug: string) => {
+    setActiveCategory(slug);
+    setActiveBrand("");
+    // Update URL without reload
+    if (slug === "all") {
+      router.push("/shop", { scroll: false });
+    } else {
+      const cat = apiCategories.find((c) => c.slug === slug);
+      if (cat) router.push(`/shop?category=${cat.id}`, { scroll: false });
+    }
+  };
 
   const reloadProducts = useCallback(() => {
     api.getProducts()
@@ -47,9 +77,18 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
     ? products
     : products.filter((p) => {
         const cat = p.categoryBn || p.category || "";
+        const catSlug = p.category_slug || "";
+        const catId = String(p.category_id || "");
         const target = categoryButtons.find((c) => c.slug === activeCategory);
-        return target ? cat === target.name || cat.toLowerCase().includes(activeCategory.replace(/-/g, " ")) : false;
+        if (!target) return false;
+        const matchedCat = apiCategories.find((c) => c.slug === activeCategory);
+        return cat === target.name || catSlug === activeCategory || (matchedCat && catId === String(matchedCat.id)) || cat.toLowerCase().includes(activeCategory.replace(/-/g, " "));
       });
+
+  // Brand filter from URL
+  if (activeBrand) {
+    filtered = filtered.filter((p) => String(p.brand_id || "") === activeBrand);
+  }
 
   if (search.trim()) {
     const q = search.toLowerCase();
@@ -72,7 +111,7 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-8">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground">সকল পণ্য</h1>
-              <p className="text-text-muted text-sm mt-1">{toBn(filtered.length)}টি পণ্য পাওয়া গেছে</p>
+              <p className="text-text-muted text-sm mt-1" suppressHydrationWarning>{toBn(filtered.length)}টি পণ্য পাওয়া গেছে</p>
             </div>
             {/* Search */}
             <div className="relative w-full md:w-72">
@@ -93,7 +132,7 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
               {categoryButtons.map((cat) => (
                 <button
                   key={cat.slug}
-                  onClick={() => setActiveCategory(cat.slug)}
+                  onClick={() => handleCategoryClick(cat.slug)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeCategory === cat.slug ? "bg-primary text-white" : "bg-white text-foreground border border-border hover:border-primary hover:text-primary"}`}
                 >
                   {cat.name}

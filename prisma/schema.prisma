@@ -1,0 +1,355 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int       @id @default(autoincrement())
+  name            String
+  email           String    @unique
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  password        String
+  phone           String?
+  role            String    @default("customer")
+  avatar          String?
+  provider        String?
+  providerId      String?   @map("provider_id")
+  rememberToken   String?   @map("remember_token")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
+
+  orders    Order[]
+  wishlists Wishlist[]
+  addresses Address[]
+  reviews   Review[]
+  blogPosts BlogPost[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  email     String    @id
+  token     String
+  createdAt DateTime? @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slug        String    @unique
+  image       String?
+  description String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String
+  slug      String    @unique
+  logo      String?
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model Product {
+  id            Int       @id @default(autoincrement())
+  name          String
+  slug          String    @unique
+  categoryId    Int       @map("category_id")
+  brandId       Int?      @map("brand_id")
+  description   String?
+  price         Float
+  originalPrice Float?    @map("original_price")
+  image         String
+  images        String?
+  badge         String?
+  badgeColor    String?   @map("badge_color")
+  weight        String?
+  stock         Int       @default(0)
+  soldCount     Int       @default(0) @map("sold_count")
+  isActive      Boolean   @default(true) @map("is_active")
+  isFeatured    Boolean   @default(false) @map("is_featured")
+  sortOrder     Int       @default(0) @map("sort_order")
+  createdAt     DateTime? @default(now()) @map("created_at")
+  updatedAt     DateTime? @updatedAt @map("updated_at")
+
+  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  flashSales  FlashSaleProduct[]
+  landingPage LandingPage?
+  reviews     Review[]
+  wishlists   Wishlist[]
+  orderItems  OrderItem[]
+
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([slug])
+  @@index([soldCount])
+  @@index([createdAt])
+  @@index([categoryId, isActive])
+  @@index([brandId, isActive])
+  @@index([isActive, soldCount])
+  @@map("products")
+}
+
+model FlashSale {
+  id        Int       @id @default(autoincrement())
+  title     String
+  startsAt  DateTime  @map("starts_at")
+  endsAt    DateTime  @map("ends_at")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  products FlashSaleProduct[]
+
+  @@map("flash_sales")
+}
+
+model FlashSaleProduct {
+  id          Int       @id @default(autoincrement())
+  flashSaleId Int       @map("flash_sale_id")
+  productId   Int       @map("product_id")
+  salePrice   Float     @map("sale_price")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  flashSale FlashSale @relation(fields: [flashSaleId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("flash_sale_product")
+}
+
+model Order {
+  id              Int       @id @default(autoincrement())
+  userId          Int?      @map("user_id")
+  customerName    String    @map("customer_name")
+  customerPhone   String    @map("customer_phone")
+  customerEmail   String?   @map("customer_email")
+  customerAddress String    @map("customer_address")
+  city            String
+  zipCode         String?   @map("zip_code")
+  subtotal        Float
+  shippingCost    Float     @default(0) @map("shipping_cost")
+  total           Float
+  status          String    @default("pending")
+  paymentMethod   String    @default("cod") @map("payment_method")
+  paymentStatus   String    @default("unpaid") @map("payment_status")
+  notes              String?
+  courierSent        Boolean   @default(false) @map("courier_sent")
+  consignmentId      String?   @map("consignment_id")
+  courierStatus      String?   @map("courier_status")
+  courierScore       String?   @map("courier_score")
+  createdAt          DateTime? @default(now()) @map("created_at")
+  updatedAt          DateTime? @updatedAt @map("updated_at")
+
+  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          Int       @id @default(autoincrement())
+  orderId     Int       @map("order_id")
+  productId   Int?      @map("product_id")
+  productName String    @map("product_name")
+  price       Float
+  quantity    Int
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@map("order_items")
+}
+
+model Review {
+  id           Int       @id @default(autoincrement())
+  productId    Int       @map("product_id")
+  userId       Int?      @map("user_id")
+  customerName String    @map("customer_name")
+  rating       Int
+  review       String
+  image        String?
+  isApproved   Boolean   @default(false) @map("is_approved")
+  createdAt    DateTime? @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId, isApproved])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+model Wishlist {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  productId Int       @map("product_id")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+}
+
+model Coupon {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  type           String
+  value          Float
+  minOrderAmount Float     @default(0) @map("min_order_amount")
+  maxUses        Int?      @map("max_uses")
+  usedCount      Int       @default(0) @map("used_count")
+  startsAt       DateTime? @map("starts_at")
+  expiresAt      DateTime? @map("expires_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime? @default(now()) @map("created_at")
+  updatedAt      DateTime? @updatedAt @map("updated_at")
+
+  @@map("coupons")
+}
+
+model ShippingZone {
+  id            Int       @id @default(autoincrement())
+  name          String
+  cities        String
+  rate          Float
+  estimatedDays String?   @map("estimated_days")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime? @default(now()) @map("created_at")
+  updatedAt     DateTime? @updatedAt @map("updated_at")
+
+  @@map("shipping_zones")
+}
+
+model Address {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  label     String
+  name      String
+  phone     String
+  address   String
+  city      String
+  zipCode   String?   @map("zip_code")
+  isDefault Boolean   @default(false) @map("is_default")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+model Banner {
+  id          Int       @id @default(autoincrement())
+  title       String
+  subtitle    String?
+  description String?
+  buttonText  String?   @map("button_text")
+  buttonUrl   String?   @map("button_url")
+  image       String?
+  gradient    String?
+  emoji       String?
+  position    String    @default("hero")
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  @@index([isActive, position])
+  @@map("banners")
+}
+
+model NavMenu {
+  id        Int       @id @default(autoincrement())
+  label     String
+  url       String
+  sortOrder Int       @default(0) @map("sort_order")
+  parentId  Int?      @map("parent_id")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  parent   NavMenu?  @relation("MenuHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children NavMenu[] @relation("MenuHierarchy")
+
+  @@index([isActive, parentId])
+  @@map("nav_menus")
+}
+
+model LandingPage {
+  id                Int       @id @default(autoincrement())
+  productId         Int       @unique @map("product_id")
+  slug              String    @unique
+  customTitle       String?   @map("custom_title")
+  customDescription String?   @map("custom_description")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime? @default(now()) @map("created_at")
+  updatedAt         DateTime? @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("landing_pages")
+}
+
+model BlogPost {
+  id          Int       @id @default(autoincrement())
+  title       String
+  slug        String    @unique
+  excerpt     String?
+  content     String
+  image       String?
+  authorId    Int?      @map("author_id")
+  isPublished Boolean   @default(false) @map("is_published")
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([isPublished])
+  @@index([slug])
+  @@map("blog_posts")
+}
+
+model SiteSetting {
+  id        Int       @id @default(autoincrement())
+  key       String    @unique
+  value     String?
+  group     String    @default("general")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}

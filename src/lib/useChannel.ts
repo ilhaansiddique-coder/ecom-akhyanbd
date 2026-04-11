@@ -3,12 +3,22 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Subscribe to a public Reverb channel and listen for events.
- * Falls back gracefully if WebSocket is unavailable.
+ * Real-time sync via polling.
+ * Polls a lightweight endpoint to detect changes, then calls the callback.
+ * Replaces WebSocket — works with SQLite, no extra server needed.
+ *
+ * Usage:
+ *   useChannel("products", ".product.changed", () => refetchProducts());
  */
+
+const POLL_INTERVAL = 5000; // 5 seconds
+
+// Global version store — tracks last known version per channel
+const versions: Record<string, number> = {};
+
 export function useChannel(
   channelName: string,
-  eventName: string,
+  _eventName: string,
   callback: (data: Record<string, unknown>) => void,
 ) {
   const callbackRef = useRef(callback);
@@ -16,44 +26,40 @@ export function useChannel(
 
   useEffect(() => {
     let cancelled = false;
-    let channel: { stopListening: (event: string) => void } | null = null;
 
-    // Defer WebSocket subscription until the browser is idle so it
-    // doesn't compete with initial page load and rendering.
-    const connect = () => {
-      import("@/lib/echo").then(({ getEcho }) => {
-        if (cancelled) return;
-        try {
-          const echo = getEcho();
-          channel = echo.channel(channelName);
-          channel.stopListening(eventName); // clear any prior listener on same event
-          (channel as ReturnType<typeof echo.channel>).listen(eventName, (data: Record<string, unknown>) => {
-            callbackRef.current(data);
-          });
-        } catch (err) {
-          console.warn(`[useChannel] Failed to subscribe to ${channelName}:`, err);
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`/api/v1/sync?channel=${channelName}`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const newVersion = data.version || 0;
+          const prevVersion = versions[channelName];
+
+          if (prevVersion !== undefined && newVersion !== prevVersion) {
+            // Version changed — trigger refresh
+            callbackRef.current({ channel: channelName, version: newVersion });
+          }
+          versions[channelName] = newVersion;
         }
-      }).catch(() => {
-        // Echo module failed to load — WebSocket unavailable
-      });
+      } catch {
+        // Silently fail — will retry next interval
+      }
     };
 
-    // Use requestIdleCallback when available, fall back to setTimeout
-    let cleanupTimer: (() => void) | null = null;
-    if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(connect);
-      cleanupTimer = () => cancelIdleCallback(id);
-    } else {
-      const id = setTimeout(connect, 2000);
-      cleanupTimer = () => clearTimeout(id);
-    }
+    // Initial check after a short delay
+    const initialTimeout = setTimeout(poll, 1000);
+
+    // Then poll at interval
+    const interval = setInterval(poll, POLL_INTERVAL);
 
     return () => {
       cancelled = true;
-      cleanupTimer?.();
-      if (channel) {
-        try { channel.stopListening(eventName); } catch {}
-      }
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
     };
-  }, [channelName, eventName]);
+  }, [channelName]);
 }

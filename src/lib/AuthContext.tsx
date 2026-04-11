@@ -26,30 +26,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      // Non-blocking: children render immediately, user state updates when ready
-      api.getUser()
-        .then((res) => setUser(res.data || res))
-        .catch(() => localStorage.removeItem("auth_token"))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    // Check session via cookie-based auth
+    api.getUser()
+      .then((res) => setUser(res.data || res))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const res = await api.login({ email, password });
-    if (!res.token) throw new Error("Login failed: no token received");
-    localStorage.setItem("auth_token", res.token);
+    // Cookie is set by the server automatically
     setUser(res.user);
     return res.user;
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string, passwordConfirmation: string, phone?: string): Promise<User> => {
     const res = await api.register({ name, email, password, password_confirmation: passwordConfirmation, phone });
-    if (!res.token) throw new Error("Registration failed: no token received");
-    localStorage.setItem("auth_token", res.token);
+    // Cookie is set by the server automatically
     setUser(res.user);
     return res.user;
   }, []);
@@ -58,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.logout();
     } catch {}
-    localStorage.removeItem("auth_token");
+    // Cookie is cleared by the server
     setUser(null);
   }, []);
 

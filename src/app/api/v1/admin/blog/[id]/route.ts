@@ -1,0 +1,83 @@
+import { NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
+import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
+import { requireAdmin } from "@/lib/auth-helpers";
+import { blogPostSchema } from "@/lib/validation";
+import { uniqueSlug } from "@/lib/unique-slug";
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let admin;
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+
+  const { id } = await params;
+  const post = await prisma.blogPost.findUnique({
+    where: { id: Number(id) },
+    include: { author: true },
+  });
+
+  if (!post) return notFound("Blog post not found");
+  return jsonResponse(serialize(post));
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let admin;
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+
+  const { id } = await params;
+  const existing = await prisma.blogPost.findUnique({ where: { id: Number(id) } });
+  if (!existing) return notFound("Blog post not found");
+
+  try {
+    const body = await request.json();
+    const parsed = blogPostSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+
+    const data = parsed.data;
+    const slug = await uniqueSlug(data.title, "blogPost", data.slug, Number(id));
+
+    const post = await prisma.blogPost.update({
+      where: { id: Number(id) },
+      data: {
+        title: data.title,
+        slug,
+        excerpt: data.excerpt ?? null,
+        content: data.content,
+        image: data.image ?? null,
+        isPublished: data.is_published ?? false,
+        publishedAt: data.published_at ? new Date(data.published_at) : null,
+      },
+      include: { author: true },
+    });
+
+    revalidateTag("blog", "max");
+    return jsonResponse(serialize(post));
+  } catch (error) {
+    return errorResponse("Failed to update blog post", 500);
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let admin;
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+
+  const { id } = await params;
+  const existing = await prisma.blogPost.findUnique({ where: { id: Number(id) } });
+  if (!existing) return notFound("Blog post not found");
+
+  await prisma.blogPost.delete({ where: { id: Number(id) } });
+  revalidateTag("blog", "max");
+  return jsonResponse({ message: "Blog post deleted" });
+}

@@ -9,36 +9,6 @@ const nextConfig: NextConfig = {
         hostname: "mavesoj.com",
         pathname: "/**",
       },
-      {
-        protocol: "http",
-        hostname: "localhost",
-        port: "8001",
-        pathname: "/storage/**",
-        search: "",
-      },
-      {
-        protocol: "http",
-        hostname: "127.0.0.1",
-        port: "8001",
-        pathname: "/storage/**",
-        search: "",
-      },
-      {
-        protocol: "http",
-        hostname: "mabheshoj-api.test",
-        pathname: "/storage/**",
-        search: "",
-      },
-      // Production API (HTTPS)
-      ...(process.env.NEXT_PUBLIC_API_URL?.startsWith("https")
-        ? [
-            {
-              protocol: "https" as const,
-              hostname: new URL(process.env.NEXT_PUBLIC_API_URL).hostname,
-              pathname: "/storage/**",
-            },
-          ]
-        : []),
     ],
     formats: ["image/avif", "image/webp"],
   },
@@ -52,6 +22,19 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 300,
     },
+  },
+  // Redirect old Laravel storage paths to new uploads location
+  async rewrites() {
+    return [
+      {
+        source: "/storage/uploads/:path*",
+        destination: "/uploads/:path*",
+      },
+      {
+        source: "/storage/:path*",
+        destination: "/uploads/:path*",
+      },
+    ];
   },
   compress: true,
   poweredByHeader: false,

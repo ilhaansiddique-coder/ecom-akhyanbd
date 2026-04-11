@@ -1,0 +1,259 @@
+import { z } from "zod";
+
+// ─── Reusable field types ───
+// Use these everywhere to ensure consistent handling of form data.
+// z.coerce automatically converts strings/null to the correct type.
+
+/** Number field — converts strings & null to number. Use for price, stock, IDs, etc. */
+const num = z.coerce.number();
+
+/** Optional nullable number */
+const numOpt = z.coerce.number().nullable().optional();
+
+/** Integer field */
+const int = z.coerce.number().int();
+
+/** Optional integer with default */
+const intDef = (def: number) => z.coerce.number().int().default(def);
+
+/** Optional nullable string */
+const strOpt = z.string().nullable().optional();
+
+/** Boolean with default */
+const boolDef = (def: boolean) => z.boolean().default(def);
+
+// ─── Auth ───
+export const registerSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8),
+  password_confirmation: z.string().min(8),
+  phone: z.string().optional(),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  code: z.string().min(1),
+  password: z.string().min(8),
+  password_confirmation: z.string().min(8),
+});
+
+export const updateProfileSchema = z.object({
+  name: z.string().max(255).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().nullable().optional(),
+});
+
+export const updatePasswordSchema = z.object({
+  current_password: z.string().min(1),
+  password: z.string().min(8),
+  password_confirmation: z.string().min(8),
+});
+
+// ─── Orders ───
+export const createOrderSchema = z.object({
+  customer_name: z.string().min(1),
+  customer_phone: z.string().min(1).optional(),
+  customer_email: z.string().email().optional().or(z.literal("")),
+  customer_address: z.string().min(1).optional(),
+  phone: z.string().min(1).optional(),
+  address: z.string().min(1).optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  city: z.string().min(1),
+  zip_code: z.string().optional(),
+  subtotal: z.coerce.number(),
+  shipping_cost: z.coerce.number().optional(),
+  coupon_code: z.string().optional(),
+  discount: z.coerce.number().optional(),
+  total: z.coerce.number(),
+  payment_method: z.enum(["cod", "bkash", "nagad", "bank"]).default("cod"),
+  notes: z.string().optional(),
+  items: z.array(
+    z.object({
+      product_id: z.coerce.number(),
+      product_name: z.string().optional(),
+      quantity: z.coerce.number().int().min(1),
+      price: z.coerce.number(),
+    })
+  ).min(1),
+});
+
+// ─── Reviews ───
+export const createReviewSchema = z.object({
+  product_id: z.coerce.number(),
+  customer_name: z.string().min(1),
+  rating: z.coerce.number().int().min(1).max(5),
+  review: z.string().min(1),
+});
+
+// ─── Coupons ───
+export const applyCouponSchema = z.object({
+  code: z.string().min(1),
+  subtotal: z.coerce.number(),
+});
+
+// ─── Shipping ───
+export const calculateShippingSchema = z.object({
+  city: z.string().min(1),
+});
+
+// ─── Addresses ───
+export const addressSchema = z.object({
+  label: z.string().min(1),
+  name: z.string().min(1),
+  phone: z.string().min(1),
+  address: z.string().min(1),
+  city: z.string().min(1),
+  zip_code: z.string().optional(),
+  is_default: z.boolean().optional(),
+});
+
+// ─── Contact ───
+export const contactSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  subject: z.string().optional(),
+  message: z.string().min(1),
+});
+
+// ─── Admin: Products ───
+export const productSchema = z.object({
+  // ── Required ──
+  name: z.string().min(1, "পণ্যের নাম দিন"),
+  price: z.coerce.number().min(1, "দাম দিন"),
+  // ── Optional ──
+  slug: strOpt,
+  category_id: numOpt,
+  brand_id: numOpt,
+  description: strOpt,
+  original_price: numOpt,
+  image: strOpt,
+  images: z.array(z.string()).nullable().optional(),
+  badge: strOpt,
+  badge_color: strOpt,
+  weight: strOpt,
+  stock: intDef(0),
+  sold_count: int.optional(),
+  is_active: boolDef(true),
+  is_featured: boolDef(false),
+  sort_order: intDef(0),
+});
+
+// ─── Admin: Categories ───
+export const categorySchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  image: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  sort_order: z.number().int().default(0),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Brands ───
+export const brandSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  logo: z.string().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Flash Sales ───
+export const flashSaleSchema = z.object({
+  title: z.string().min(1),
+  starts_at: z.string(),
+  ends_at: z.string(),
+  is_active: z.boolean().default(true),
+  products: z.array(z.object({
+    id: z.coerce.number(),
+    sale_price: z.coerce.number(),
+  })).optional(),
+});
+
+// ─── Admin: Coupons ───
+export const couponSchema = z.object({
+  code: z.string().min(1),
+  type: z.enum(["fixed", "percentage"]),
+  value: z.coerce.number(),
+  min_order_amount: z.coerce.number().default(0),
+  max_uses: z.coerce.number().nullable().optional(),
+  starts_at: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Banners ───
+export const bannerSchema = z.object({
+  title: z.string().min(1),
+  subtitle: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  button_text: z.string().nullable().optional(),
+  button_url: z.string().nullable().optional(),
+  image: z.string().nullable().optional(),
+  gradient: z.string().nullable().optional(),
+  emoji: z.string().nullable().optional(),
+  position: z.string().default("hero"),
+  sort_order: z.coerce.number().int().default(0),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Nav Menus ───
+export const menuSchema = z.object({
+  label: z.string().min(1),
+  url: z.string().min(1),
+  sort_order: z.coerce.number().int().default(0),
+  parent_id: z.coerce.number().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Blog ───
+export const blogPostSchema = z.object({
+  title: z.string().min(1),
+  slug: z.string().optional(),
+  excerpt: z.string().nullable().optional(),
+  content: z.string().min(1),
+  image: z.string().nullable().optional(),
+  is_published: z.boolean().default(false),
+  published_at: z.string().nullable().optional(),
+});
+
+// ─── Admin: Shipping Zones ───
+export const shippingZoneSchema = z.object({
+  name: z.string().min(1),
+  cities: z.array(z.string()),
+  rate: z.coerce.number(),
+  estimated_days: z.string().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Landing Pages ───
+export const landingPageSchema = z.object({
+  product_id: z.coerce.number(),
+  slug: z.string().min(1),
+  custom_title: z.string().nullable().optional(),
+  custom_description: z.string().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+
+// ─── Admin: Users ───
+export const userSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8).optional(),
+  phone: z.string().nullable().optional(),
+  role: z.enum(["customer", "admin"]).default("customer"),
+});
+
+// ─── Admin: Orders status ───
+export const orderStatusSchema = z.object({
+  status: z.enum(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]),
+  payment_status: z.enum(["unpaid", "paid"]).optional(),
+});

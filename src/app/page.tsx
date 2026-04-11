@@ -10,7 +10,7 @@ import Features from "@/components/Features";
 import { mapApiProduct, latestProducts as staticLatest, topRatedProducts as staticTopRated } from "@/data/products";
 import type { Product } from "@/data/products";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
 
 const emojiMap: Record<string, string> = {
   "ভেষজ গুঁড়ো": "🌿", "ভেষজ চা": "🍵", "হার্ট কেয়ার": "❤️",
@@ -42,12 +42,15 @@ async function fetchCategories() {
     const data = await res.json();
     const cats = Array.isArray(data) ? data : data.data || [];
     if (cats.length === 0) return fallbackCategories;
-    const mapped = cats.map((c: { name: string; slug: string }) => ({
-      name: c.name, slug: c.slug,
+    const mapped = cats.map((c: { id?: number; name: string; slug: string; image?: string; products_count?: number }) => ({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      image: c.image || null,
+      products_count: c.products_count || 0,
       emoji: emojiMap[c.name] || "📦",
       color: colorMap[c.name] || "from-gray-50 to-gray-100",
     }));
-    mapped.push({ name: "সকল পণ্য", emoji: "🛒", slug: "all", color: "from-lime-50 to-lime-100" });
     return mapped;
   } catch {
     return fallbackCategories;
@@ -119,9 +122,37 @@ async function fetchTopRatedProducts(): Promise<Product[]> {
   }
 }
 
+async function fetchBanners() {
+  try {
+    const res = await fetch(`${API_URL}/banners`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 600, tags: ["banners"] },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchApprovedReviews() {
+  try {
+    // Fetch all products, then get reviews for each — or use a simpler approach:
+    // Get all approved reviews from the admin endpoint (public-facing)
+    const res = await fetch(`${API_URL}/reviews/approved`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300, tags: ["reviews"] },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.data || [];
+  } catch {
+    return [];
+  }
+}
+
 /* ---------- Independent async section components ---------- */
-/* Each fetches its own data so Suspense can stream them independently.
-   Hero, AdBanners, Features, CustomerReviews are data-free and appear instantly. */
 
 async function CategoriesSection() {
   const categories = await fetchCategories();
@@ -141,6 +172,16 @@ async function LatestProductsSection() {
 async function TopRatedProductsSection() {
   const products = await fetchTopRatedProducts();
   return <TopRatedProducts products={products} />;
+}
+
+async function BannersSection() {
+  const banners = await fetchBanners();
+  return <AdBanners banners={banners} />;
+}
+
+async function ReviewsSection() {
+  const reviews = await fetchApprovedReviews();
+  return <LazyCustomerReviews reviews={reviews} />;
 }
 
 /* ---------- Lightweight skeleton placeholders ---------- */
@@ -203,11 +244,15 @@ export default function Home() {
       <Suspense fallback={<ProductsSkeleton />}>
         <LatestProductsSection />
       </Suspense>
-      <AdBanners />
+      <Suspense fallback={null}>
+        <BannersSection />
+      </Suspense>
       <Suspense fallback={<ProductsSkeleton />}>
         <TopRatedProductsSection />
       </Suspense>
-      <LazyCustomerReviews />
+      <Suspense fallback={null}>
+        <ReviewsSection />
+      </Suspense>
       <Features />
     </>
   );

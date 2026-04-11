@@ -15,6 +15,7 @@ const LanguageContext = createContext<LanguageContextType | null>(null);
 /* --------------- translations --------------- */
 import { bn } from "@/i18n/bn";
 import { en } from "@/i18n/en";
+import { setNumberLang } from "@/utils/toBn";
 
 const dicts: Record<Lang, Record<string, string>> = { bn, en };
 
@@ -23,11 +24,15 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("lang") as Lang | null;
-    if (saved === "en" || saved === "bn") setLangState(saved);
+    if (saved === "en" || saved === "bn") {
+      setLangState(saved);
+      setNumberLang(saved);
+    }
   }, []);
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
+    setNumberLang(l);
     localStorage.setItem("lang", l);
     document.documentElement.lang = l === "en" ? "en" : "bn";
     document.documentElement.classList.toggle("lang-en", l === "en");
@@ -42,7 +47,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [lang]);
 
   const t = useCallback((key: string): string => {
-    return dicts[lang][key] || dicts.bn[key] || key;
+    const val = dicts[lang][key] ?? dicts.bn[key];
+    return val !== undefined ? val : key;
   }, [lang]);
 
   return (

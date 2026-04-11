@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { SafeNextImage } from "@/components/SafeImage";
 import { FiShoppingCart, FiHeart } from "react-icons/fi";
 import type { Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
@@ -21,7 +21,7 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   const wishlisted = isWishlisted(product.id);
   const displayName = product.nameBn || product.name;
   const { price, originalPrice, image: rawImage, badge, badgeColor = "bg-primary" } = product;
-  const image = rawImage || "/placeholder.png";
+  const image = rawImage || "/placeholder.svg";
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
   const slug = product.slug || product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
@@ -33,14 +33,13 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
     <div className="bg-white rounded-2xl border border-border overflow-hidden group shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
       <Link href={`/products/${slug}`} className="block">
         <div className="relative overflow-hidden aspect-square bg-background-alt">
-          <Image
+          <SafeNextImage
             src={image}
             alt={displayName}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-500"
             priority={priority}
-            unoptimized={image.includes("/storage/")}
           />
 
           {badge && (
@@ -50,8 +49,8 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
           )}
 
           {discount > 0 && !badge && (
-            <span className="absolute top-3 left-3 bg-sale-red text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md">
-              -{lang === "bn" ? toBn(discount) : discount}%
+            <span className="absolute top-3 left-3 bg-sale-red text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md" suppressHydrationWarning>
+              -{toBn(discount)}%
             </span>
           )}
 
@@ -82,9 +81,9 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
         </Link>
 
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="font-bold text-primary text-lg">৳{lang === "bn" ? toBn(price) : price}</span>
+          <span className="font-bold text-primary text-lg" suppressHydrationWarning>৳{toBn(price)}</span>
           {originalPrice && (
-            <span className="text-text-light line-through text-sm">৳{lang === "bn" ? toBn(originalPrice) : originalPrice}</span>
+            <span className="text-text-light line-through text-sm" suppressHydrationWarning>৳{toBn(originalPrice)}</span>
           )}
         </div>
 

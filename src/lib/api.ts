@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+const API_URL = "/api/v1";
 
 class ApiError extends Error {
   status: number;
@@ -13,7 +13,6 @@ class ApiError extends Error {
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
   const url = `${API_URL}${endpoint}`;
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -21,10 +20,10 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
     const res = await fetch(url, {
       ...options,
       signal: controller.signal,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
     });
@@ -107,10 +106,10 @@ export const api = {
   // ============ ADMIN API ============
   admin: {
     dashboard: () => fetchAPI("/admin/dashboard"),
-    stats: () => fetchAPI("/admin/stats"),
-    recentOrders: () => fetchAPI("/admin/recent-orders"),
-    topProducts: () => fetchAPI("/admin/top-products"),
-    lowStock: () => fetchAPI("/admin/low-stock"),
+    stats: () => fetchAPI("/admin/dashboard"),
+    recentOrders: () => fetchAPI("/admin/dashboard"),
+    topProducts: () => fetchAPI("/admin/dashboard"),
+    lowStock: () => fetchAPI("/admin/dashboard"),
 
     // Products
     getProducts: (params?: string) => fetchAPI(`/admin/products${params ? `?${params}` : ""}`),
@@ -134,6 +133,7 @@ export const api = {
     // Orders
     getOrders: (params?: string) => fetchAPI(`/admin/orders${params ? `?${params}` : ""}`),
     getOrder: (id: number) => fetchAPI(`/admin/orders/${id}`),
+    updateOrder: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     updateOrderStatus: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/orders/${id}/status`, { method: "PUT", body: JSON.stringify(data) }),
     deleteOrder: (id: number) => fetchAPI(`/admin/orders/${id}`, { method: "DELETE" }),
 
@@ -142,6 +142,7 @@ export const api = {
     createUser: (data: Record<string, unknown>) => fetchAPI("/admin/users", { method: "POST", body: JSON.stringify(data) }),
     updateUser: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     deleteUser: (id: number) => fetchAPI(`/admin/users/${id}`, { method: "DELETE" }),
+    searchCustomers: (q: string) => fetchAPI(`/admin/customers/search?q=${encodeURIComponent(q)}`),
 
     // Reviews
     getReviews: (params?: string) => fetchAPI(`/admin/reviews${params ? `?${params}` : ""}`),
@@ -198,10 +199,10 @@ export const api = {
     upload: (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
       return fetch(`${API_URL}/admin/upload`, {
         method: "POST",
-        headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+        headers: { Accept: "application/json" },
         body: formData,
       }).then(async (r) => {
         if (!r.ok) {
@@ -211,5 +212,14 @@ export const api = {
         return r.json();
       });
     },
+
+    // Courier (Steadfast)
+    courierBalance: () => fetchAPI("/admin/courier?action=balance"),
+    courierStatus: (consignmentId: string) => fetchAPI(`/admin/courier?action=status&consignment_id=${consignmentId}`),
+    courierScore: (phone: string) => fetchAPI(`/admin/courier?action=score&phone=${phone}`),
+    sendToCourier: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ order_id: orderId }) }),
+    bulkSendToCourier: (orderIds: number[]) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ order_ids: orderIds }) }),
+    checkCourierStatus: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ action: "check_status", order_id: orderId }) }),
+    checkCourierScore: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ action: "check_score", order_id: orderId }) }),
   },
 };

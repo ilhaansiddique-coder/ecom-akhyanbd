@@ -8,6 +8,7 @@ import { useCart, CartItem } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
+import { SafeImg } from "@/components/SafeImage";
 // Lazy-loaded: html2canvas-pro (~15KB) + jspdf (~60KB) only when user clicks download
 const loadPdfLibs = () => Promise.all([
   import("html2canvas-pro").then(m => m.default),
@@ -80,15 +81,13 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (user) {
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1"}/addresses`, {
-          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-        })
-          .then((r) => r.ok ? r.json() : [])
-          .then((data) => setSavedAddresses(Array.isArray(data) ? data : data.data || []))
-          .catch(() => {});
-      }
+      fetch(`/api/v1/addresses`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      })
+        .then((r) => r.ok ? r.json() : [])
+        .then((data) => setSavedAddresses(Array.isArray(data) ? data : data.data || []))
+        .catch(() => {});
     }
   }, [user]);
 
@@ -106,8 +105,7 @@ export default function CheckoutPage() {
     setCouponLoading(true);
     setCouponMsg("");
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
-      const res = await fetch(`${API}/coupons/apply`, {
+      const res = await fetch(`/api/v1/coupons/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ code: couponCode, subtotal: totalPrice }),
@@ -132,7 +130,7 @@ export default function CheckoutPage() {
     if (!newCity.trim()) { setShippingCost(DEFAULT_SHIPPING); return; }
     setShippingLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1"}/shipping/calculate`, {
+      const res = await fetch(`/api/v1/shipping/calculate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ city: newCity, subtotal: totalPrice }),
@@ -577,7 +575,7 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg overflow-hidden bg-background-alt shrink-0">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      <SafeImg src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{item.name}</p>

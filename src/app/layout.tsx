@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Hind_Siliguri, Playfair_Display, Manrope } from "next/font/google";
+import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 
@@ -21,6 +21,13 @@ const manrope = Manrope({
   variable: "--font-manrope",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -60,18 +67,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const apiOrigin = (() => {
-    try { return new URL(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").origin; }
-    catch { return "http://localhost:8001"; }
-  })();
-
   return (
-    <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
-      <head>
-        {/* Preconnect to API for faster data fetches */}
-        <link rel="preconnect" href={apiOrigin} />
-        <link rel="dns-prefetch" href={apiOrigin} />
-      </head>
+    <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
         {/* Mark JS as active so fade-in animations only apply after hydration.
             Without this, content stays visible (no invisible flash). */}

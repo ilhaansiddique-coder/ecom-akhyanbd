@@ -6,6 +6,7 @@ import { FiX, FiShoppingBag, FiTrash2, FiMinus, FiPlus } from "react-icons/fi";
 import Link from "next/link";
 import { useCart } from "@/lib/CartContext";
 import { toBn } from "@/utils/toBn";
+import { SafeImg } from "@/components/SafeImage";
 
 interface CartDrawerProps {
   open: boolean;
@@ -51,7 +52,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                 items.map((item) => (
                   <motion.div key={item.id} layout className="flex gap-4 p-3 bg-background-alt rounded-xl">
                     <div className="w-20 h-20 rounded-lg overflow-hidden bg-white shrink-0">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      <SafeImg src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-sm text-foreground truncate">{item.name}</h3>

@@ -6,15 +6,20 @@ import { api } from "@/lib/api";
 import { toBn, parseNum } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
 import {
-  FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud,
+  FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud, FiEye,
 } from "react-icons/fi";
 import { useChannel } from "@/lib/useChannel";
 import { useAutoSlug } from "@/lib/useAutoSlug";
+import { useLang } from "@/lib/LanguageContext";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
+import { theme } from "@/lib/theme";
+import InlineSelect from "@/components/InlineSelect";
+import { SafeImg } from "@/components/SafeImage";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1").replace(/\/api\/v1$/, "");
+const API_BASE = "";
 function resolveImg(src: string) { return src.startsWith("/storage/") ? `${API_BASE}${src}` : src; }
 
 interface Category { id: number; name: string; }
@@ -60,6 +65,7 @@ type FormState = typeof emptyForm;
 // slugify removed — now using useAutoSlug hook with backend transliteration
 
 export default function ProductsPage() {
+  const { t } = useLang();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -97,7 +103,7 @@ export default function ProductsPage() {
         setCategories(c.data || c || []);
         setBrands(b.data || b || []);
       })
-      .catch(() => { if (!background) showToast("ডেটা লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -143,20 +149,20 @@ export default function ProductsPage() {
 
   const handleImageUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      showToast("শুধুমাত্র ছবি ফাইল আপলোড করুন", "error");
+      showToast(t("toast.imageError"), "error");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      showToast("ফাইলের আকার ৫MB এর বেশি হতে পারবে না", "error");
+      showToast(t("toast.imageError"), "error");
       return;
     }
     setUploading(true);
     try {
       const res = await api.admin.upload(file);
       setForm((prev) => ({ ...prev, image: res.url || res.path }));
-      showToast("ছবি আপলোড হয়েছে!");
+      showToast(t("toast.imageUploaded"));
     } catch {
-      showToast("ছবি আপলোড করতে সমস্যা হয়েছে", "error");
+      showToast(t("toast.imageError"), "error");
     } finally {
       setUploading(false);
     }
@@ -200,12 +206,12 @@ export default function ProductsPage() {
         const res = await api.admin.updateProduct(editId, payload);
         const updated = res.data || res;
         setProducts((prev) => prev.map((p) => (p.id === editId ? { ...p, ...updated } : p)));
-        showToast("পণ্য আপডেট হয়েছে!");
+        showToast(t("toast.updated"));
       } else {
         const res = await api.admin.createProduct(payload);
         const created = res.data || res;
         setProducts((prev) => [created, ...prev]);
-        showToast("নতুন পণ্য তৈরি হয়েছে!");
+        showToast(t("toast.created"));
       }
       setModalOpen(false);
     } catch (err: unknown) {
@@ -213,7 +219,7 @@ export default function ProductsPage() {
       if (error.errors) {
         showToast(Object.values(error.errors).flat().join(", "), "error");
       } else {
-        showToast(error.message || "সমস্যা হয়েছে, আবার চেষ্টা করুন", "error");
+        showToast(error.message || t("toast.error"), "error");
       }
     } finally {
       setSaving(false);
@@ -226,10 +232,10 @@ export default function ProductsPage() {
     try {
       await api.admin.deleteProduct(deleteId);
       setProducts((prev) => prev.filter((p) => p.id !== deleteId));
-      showToast("পণ্য মুছে ফেলা হয়েছে!");
+      showToast(t("toast.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("মুছতে সমস্যা হয়েছে", "error");
+      showToast(t("common.deleteError"), "error");
     } finally {
       setDeleting(false);
     }
@@ -239,15 +245,15 @@ export default function ProductsPage() {
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none";
-  const labelCls = "block text-xs font-medium text-gray-600 mb-1";
+  const inputCls = theme.input;
+  const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="পণ্য">
+    <DashboardLayout title={t("dash.products")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="এই পণ্যটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।"
+        message={t("confirm.deleteProduct")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -260,7 +266,7 @@ export default function ProductsPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="পণ্য খুঁজুন..."
+              placeholder={t("search.products")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -271,7 +277,7 @@ export default function ProductsPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            নতুন পণ্য
+            {t("btn.addProduct")}
           </button>
         </div>
 
@@ -284,7 +290,7 @@ export default function ProductsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {["ছবি", "নাম", "ক্যাটাগরি", "দাম", "স্টক", "বিক্রি", "স্ট্যাটাস", ""].map((h) => (
+                    {[t("th.image"), t("th.name"), t("th.category"), t("th.price"), t("th.stock"), t("th.sales"), t("th.status"), t("th.actions")].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -292,7 +298,7 @@ export default function ProductsPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-400">কোনো পণ্য পাওয়া যায়নি</td>
+                      <td colSpan={8} className="py-12 text-center text-gray-400">{t("empty.products")}</td>
                     </tr>
                   ) : (
                     filtered.map((p) => (
@@ -304,8 +310,7 @@ export default function ProductsPage() {
                       >
                         <td className="px-4 py-3">
                           {p.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={resolveImg(p.image || "/placeholder.png")} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                            <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
                               <FiImage className="w-4 h-4 text-gray-400" />
@@ -322,15 +327,18 @@ export default function ProductsPage() {
                         <td className="px-4 py-3 text-gray-600">{toBn(p.sold ?? 0)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {p.is_active ? "সক্রিয়" : "নিষ্ক্রিয়"}
+                            {p.is_active ? t("form.active") : t("form.inactive")}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => openEdit(p)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                            <a href={`/products/${p.slug}`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="পণ্য দেখুন">
+                              <FiEye className="w-3.5 h-3.5" />
+                            </a>
+                            <button onClick={() => openEdit(p)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="সম্পাদনা">
                               <FiEdit2 className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                            <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="মুছুন">
                               <FiTrash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -346,66 +354,39 @@ export default function ProductsPage() {
       </motion.div>
 
       {/* Modal */}
-      <AnimatePresence>
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/50"
-              onMouseDown={() => setModalOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="text-base font-bold text-gray-800">{editId ? "পণ্য সম্পাদনা" : "নতুন পণ্য"}</h2>
-                <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("modal.editProduct") : t("modal.newProduct")} size="xl">
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelCls}>নাম *</label>
+                    <label className={labelCls}>{t("form.name")} *</label>
                     <input name="name" required value={form.name} onChange={(e) => handleNameChange(e.target.value)} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>স্লাগ *</label>
+                    <label className={labelCls}>{t("form.slug")} *</label>
                     <input name="slug" required value={form.slug} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, slug: v })); }} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>ক্যাটাগরি</label>
-                    <select name="category_id" value={form.category_id} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, category_id: v })); }} className={inputCls}>
-                      <option value="">নির্বাচন করুন</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <label className={labelCls}>{t("form.category")}</label>
+                    <InlineSelect fullWidth value={form.category_id} options={[{ value: "", label: t("form.select") }, ...categories.map(c => ({ value: String(c.id), label: c.name }))]} onChange={(v) => { setForm(prev => ({ ...prev, category_id: v })); }} placeholder={t("form.select")} />
                   </div>
                   <div>
-                    <label className={labelCls}>ব্র্যান্ড</label>
-                    <select name="brand_id" value={form.brand_id} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, brand_id: v })); }} className={inputCls}>
-                      <option value="">নির্বাচন করুন</option>
-                      {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
+                    <label className={labelCls}>{t("form.brand")}</label>
+                    <InlineSelect fullWidth value={form.brand_id} options={[{ value: "", label: t("form.select") }, ...brands.map(b => ({ value: String(b.id), label: b.name }))]} onChange={(v) => { setForm(prev => ({ ...prev, brand_id: v })); }} placeholder={t("form.select")} />
                   </div>
                   <div>
-                    <label className={labelCls}>দাম (৳) *</label>
-                    <input name="price" required type="text" inputMode="decimal" value={form.price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, price: v })); }} className={inputCls} placeholder="0" />
+                    <label className={labelCls}>{t("form.price")} *</label>
+                    <input name="price" required type="number" min="0" step="0.01" value={form.price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, price: v })); }} className={inputCls} placeholder="0" />
                   </div>
                   <div>
-                    <label className={labelCls}>আসল দাম (৳)</label>
-                    <input name="original_price" type="text" inputMode="decimal" value={form.original_price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, original_price: v })); }} className={inputCls} placeholder="0" />
+                    <label className={labelCls}>{t("form.originalPrice")}</label>
+                    <input name="original_price" type="number" min="0" step="0.01" value={form.original_price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, original_price: v })); }} className={inputCls} placeholder="0" />
                   </div>
                   <div>
-                    <label className={labelCls}>স্টক *</label>
-                    <input name="stock" required type="text" inputMode="numeric" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }} className={inputCls} placeholder="0" />
+                    <label className={labelCls}>{t("form.stock")} *</label>
+                    <input name="stock" required type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }} className={inputCls} placeholder="0" />
                   </div>
                   <div className="relative">
-                    <label className={labelCls}>ব্যাজ</label>
+                    <label className={labelCls}>{t("form.badge")}</label>
                     <input
                       name="badge"
                       value={form.badge}
@@ -449,14 +430,14 @@ export default function ProductsPage() {
                     })()}
                   </div>
                   <div>
-                    <label className={labelCls}>ওজন</label>
+                    <label className={labelCls}>{t("form.weight")}</label>
                     <input name="weight" value={form.weight} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, weight: v })); }} className={inputCls} placeholder="যেমন: ১০০গ্রাম" />
                   </div>
                 </div>
 
                 {/* Image Upload */}
                 <div>
-                  <label className={labelCls}>পণ্যের ছবি</label>
+                  <label className={labelCls}>{t("form.image")}</label>
                   <div
                     onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
@@ -466,8 +447,7 @@ export default function ProductsPage() {
                     {form.image ? (
                       <div className="p-3 flex items-center gap-4">
                         <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-100 shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={resolveImg(form.image)} alt="Preview" className="w-full h-full object-cover" />
+                          <SafeImg src={resolveImg(form.image)} alt="Preview" className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-700 font-medium truncate">{form.image.split("/").pop()}</p>
@@ -508,32 +488,29 @@ export default function ProductsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>বিবরণ</label>
+                  <label className={labelCls}>{t("form.description")}</label>
                   <textarea name="description" rows={3} value={form.description} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, description: v })); }} className={inputCls + " resize-none"} />
                 </div>
                 <div className="flex items-center gap-6">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input name="is_active" type="checkbox" checked={form.is_active} onChange={(e) => { const v = e.target.checked; setForm(prev => ({ ...prev, is_active: v })); }} className="w-4 h-4 accent-[#0f5931]" />
-                    সক্রিয়
+                    {t("form.active")}
                   </label>
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input name="is_featured" type="checkbox" checked={form.is_featured} onChange={(e) => { const v = e.target.checked; setForm(prev => ({ ...prev, is_featured: v })); }} className="w-4 h-4 accent-[#0f5931]" />
-                    ফিচার্ড
+                    {t("form.featured")}
                   </label>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    বাতিল
+                    {t("btn.cancel")}
                   </button>
                   <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-                    {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
+                    {saving ? t("btn.saving") : editId ? t("btn.update") : t("btn.create")}
                   </button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </Modal>
     </DashboardLayout>
   );
 }

@@ -8,25 +8,29 @@ export interface Product {
   image: string;
   category: string;
   categoryBn: string;
+  category_id?: number;
+  category_slug?: string;
+  brand_id?: number;
   badge?: string;
   badgeColor?: string;
   description?: string;
   descriptionBn?: string;
 }
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1").replace(/\/api\/v1$/, "");
+const API_BASE = "";
 
 /** Resolve image path — prepend API base URL for relative /storage/ paths */
 function resolveImage(raw: unknown): string {
-  const img = (raw as string) || "/placeholder.png";
+  const img = (raw as string) || "/placeholder.svg";
   if (img.startsWith("/storage/")) return `${API_BASE}${img}`;
   return img;
 }
 
 /** Map a raw API product (snake_case) to the frontend Product interface */
 export function mapApiProduct(p: Record<string, unknown>): Product {
-  const cat = p.category as { name?: string; slug?: string } | string | null;
+  const cat = p.category as { id?: number; name?: string; slug?: string } | string | null;
   const catName = typeof cat === "string" ? cat : cat?.name || "";
+  const catObj = typeof cat === "object" && cat ? cat : null;
   return {
     id: p.id as number,
     name: (p.name as string) || "",
@@ -37,6 +41,9 @@ export function mapApiProduct(p: Record<string, unknown>): Product {
     image: resolveImage(p.image),
     category: catName,
     categoryBn: catName,
+    category_id: (p.category_id as number) || catObj?.id as number || undefined,
+    category_slug: (p.category_slug as string) || catObj?.slug || undefined,
+    brand_id: (p.brand_id as number) || undefined,
     badge: (p.badge as string) || undefined,
     badgeColor: (p.badge_color as string) || undefined,
     description: (p.description as string) || undefined,

@@ -9,8 +9,8 @@ import { AddToCartSection, ReviewsSection } from "@/components/ProductDetailClie
 import ProductGallery from "@/components/ProductGallery";
 import type { Metadata } from "next";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
-const API_BASE = API_URL.replace(/\/api\/v1$/, "");
+const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
+const API_BASE = "";
 
 function resolveImage(img: string): string {
   if (img.startsWith("/storage/")) return `${API_BASE}${img}`;
@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const name = product.nameBn || product.name_bn || product.name;
   const desc = product.descriptionBn || product.description_bn || product.description || "";
-  const image = product.image || "/placeholder.png";
+  const image = product.image || "/placeholder.svg";
 
   return {
     title: `${name} — মা ভেষজ বাণিজ্যালয়`,
@@ -66,7 +66,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     nameBn: (raw.name_bn as string) || (raw.nameBn as string) || (raw.name as string) || "",
     price: Number(raw.price) || 0,
     originalPrice: raw.original_price != null ? Number(raw.original_price) : (raw.originalPrice as number | undefined),
-    image: resolveImage((raw.image as string) || "/placeholder.png"),
+    image: resolveImage((raw.image as string) || "/placeholder.svg"),
     category: typeof raw.category === "string" ? raw.category : (raw.category as { name?: string })?.name || "",
     categoryBn: (raw.categoryBn as string) || (typeof raw.category === "string" ? raw.category : (raw.category as { name?: string })?.name || ""),
     badge: (raw.badge as string) || (raw.badgeColor as string) || undefined,
@@ -122,7 +122,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <div className="relative">
             <ProductGallery mainImage={product.image} images={product.images} alt={displayName} />
             {discount > 0 && (
-              <span className="absolute top-4 right-4 z-10 bg-sale-red text-white text-sm font-bold px-3 py-1.5 rounded-full">-{toBn(discount)}%</span>
+              <span className="absolute top-4 right-4 z-10 bg-sale-red text-white text-sm font-bold px-3 py-1.5 rounded-full" suppressHydrationWarning>-{toBn(discount)}%</span>
             )}
             {product.badge && (
               <span className={`absolute top-4 left-4 z-10 ${product.badgeColor || "bg-primary"} text-white text-sm font-bold px-3 py-1.5 rounded-full`}>{product.badge}</span>
@@ -140,12 +140,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">{displayName}</h1>
 
             <div className="mt-4 flex items-center gap-3">
-              <span className="text-3xl font-bold text-primary">৳{toBn(product.price)}</span>
+              <span className="text-3xl font-bold text-primary" suppressHydrationWarning>৳{toBn(product.price)}</span>
               {product.originalPrice && (
-                <span className="text-xl text-text-light line-through">৳{toBn(product.originalPrice)}</span>
+                <span className="text-xl text-text-light line-through" suppressHydrationWarning>৳{toBn(product.originalPrice)}</span>
               )}
               {discount > 0 && (
-                <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg">{toBn(discount)}% ছাড়</span>
+                <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>{toBn(discount)}% ছাড়</span>
               )}
             </div>
 

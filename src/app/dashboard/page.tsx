@@ -21,6 +21,7 @@ import {
   FiChevronRight,
 } from "react-icons/fi";
 import DashboardLayout from "@/components/DashboardLayout";
+import { useLang } from "@/lib/LanguageContext";
 
 // ─── Status labels ───────────────────────────────────────────────────────────
 const statusLabels: Record<string, { label: string; color: string }> = {
@@ -107,6 +108,7 @@ function StatCard({
 }
 
 function AdminDashboard() {
+  const { t, lang } = useLang();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -130,13 +132,13 @@ function AdminDashboard() {
   }
 
   const statCards = [
-    { icon: FiShoppingBag, label: "মোট অর্ডার", value: stats?.total_orders ?? 0, color: "bg-[#0f5931]", delay: 0 },
-    { icon: FiClock, label: "আজকের অর্ডার", value: stats?.today_orders ?? 0, color: "bg-blue-500", delay: 0.05 },
-    { icon: FiDollarSign, label: "মোট রেভিনিউ (৳)", value: stats?.total_revenue ?? 0, color: "bg-emerald-500", delay: 0.1 },
-    { icon: FiUsers, label: "গ্রাহক", value: stats?.total_customers ?? 0, color: "bg-violet-500", delay: 0.15 },
-    { icon: FiBox, label: "পণ্য", value: stats?.total_products ?? 0, color: "bg-orange-500", delay: 0.2 },
-    { icon: FiAlertCircle, label: "অপেক্ষমাণ অর্ডার", value: stats?.pending_orders ?? 0, color: "bg-yellow-500", delay: 0.25 },
-    { icon: FiTrendingUp, label: "লো স্টক", value: stats?.low_stock ?? 0, color: "bg-red-500", delay: 0.3 },
+    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[#0f5931]", delay: 0 },
+    { icon: FiClock, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-blue-500", delay: 0.05 },
+    { icon: FiDollarSign, label: t("dash.totalRevenue"), value: stats?.total_revenue ?? 0, color: "bg-emerald-500", delay: 0.1 },
+    { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500", delay: 0.15 },
+    { icon: FiBox, label: t("dash.productCount"), value: stats?.total_products ?? 0, color: "bg-orange-500", delay: 0.2 },
+    { icon: FiAlertCircle, label: t("dash.pendingOrders"), value: stats?.pending_orders ?? 0, color: "bg-yellow-500", delay: 0.25 },
+    { icon: FiTrendingUp, label: t("dash.lowStock"), value: stats?.low_stock ?? 0, color: "bg-red-500", delay: 0.3 },
   ];
 
   return (
@@ -156,18 +158,18 @@ function AdminDashboard() {
           transition={{ delay: 0.35 }}
           className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm"
         >
-          <h2 className="text-base font-bold text-gray-800 mb-4">সাম্প্রতিক অর্ডার</h2>
+          <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.recentOrders")}</h2>
           {recentOrders.length === 0 ? (
-            <p className="text-sm text-gray-400 py-8 text-center">কোনো অর্ডার নেই</p>
+            <p className="text-sm text-gray-400 py-8 text-center">{t("empty.orders")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
                     <th className="pb-2 font-medium">#</th>
-                    <th className="pb-2 font-medium">গ্রাহক</th>
-                    <th className="pb-2 font-medium">মোট</th>
-                    <th className="pb-2 font-medium">স্ট্যাটাস</th>
+                    <th className="pb-2 font-medium">{t("th.customer")}</th>
+                    <th className="pb-2 font-medium">{t("th.total")}</th>
+                    <th className="pb-2 font-medium">{t("th.status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -197,17 +199,17 @@ function AdminDashboard() {
           transition={{ delay: 0.4 }}
           className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm"
         >
-          <h2 className="text-base font-bold text-gray-800 mb-4">সেরা বিক্রিত পণ্য</h2>
+          <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.topProducts")}</h2>
           {topProducts.length === 0 ? (
-            <p className="text-sm text-gray-400 py-8 text-center">কোনো পণ্য নেই</p>
+            <p className="text-sm text-gray-400 py-8 text-center">{t("empty.products")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-                    <th className="pb-2 font-medium">পণ্য</th>
-                    <th className="pb-2 font-medium">বিক্রি</th>
-                    <th className="pb-2 font-medium">রেভিনিউ</th>
+                    <th className="pb-2 font-medium">{t("dash.products")}</th>
+                    <th className="pb-2 font-medium">{t("th.sales")}</th>
+                    <th className="pb-2 font-medium">{t("th.total")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -235,7 +237,7 @@ function AdminDashboard() {
         >
           <h2 className="text-base font-bold text-red-700 mb-4 flex items-center gap-2">
             <FiAlertCircle className="w-5 h-5" />
-            লো স্টক সতর্কতা
+            {t("dash.lowStockAlert")}
           </h2>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
             {lowStockItems.map((item) => (
@@ -245,7 +247,7 @@ function AdminDashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{item.name}</div>
-                  <div className="text-xs text-red-600 font-semibold">স্টক: {toBn(item.stock)}</div>
+                  <div className="text-xs text-red-600 font-semibold">{t("cust.stockLabel")}: {toBn(item.stock)}</div>
                 </div>
               </div>
             ))}
@@ -258,6 +260,7 @@ function AdminDashboard() {
 
 // ─── Customer Dashboard ───────────────────────────────────────────────────────
 function CustomerDashboard({ user }: { user: { id: number; name: string; email: string; phone?: string; role: string } }) {
+  const { t, lang } = useLang();
   const [tab, setTab] = useState<"profile" | "orders" | "password">("profile");
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -291,10 +294,10 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
     setProfileMsg(""); setProfileErr(""); setProfileSaving(true);
     try {
       await api.updateProfile({ name, email, phone });
-      setProfileMsg("প্রোফাইল আপডেট হয়েছে!");
+      setProfileMsg(t("cust.profileUpdated"));
     } catch (err: unknown) {
       const error = err as { message?: string };
-      setProfileErr(error.message || "সমস্যা হয়েছে");
+      setProfileErr(error.message || t("toast.error"));
     } finally {
       setProfileSaving(false);
     }
@@ -305,14 +308,14 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
     setPassMsg(""); setPassErr(""); setPassSaving(true);
     try {
       await api.updatePassword({ current_password: currentPassword, password: newPassword, password_confirmation: confirmPassword });
-      setPassMsg("পাসওয়ার্ড পরিবর্তন হয়েছে!");
+      setPassMsg(t("cust.passwordChanged"));
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err: unknown) {
       const error = err as { message?: string; errors?: Record<string, string[]> };
       if (error.errors) {
         setPassErr(Object.values(error.errors).flat().join(", "));
       } else {
-        setPassErr(error.message || "সমস্যা হয়েছে");
+        setPassErr(error.message || t("toast.error"));
       }
     } finally {
       setPassSaving(false);
@@ -320,9 +323,9 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
   };
 
   const tabs = [
-    { id: "profile" as const, label: "প্রোফাইল", icon: FiUser },
-    { id: "orders" as const, label: "অর্ডারসমূহ", icon: FiPackage },
-    { id: "password" as const, label: "পাসওয়ার্ড", icon: FiLock },
+    { id: "profile" as const, label: t("cust.profile"), icon: FiUser },
+    { id: "orders" as const, label: t("cust.myOrders"), icon: FiPackage },
+    { id: "password" as const, label: t("cust.password"), icon: FiLock },
   ];
 
   return (
@@ -330,8 +333,8 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
       <div className="container mx-auto px-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">ড্যাশবোর্ড</h1>
-            <p className="text-text-muted text-sm mt-1">স্বাগতম, {user.name}</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">{t("cust.dashboard")}</h1>
+            <p className="text-text-muted text-sm mt-1">{t("cust.welcome")}, {user.name}</p>
           </div>
           <div className="grid lg:grid-cols-[260px_1fr] gap-6">
             <div className="bg-white rounded-2xl border border-border p-4 h-fit">
@@ -354,25 +357,25 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                 <div>
                   <h2 className="text-lg font-bold text-foreground flex items-center gap-2 mb-6">
                     <FiEdit3 className="w-5 h-5 text-primary" />
-                    প্রোফাইল তথ্য
+                    {t("cust.profileInfo")}
                   </h2>
                   {profileMsg && <div className="p-3 mb-4 bg-green-50 text-green-700 text-sm rounded-lg">{profileMsg}</div>}
                   {profileErr && <div className="p-3 mb-4 bg-red-50 text-sale-red text-sm rounded-lg">{profileErr}</div>}
                   <form onSubmit={handleProfileUpdate} className="space-y-4 max-w-lg">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">নাম</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("form.name")}</label>
                       <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">ইমেইল</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("form.email")}</label>
                       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">ফোন</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("form.phone")}</label>
                       <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <button type="submit" disabled={profileSaving} className="px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-light transition-colors disabled:opacity-50">
-                      {profileSaving ? "সংরক্ষণ হচ্ছে..." : "আপডেট করুন"}
+                      {profileSaving ? t("btn.saving") : t("cust.updateProfile")}
                     </button>
                   </form>
                 </div>
@@ -381,7 +384,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                 <div>
                   <h2 className="text-lg font-bold text-foreground flex items-center gap-2 mb-6">
                     <FiPackage className="w-5 h-5 text-primary" />
-                    আমার অর্ডারসমূহ
+                    {t("cust.myOrders")}
                   </h2>
                   {ordersLoading ? (
                     <div className="flex justify-center py-12">
@@ -390,7 +393,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                   ) : orders.length === 0 ? (
                     <div className="text-center py-12">
                       <FiPackage className="w-12 h-12 text-text-muted mx-auto mb-3" />
-                      <p className="text-text-muted">কোনো অর্ডার পাওয়া যায়নি</p>
+                      <p className="text-text-muted">{t("cust.noOrders")}</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -400,10 +403,10 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                           <div key={order.id} className="border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
                             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                               <div className="flex items-center gap-3">
-                                <span className="text-sm font-bold text-foreground">অর্ডার #{toBn(order.id)}</span>
+                                <span className="text-sm font-bold text-foreground">{t("cust.order")} #{toBn(order.id)}</span>
                                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${st.color}`}>{st.label}</span>
                                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${order.payment_status === "paid" ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"}`}>
-                                  {order.payment_status === "paid" ? "পেমেন্ট সম্পন্ন" : "পেমেন্ট বাকি"}
+                                  {order.payment_status === "paid" ? t("cust.paymentDone") : t("cust.paymentPending")}
                                 </span>
                               </div>
                               <span className="text-lg font-bold text-primary">৳{toBn(order.total)}</span>
@@ -449,8 +452,8 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                               </div>
                             )}
                             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-xs text-text-muted">
-                              <span>{new Date(order.created_at).toLocaleDateString("bn-BD")}</span>
-                              <span>{order.payment_method === "cod" ? "ক্যাশ অন ডেলিভারি" : order.payment_method}</span>
+                              <span>{new Date(order.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}</span>
+                              <span>{order.payment_method === "cod" ? t("payment.cod") : order.payment_method === "bkash" ? t("payment.bkash") : order.payment_method === "nagad" ? t("payment.nagad") : order.payment_method}</span>
                             </div>
                           </div>
                         );
@@ -463,25 +466,25 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                 <div>
                   <h2 className="text-lg font-bold text-foreground flex items-center gap-2 mb-6">
                     <FiLock className="w-5 h-5 text-primary" />
-                    পাসওয়ার্ড পরিবর্তন
+                    {t("cust.changePassword")}
                   </h2>
                   {passMsg && <div className="p-3 mb-4 bg-green-50 text-green-700 text-sm rounded-lg">{passMsg}</div>}
                   {passErr && <div className="p-3 mb-4 bg-red-50 text-sale-red text-sm rounded-lg">{passErr}</div>}
                   <form onSubmit={handlePasswordUpdate} className="space-y-4 max-w-lg">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">বর্তমান পাসওয়ার্ড</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("cust.currentPassword")}</label>
                       <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">নতুন পাসওয়ার্ড</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("cust.newPassword")}</label>
                       <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">নতুন পাসওয়ার্ড নিশ্চিত করুন</label>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">{t("cust.confirmPassword")}</label>
                       <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
                     </div>
                     <button type="submit" disabled={passSaving} className="px-6 py-3 bg-primary text-white rounded-xl font-semibold hover:bg-primary-light transition-colors disabled:opacity-50">
-                      {passSaving ? "পরিবর্তন হচ্ছে..." : "পাসওয়ার্ড পরিবর্তন করুন"}
+                      {passSaving ? t("cust.changing") : t("cust.changePassword")}
                     </button>
                   </form>
                 </div>
@@ -497,6 +500,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { user, loading } = useAuth();
+  const { t, lang } = useLang();
 
   if (loading) {
     return <TableSkeleton rows={3} cols={3} />;
@@ -506,14 +510,14 @@ export default function DashboardPage() {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
         <FiUser className="w-16 h-16 text-text-muted" />
-        <p className="text-lg text-text-muted">ড্যাশবোর্ড দেখতে লগইন করুন</p>
+        <p className="text-lg text-text-muted">{t("cust.loginRequired")}</p>
       </div>
     );
   }
 
   if (user.role === "admin") {
     return (
-      <DashboardLayout title="ড্যাশবোর্ড">
+      <DashboardLayout title={t("dash.dashboard")}>
         <AdminDashboard />
       </DashboardLayout>
     );

@@ -1,14 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiX } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
+import Modal from "@/components/Modal";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
+import { theme } from "@/lib/theme";
+import InlineSelect from "@/components/InlineSelect";
+import { useLang } from "@/lib/LanguageContext";
 
 interface Coupon {
   id: number;
@@ -36,16 +40,17 @@ const emptyForm = {
 
 type FormState = typeof emptyForm;
 
-function formatDate(dt: string | undefined) {
+function formatDate(dt: string | undefined, lang: string = "bn") {
   if (!dt) return "—";
   try {
-    return new Date(dt).toLocaleDateString("bn-BD");
+    return new Date(dt).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD");
   } catch {
     return dt;
   }
 }
 
 export default function CouponsPage() {
+  const { t, lang } = useLang();
   const [items, setItems] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -66,7 +71,7 @@ export default function CouponsPage() {
     if (!background) setLoading(true);
     api.admin.getCoupons()
       .then((res) => setItems(res.data || res || []))
-      .catch(() => { if (!background) showToast("ডেটা লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -107,16 +112,16 @@ export default function CouponsPage() {
         const res = await api.admin.updateCoupon(editId, payload);
         const updated = res.data || res;
         setItems((prev) => prev.map((x) => (x.id === editId ? { ...x, ...updated } : x)));
-        showToast("কুপন আপডেট হয়েছে!");
+        showToast(t("toast.updated"));
       } else {
         const res = await api.admin.createCoupon(payload);
         const created = res.data || res;
         setItems((prev) => [created, ...prev]);
-        showToast("নতুন কুপন তৈরি হয়েছে!");
+        showToast(t("toast.created"));
       }
       setModalOpen(false);
     } catch {
-      showToast("সমস্যা হয়েছে, আবার চেষ্টা করুন", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -128,10 +133,10 @@ export default function CouponsPage() {
     try {
       await api.admin.deleteCoupon(deleteId);
       setItems((prev) => prev.filter((x) => x.id !== deleteId));
-      showToast("কুপন মুছে ফেলা হয়েছে!");
+      showToast(t("toast.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("মুছতে সমস্যা হয়েছে", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setDeleting(false);
     }
@@ -141,15 +146,15 @@ export default function CouponsPage() {
     item.code.toLowerCase().includes(search.toLowerCase())
   );
 
-  const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none";
-  const labelCls = "block text-xs font-medium text-gray-600 mb-1";
+  const inputCls = theme.input;
+  const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="কুপন">
+    <DashboardLayout title={t("coupon.title")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="এই কুপনটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।"
+        message={t("coupon.deleteConfirm")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -161,7 +166,7 @@ export default function CouponsPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="কুপন খুঁজুন..."
+              placeholder={t("coupon.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -172,7 +177,7 @@ export default function CouponsPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            নতুন কুপন
+            {t("coupon.addNew")}
           </button>
         </div>
 
@@ -184,7 +189,7 @@ export default function CouponsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {["কোড", "ধরন", "মান", "ব্যবহৃত", "সর্বোচ্চ", "মেয়াদ", "স্ট্যাটাস", ""].map((h) => (
+                    {[t("coupon.code"), t("coupon.type"), t("coupon.value"), t("coupon.used"), t("coupon.maxUses"), t("coupon.expires"), t("th.status"), ""].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -192,7 +197,7 @@ export default function CouponsPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-400">কোনো কুপন পাওয়া যায়নি</td>
+                      <td colSpan={8} className="py-12 text-center text-gray-400">{t("coupon.empty")}</td>
                     </tr>
                   ) : (
                     filtered.map((item) => (
@@ -205,7 +210,7 @@ export default function CouponsPage() {
                         <td className="px-4 py-3 font-mono font-semibold text-gray-800">{item.code}</td>
                         <td className="px-4 py-3 text-gray-600">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.type === "percentage" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
-                            {item.type === "percentage" ? "শতকরা" : "নির্দিষ্ট"}
+                            {item.type === "percentage" ? t("coupon.percentage") : t("coupon.fixed")}
                           </span>
                         </td>
                         <td className="px-4 py-3 font-semibold text-[#0f5931] whitespace-nowrap">
@@ -213,10 +218,10 @@ export default function CouponsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">{toBn(item.used_count ?? 0)}</td>
                         <td className="px-4 py-3 text-gray-600">{item.max_uses ? toBn(item.max_uses) : "—"}</td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(item.expires_at)}</td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(item.expires_at, lang)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {item.is_active ? "সক্রিয়" : "নিষ্ক্রিয়"}
+                            {item.is_active ? t("common.active") : t("common.inactive")}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -239,79 +244,52 @@ export default function CouponsPage() {
         </div>
       </motion.div>
 
-      <AnimatePresence>
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/50" onMouseDown={() => setModalOpen(false)}
-              onClick={() => setModalOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="text-base font-bold text-gray-800">{editId ? "কুপন সম্পাদনা" : "নতুন কুপন"}</h2>
-                <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>কোড *</label>
-                    <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className={inputCls} placeholder="SAVE20" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>ধরন *</label>
-                    <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as "fixed" | "percentage" })} className={inputCls}>
-                      <option value="fixed">নির্দিষ্ট (৳)</option>
-                      <option value="percentage">শতকরা (%)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>মান *</label>
-                    <input required type="number" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>ন্যূনতম অর্ডার (৳)</label>
-                    <input type="number" min="0" value={form.min_order_amount} onChange={(e) => setForm({ ...form, min_order_amount: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>সর্বোচ্চ ব্যবহার</label>
-                    <input type="number" min="0" value={form.max_uses} onChange={(e) => setForm({ ...form, max_uses: e.target.value })} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>শুরুর তারিখ</label>
-                    <input type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} className={inputCls} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className={labelCls}>মেয়াদ শেষ</label>
-                    <input type="datetime-local" value={form.expires_at} onChange={(e) => setForm({ ...form, expires_at: e.target.value })} className={inputCls} />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
-                  সক্রিয়
-                </label>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    বাতিল
-                  </button>
-                  <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-                    {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("coupon.editCoupon") : t("coupon.newCoupon")} size="lg">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>{t("coupon.code")} *</label>
+              <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className={inputCls} placeholder="SAVE20" />
+            </div>
+            <div>
+              <label className={labelCls}>{t("coupon.type")} *</label>
+              <InlineSelect fullWidth value={form.type} options={[{ value: "fixed", label: t("coupon.fixed") }, { value: "percentage", label: t("coupon.percentage") }]} onChange={(v) => setForm({ ...form, type: v as "fixed" | "percentage" })} />
+            </div>
+            <div>
+              <label className={labelCls}>{t("coupon.value")} *</label>
+              <input required type="number" min="0" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{t("coupon.minOrder")}</label>
+              <input type="number" min="0" value={form.min_order_amount} onChange={(e) => setForm({ ...form, min_order_amount: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{t("coupon.maxUses")}</label>
+              <input type="number" min="0" value={form.max_uses} onChange={(e) => setForm({ ...form, max_uses: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>{t("flash.start")}</label>
+              <input type="datetime-local" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} className={inputCls} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelCls}>{t("coupon.expires")}</label>
+              <input type="datetime-local" value={form.expires_at} onChange={(e) => setForm({ ...form, expires_at: e.target.value })} className={inputCls} />
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
+            {t("form.active")}
+          </label>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              {t("btn.cancel")}
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
+              {saving ? t("btn.saving") : editId ? t("btn.update") : t("btn.create")}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardLayout>
   );
 }

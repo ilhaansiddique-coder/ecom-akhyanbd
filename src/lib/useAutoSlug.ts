@@ -2,7 +2,7 @@
 
 import { useRef, useCallback } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1";
+const API_URL = "/api/v1";
 
 /**
  * Hook that auto-generates a slug from Bengali/English text via the backend API.
@@ -37,8 +37,9 @@ export function useAutoSlug(debounceMs = 400) {
     // Debounced API call for proper Bengali transliteration
     timerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_URL}/generate-slug`, {
+        const res = await fetch(`${API_URL}/admin/generate-slug`, {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ name }),
         });

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiX } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
+import Modal from "@/components/Modal";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
+import { theme } from "@/lib/theme";
 
 interface Menu {
   id: number;
@@ -114,8 +116,8 @@ export default function MenusPage() {
     item.label.toLowerCase().includes(search.toLowerCase())
   );
 
-  const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none";
-  const labelCls = "block text-xs font-medium text-gray-600 mb-1";
+  const inputCls = theme.input;
+  const labelCls = theme.label;
 
   return (
     <DashboardLayout title="মেনু">
@@ -203,58 +205,34 @@ export default function MenusPage() {
         </div>
       </motion.div>
 
-      <AnimatePresence>
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/50" onMouseDown={() => setModalOpen(false)}
-              onClick={() => setModalOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <h2 className="text-base font-bold text-gray-800">{editId ? "মেনু সম্পাদনা" : "নতুন মেনু"}</h2>
-                <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                <div>
-                  <label className={labelCls}>লেবেল *</label>
-                  <input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>URL *</label>
-                  <input required value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className={inputCls} placeholder="/category/xyz" />
-                </div>
-                <div>
-                  <label className={labelCls}>সর্ট ক্রম</label>
-                  <input type="number" min="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className={inputCls} />
-                </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
-                  সক্রিয়
-                </label>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    বাতিল
-                  </button>
-                  <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-                    {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? "মেনু সম্পাদনা" : "নতুন মেনু"} size="md">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className={labelCls}>লেবেল *</label>
+            <input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} />
           </div>
-        )}
-      </AnimatePresence>
+          <div>
+            <label className={labelCls}>URL *</label>
+            <input required value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className={inputCls} placeholder="/category/xyz" />
+          </div>
+          <div>
+            <label className={labelCls}>সর্ট ক্রম</label>
+            <input type="number" min="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className={inputCls} />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
+            সক্রিয়
+          </label>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              বাতিল
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
+              {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardLayout>
   );
 }

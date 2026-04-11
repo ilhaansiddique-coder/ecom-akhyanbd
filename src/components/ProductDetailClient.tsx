@@ -39,7 +39,7 @@ export function AddToCartSection({ productId, productName, price, image }: Produ
         <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:text-primary transition-colors">
           <FiMinus className="w-4 h-4" />
         </button>
-        <span className="text-lg font-semibold w-10 text-center">{toBn(quantity)}</span>
+        <span className="text-lg font-semibold w-10 text-center" suppressHydrationWarning>{toBn(quantity)}</span>
         <button onClick={() => setQuantity(quantity + 1)} className="p-3 hover:text-primary transition-colors">
           <FiPlus className="w-4 h-4" />
         </button>
@@ -105,7 +105,7 @@ export function ReviewsSection({ productId }: { productId: number }) {
               <FiStar key={i} className={`w-4 h-4 ${i < Math.round(avgRating) ? "text-amber-400 fill-amber-400" : "text-gray-200"}`} />
             ))}
           </div>
-          <span className="text-sm text-text-muted">({toBn(reviews.length)}টি রিভিউ)</span>
+          <span className="text-sm text-text-muted" suppressHydrationWarning>({toBn(reviews.length)}টি রিভিউ)</span>
         </div>
       )}
 

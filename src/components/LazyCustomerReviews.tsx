@@ -21,6 +21,14 @@ const CustomerReviews = dynamic(() => import("./CustomerReviews"), {
   ssr: false,
 });
 
-export default function LazyCustomerReviews() {
-  return <CustomerReviews />;
+interface Review {
+  id: number;
+  customer_name: string;
+  rating: number;
+  review: string;
+  product_name?: string;
+}
+
+export default function LazyCustomerReviews({ reviews }: { reviews?: Review[] }) {
+  return <CustomerReviews reviews={reviews} />;
 }
