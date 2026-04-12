@@ -25,7 +25,7 @@ async function getProduct(slug: string) {
   try {
     const res = await fetch(`${API_URL}/products/${slug}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["products"] },
+      next: { revalidate: 60, tags: ["products"] },
     });
     if (res.ok) return await res.json();
   } catch {}
@@ -51,6 +51,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: image.startsWith("http") ? [image] : undefined,
     },
   };
+}
+
+// Pre-render product pages at build time for instant loading
+export async function generateStaticParams() {
+  try {
+    const res = await fetch(`${API_URL}/products?per_page=100`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const products = data.data || data || [];
+      return products.map((p: any) => ({ slug: p.slug }));
+    }
+  } catch {}
+  return [];
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -149,10 +164,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               )}
             </div>
 
-            {product.descriptionBn && (
-              <p className="mt-4 text-text-body leading-relaxed">{product.descriptionBn}</p>
-            )}
-
             {/* Client island: Add to cart + quantity */}
             <div className="mt-6">
               <AddToCartSection productId={product.id} productName={displayName} price={product.price} image={product.image} />
@@ -173,6 +184,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
         </div>
+
+        {/* Product Description */}
+        {product.descriptionBn && (
+          <div className="mt-10 bg-white rounded-2xl border border-border p-6 md:p-8">
+            <h2 className="text-xl font-bold text-foreground mb-4">পণ্যের বিবরণ</h2>
+            <div className="text-text-body leading-relaxed whitespace-pre-line">{product.descriptionBn}</div>
+          </div>
+        )}
 
         {/* Client island: Reviews (fetches client-side) */}
         <ReviewsSection productId={product.id} />

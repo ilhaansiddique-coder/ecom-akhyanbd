@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -59,7 +59,7 @@ export async function PUT(
       include: { author: true },
     });
 
-    revalidateTag("blog", "max");
+    revalidateAll("blog");
     return jsonResponse(serialize(post));
   } catch (error) {
     return errorResponse("Failed to update blog post", 500);
@@ -78,6 +78,6 @@ export async function DELETE(
   if (!existing) return notFound("Blog post not found");
 
   await prisma.blogPost.delete({ where: { id: Number(id) } });
-  revalidateTag("blog", "max");
+  revalidateAll("blog");
   return jsonResponse({ message: "Blog post deleted" });
 }

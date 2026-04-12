@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       include: { author: true },
     });
 
-    revalidateTag("blog", "max");
+    revalidateAll("blog");
     return jsonResponse(serialize(post), 201);
   } catch (error) {
     return errorResponse("Failed to create blog post", 500);

@@ -100,7 +100,7 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
       </div>
 
       {/* Main Nav */}
-      <nav className={`bg-white sticky top-0 z-50 transition-shadow duration-300 ${scrolled ? "shadow-md" : "shadow-sm"}`}>
+      <nav className={`bg-white sticky top-0 z-50 w-full transition-shadow duration-300 ${scrolled ? "shadow-md" : "shadow-sm"}`}>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16 lg:h-20">
             <button
@@ -139,7 +139,7 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
 
             {/* Actions */}
             <div className="flex items-center gap-1.5">
-              <LanguageToggle compact />
+              <div className="hidden md:block"><LanguageToggle compact /></div>
               <button
                 onClick={onSearchOpen}
                 className="p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
@@ -155,7 +155,6 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
                 <FiShoppingCart className="w-5 h-5" />
                 {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-sale-red text-white text-[10px] font-bold rounded-full flex items-center justify-center" suppressHydrationWarning>{toBn(totalItems)}</span>}
               </button>
-              <AuthButton onAuthOpen={onAuthOpen} />
             </div>
           </div>
         </div>
@@ -165,8 +164,6 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
           className={`lg:hidden border-t border-border overflow-hidden bg-white transition-all duration-250 ease-out ${mobileMenuOpen ? "max-h-[70vh] opacity-100" : "max-h-0 opacity-0"}`}
         >
           <div className="py-3 px-4 space-y-1 max-h-[70vh] overflow-y-auto">
-            <AuthButton onAuthOpen={() => { onAuthOpen(); setMobileMenuOpen(false); }} mobile={true} />
-            <div className="border-b border-border my-2" />
 
             {menuKeys.map((item) => (
               <Link

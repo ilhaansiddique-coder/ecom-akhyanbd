@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { clearSmtpCache } from "@/lib/email";
 
 export async function GET(_request: NextRequest) {
   let admin;
@@ -11,10 +12,17 @@ export async function GET(_request: NextRequest) {
 
   const settings = await prisma.siteSetting.findMany();
 
-  // Convert to key-value object
+  // Sensitive keys — mask in API response (write-only)
+  const SENSITIVE_KEYS = new Set(["smtp_pass", "steadfast_api_key", "steadfast_secret_key"]);
+
+  // Convert to key-value object, masking sensitive values
   const result: Record<string, string | null> = {};
   for (const setting of settings) {
-    result[setting.key] = setting.value;
+    if (SENSITIVE_KEYS.has(setting.key) && setting.value) {
+      result[setting.key] = "••••••••";
+    } else {
+      result[setting.key] = setting.value;
+    }
   }
 
   return jsonResponse(result);
@@ -27,7 +35,9 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const updates = Object.entries(body).map(([key, value]) =>
+    // Skip masked values — don't overwrite secrets with "••••••••"
+    const entries = Object.entries(body).filter(([_, value]) => value !== "••••••••");
+    const updates = entries.map(([key, value]) =>
       prisma.siteSetting.upsert({
         where: { key },
         update: { value: value as string },
@@ -37,7 +47,8 @@ export async function PUT(request: NextRequest) {
 
     await prisma.$transaction(updates);
 
-    revalidateTag("settings", "max");
+    revalidateAll("settings");
+    clearSmtpCache();
     return jsonResponse({ message: "Settings updated" });
   } catch (error) {
     return errorResponse("Failed to update settings", 500);

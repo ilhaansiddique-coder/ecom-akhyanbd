@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -39,7 +39,7 @@ export async function PUT(
       },
     });
 
-    revalidateTag("brands", "max");
+    revalidateAll("brands");
     bumpVersion("brands");
     return jsonResponse(serialize(brand));
   } catch (error) {
@@ -59,7 +59,7 @@ export async function DELETE(
   if (!existing) return notFound("Brand not found");
 
   await prisma.brand.delete({ where: { id: Number(id) } });
-  revalidateTag("brands", "max");
+  revalidateAll("brands");
   bumpVersion("brands");
   return jsonResponse({ message: "Brand deleted" });
 }

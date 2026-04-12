@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -37,7 +37,7 @@ export async function PUT(
       },
     });
 
-    revalidateTag("menus", "max");
+    revalidateAll("menus");
     return jsonResponse(serialize(menu));
   } catch (error) {
     return errorResponse("Failed to update menu", 500);
@@ -56,6 +56,6 @@ export async function DELETE(
   if (!existing) return notFound("Menu not found");
 
   await prisma.navMenu.delete({ where: { id: Number(id) } });
-  revalidateTag("menus", "max");
+  revalidateAll("menus");
   return jsonResponse({ message: "Menu deleted" });
 }

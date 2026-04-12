@@ -10,6 +10,7 @@ const hindSiliguri = Hind_Siliguri({
   display: "swap",
 });
 
+
 const playfairDisplay = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
@@ -69,7 +70,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
-      <body className="min-h-screen bg-background" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://mavesoj.com" />
+        <link rel="dns-prefetch" href="https://mavesoj.com" />
+      </head>
+      <body className={`min-h-screen bg-background ${hindSiliguri.className}`} suppressHydrationWarning>
         {/* Mark JS as active so fade-in animations only apply after hydration.
             Without this, content stays visible (no invisible flash). */}
         <script dangerouslySetInnerHTML={{ __html: 'document.documentElement.classList.add("js-ready")' }} />

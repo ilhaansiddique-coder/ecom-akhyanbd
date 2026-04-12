@@ -61,14 +61,14 @@ export const updatePasswordSchema = z.object({
 
 // ─── Orders ───
 export const createOrderSchema = z.object({
-  customer_name: z.string().min(1),
-  customer_phone: z.string().min(1).optional(),
+  customer_name: z.string().min(1, "নাম আবশ্যক"),
+  customer_phone: z.string().min(1, "ফোন নম্বর আবশ্যক").optional().or(z.literal("")),
   customer_email: z.string().email().optional().or(z.literal("")),
-  customer_address: z.string().min(1).optional(),
-  phone: z.string().min(1).optional(),
-  address: z.string().min(1).optional(),
+  customer_address: z.string().min(1, "ঠিকানা আবশ্যক").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  address: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
-  city: z.string().min(1),
+  city: z.string().optional().or(z.literal("")),
   zip_code: z.string().optional(),
   subtotal: z.coerce.number(),
   shipping_cost: z.coerce.number().optional(),
@@ -76,6 +76,7 @@ export const createOrderSchema = z.object({
   discount: z.coerce.number().optional(),
   total: z.coerce.number(),
   payment_method: z.enum(["cod", "bkash", "nagad", "bank"]).default("cod"),
+  transaction_id: z.string().optional(),
   notes: z.string().optional(),
   items: z.array(
     z.object({
@@ -121,6 +122,7 @@ export const addressSchema = z.object({
 export const contactSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
+  phone: z.string().optional(),
   subject: z.string().optional(),
   message: z.string().min(1),
 });
@@ -142,6 +144,7 @@ export const productSchema = z.object({
   badge_color: strOpt,
   weight: strOpt,
   stock: intDef(0),
+  unlimited_stock: z.boolean().optional(),
   sold_count: int.optional(),
   is_active: boolDef(true),
   is_featured: boolDef(false),
@@ -236,11 +239,43 @@ export const shippingZoneSchema = z.object({
 
 // ─── Admin: Landing Pages ───
 export const landingPageSchema = z.object({
-  product_id: z.coerce.number(),
   slug: z.string().min(1),
-  custom_title: z.string().nullable().optional(),
-  custom_description: z.string().nullable().optional(),
+  title: z.string().min(1),
   is_active: z.boolean().default(true),
+  hero_headline: strOpt,
+  hero_subheadline: strOpt,
+  hero_image: strOpt,
+  hero_cta: strOpt,
+  hero_trust_text: strOpt,
+  hero_badge: strOpt,
+  problem_title: strOpt,
+  problem_points: strOpt, // JSON string
+  products_title: strOpt,
+  products_subtitle: strOpt,
+  features_title: strOpt,
+  features: strOpt,
+  testimonials_title: strOpt,
+  testimonials_mode: strOpt, // "all_site" | "select" | "custom"
+  testimonials: strOpt,
+  how_it_works_title: strOpt,
+  how_it_works_subtitle: strOpt,
+  how_it_works: strOpt,
+  faq_title: strOpt,
+  faq: strOpt,
+  products: strOpt,
+  checkout_title: strOpt,
+  checkout_subtitle: strOpt,
+  checkout_btn_text: strOpt,
+  custom_shipping: z.boolean().optional(),
+  shipping_cost: z.coerce.number().optional(),
+  show_email: z.boolean().optional(),
+  show_city: z.boolean().optional(),
+  guarantee_text: strOpt,
+  success_message: strOpt,
+  meta_title: strOpt,
+  meta_description: strOpt,
+  whatsapp: strOpt,
+  primary_color: strOpt,
 });
 
 // ─── Admin: Users ───

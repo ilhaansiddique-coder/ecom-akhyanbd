@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FiShoppingCart, FiMinus, FiPlus, FiStar, FiCheck } from "react-icons/fi";
+import { useRouter } from "next/navigation";
+import { FiShoppingCart, FiShoppingBag, FiMinus, FiPlus, FiStar, FiCheck } from "react-icons/fi";
 import { useCart } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
+import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 
@@ -24,37 +26,85 @@ interface ProductDetailClientProps {
 
 export function AddToCartSection({ productId, productName, price, image }: ProductDetailClientProps) {
   const { addItem } = useCart();
+  const { lang } = useLang();
+  const router = useRouter();
   const [quantity, setQuantity] = useState(1);
-  const [addedToCart, setAddedToCart] = useState(false);
+  const [showAdded, setShowAdded] = useState(false);
 
-  const handleAdd = () => {
+  const handleAddToBag = () => {
     addItem({ id: productId, name: productName, price, image }, quantity);
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 2000);
+    setShowAdded(true);
+  };
+
+  const handleOrderNow = () => {
+    addItem({ id: productId, name: productName, price, image }, quantity);
+    router.push("/checkout");
   };
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-1 bg-white rounded-xl border border-border">
-        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:text-primary transition-colors">
-          <FiMinus className="w-4 h-4" />
+    <>
+      <div className="space-y-3">
+        {/* Row 1: Quantity */}
+        <div className="flex items-center gap-1 bg-white rounded-xl border border-border w-fit">
+          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:text-primary transition-colors">
+            <FiMinus className="w-4 h-4" />
+          </button>
+          <span className="text-lg font-semibold w-10 text-center" suppressHydrationWarning>{toBn(quantity)}</span>
+          <button onClick={() => setQuantity(quantity + 1)} className="p-3 hover:text-primary transition-colors">
+            <FiPlus className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Row 2: Add to Bag */}
+        <button
+          onClick={handleAddToBag}
+          className="w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-primary text-primary hover:bg-primary/5"
+        >
+          <FiShoppingCart className="w-5 h-5" />
+          {lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন"}
         </button>
-        <span className="text-lg font-semibold w-10 text-center" suppressHydrationWarning>{toBn(quantity)}</span>
-        <button onClick={() => setQuantity(quantity + 1)} className="p-3 hover:text-primary transition-colors">
-          <FiPlus className="w-4 h-4" />
+
+        {/* Row 3: Order Now */}
+        <button
+          onClick={handleOrderNow}
+          className="w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm bg-primary text-white hover:bg-primary-light"
+        >
+          <FiShoppingBag className="w-5 h-5" />
+          {lang === "en" ? "Order Now" : "অর্ডার করুন"}
         </button>
       </div>
-      <button
-        onClick={handleAdd}
-        className={`flex-1 py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm ${addedToCart ? "bg-green-600 text-white" : "bg-primary text-white hover:bg-primary-light"}`}
-      >
-        {addedToCart ? (
-          <><FiCheck className="w-5 h-5" /> কার্টে যোগ হয়েছে</>
-        ) : (
-          <><FiShoppingCart className="w-5 h-5" /> অর্ডার করুন</>
-        )}
-      </button>
-    </div>
+
+      {/* Added to Cart Popup */}
+      {showAdded && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAdded(false)}>
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                <FiCheck className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">
+                {lang === "en" ? "Added to Cart!" : "কার্টে যোগ হয়েছে!"}
+              </h3>
+              <p className="text-sm text-gray-500 mb-5 line-clamp-1">{productName}</p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowAdded(false)}
+                  className="flex-1 py-2.5 border-2 border-primary text-primary rounded-xl text-sm font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
+                >
+                  {lang === "en" ? "Continue Shopping" : "আরো কিনুন"}
+                </button>
+                <button
+                  onClick={() => { setShowAdded(false); router.push("/checkout"); }}
+                  className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors cursor-pointer"
+                >
+                  {lang === "en" ? "Checkout" : "চেকআউট"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

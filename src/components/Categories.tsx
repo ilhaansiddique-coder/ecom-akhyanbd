@@ -6,7 +6,7 @@ import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import MotionFadeIn from "./MotionFadeIn";
 import LiveRefresh from "./LiveRefresh";
 import T from "./T";
-import { SafeImg } from "./SafeImage";
+import { SafeNextImage } from "./SafeImage";
 
 interface CategoryItem {
   id?: number;
@@ -91,12 +91,14 @@ export default function Categories({ categories }: CategoriesProps) {
                     className="group flex flex-col items-center text-center shrink-0 w-28 md:w-36"
                   >
                     {/* Image container */}
-                    <div className={`w-24 h-24 md:w-32 md:h-32 rounded-2xl overflow-hidden border-2 border-transparent group-hover:border-primary group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 ${!cat.image ? `bg-gradient-to-br ${cat.color || "from-gray-50 to-gray-100"}` : ""}`}>
+                    <div className={`w-24 h-24 md:w-32 md:h-32 rounded-2xl overflow-hidden border-2 border-transparent group-hover:border-primary group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 relative ${!cat.image ? `bg-gradient-to-br ${cat.color || "from-gray-50 to-gray-100"}` : ""}`}>
                       {cat.image ? (
-                        <SafeImg
+                        <SafeNextImage
                           src={cat.image}
                           alt={cat.name}
-                          className="w-full h-full object-cover"
+                          fill
+                          sizes="128px"
+                          className="object-cover"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">

@@ -1,14 +1,12 @@
 "use client";
 
 import Image, { ImageProps } from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const PLACEHOLDER = "/placeholder.svg";
 
-/**
- * SafeImage — drop-in replacement for next/image and <img>.
- * Automatically shows placeholder on error or missing src.
- */
+// Gray blur placeholder
+const BLUR_DATA_URL = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNlZWUiLz48L3N2Zz4=";
 
 // ─── For next/image (fill mode) ───
 interface SafeNextImageProps extends Omit<ImageProps, "onError"> {
@@ -17,14 +15,28 @@ interface SafeNextImageProps extends Omit<ImageProps, "onError"> {
 
 export function SafeNextImage({ src, fallback = PLACEHOLDER, alt, ...props }: SafeNextImageProps) {
   const [imgSrc, setImgSrc] = useState(src || fallback);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(src || fallback);
+    setHasError(false);
+  }, [src, fallback]);
+
+  const isSvg = typeof imgSrc === "string" && imgSrc.endsWith(".svg");
 
   return (
     <Image
       {...props}
       src={imgSrc || fallback}
-      alt={alt}
-      onError={() => setImgSrc(fallback)}
-      unoptimized
+      alt={alt || ""}
+      onError={() => {
+        if (!hasError) {
+          setHasError(true);
+          setImgSrc(fallback);
+        }
+      }}
+      {...(!isSvg ? { placeholder: "blur", blurDataURL: BLUR_DATA_URL } : {})}
+      unoptimized={isSvg}
     />
   );
 }
@@ -37,6 +49,10 @@ interface SafeImgProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 export function SafeImg({ src, fallback = PLACEHOLDER, alt, ...props }: SafeImgProps) {
   const [imgSrc, setImgSrc] = useState(src || fallback);
 
+  useEffect(() => {
+    setImgSrc(src || fallback);
+  }, [src, fallback]);
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -44,14 +60,12 @@ export function SafeImg({ src, fallback = PLACEHOLDER, alt, ...props }: SafeImgP
       src={imgSrc || fallback}
       alt={alt || ""}
       onError={() => setImgSrc(fallback)}
+      loading="lazy"
+      decoding="async"
     />
   );
 }
 
-/**
- * Helper: get safe image URL — returns placeholder if empty/null/undefined.
- * Use this in data mappers or when passing image to other components.
- */
 export function safeImageUrl(url: string | null | undefined): string {
   if (!url || url.trim() === "") return PLACEHOLDER;
   return url;

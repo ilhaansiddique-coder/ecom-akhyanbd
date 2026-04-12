@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { FiShoppingBag, FiCheck, FiPrinter, FiDownload } from "react-icons/fi";
+import { FiShoppingBag, FiCheck, FiPrinter, FiDownload, FiMinus, FiPlus, FiTrash2 } from "react-icons/fi";
 import { useCart, CartItem } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
-import { SafeImg } from "@/components/SafeImage";
+import { SafeNextImage } from "@/components/SafeImage";
 // Lazy-loaded: html2canvas-pro (~15KB) + jspdf (~60KB) only when user clicks download
 const loadPdfLibs = () => Promise.all([
   import("html2canvas-pro").then(m => m.default),
@@ -35,7 +35,7 @@ interface OrderData {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, hydrated, totalPrice, clearCart, updateQuantity, removeItem } = useCart();
   const { user } = useAuth();
   const invoiceRef = useRef<HTMLDivElement>(null);
 
@@ -46,9 +46,11 @@ export default function CheckoutPage() {
   const [city, setCity] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [transactionId, setTransactionId] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [orderPlaced, setOrderPlaced] = useState(false);
   const [order, setOrder] = useState<OrderData | null>(null);
   const [savedItems, setSavedItems] = useState<CartItem[]>([]);
 
@@ -58,9 +60,13 @@ export default function CheckoutPage() {
   const [couponMsg, setCouponMsg] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
-  // Shipping
+  // Shipping zones
   const [shippingCost, setShippingCost] = useState(DEFAULT_SHIPPING);
-  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingZones, setShippingZones] = useState<{ id: number; name: string; rate: number; cities: string[]; estimated_days?: string }[]>([]);
+  const [selectedZone, setSelectedZone] = useState<number | null>(null);
+
+  // Checkout settings (customizer)
+  const [checkoutSettings, setCheckoutSettings] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (user) {
@@ -70,11 +76,34 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
+  // Fetch shipping zones + checkout settings on mount
   useEffect(() => {
-    if (items.length === 0 && !order) {
+    fetch("/api/v1/shipping/zones", { headers: { Accept: "application/json" } })
+      .then(r => r.json())
+      .then(data => {
+        const zones = (Array.isArray(data) ? data : data.data || []).map((z: any) => ({
+          ...z,
+          cities: typeof z.cities === "string" ? JSON.parse(z.cities) : (z.cities || []),
+        }));
+        setShippingZones(zones);
+        if (zones.length > 0) {
+          setSelectedZone(zones[0].id);
+          setShippingCost(zones[0].rate);
+        }
+      })
+      .catch(() => {});
+    fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
+      .then(r => r.json())
+      .then(data => setCheckoutSettings(data || {}))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Wait for cart to load from localStorage before deciding to redirect
+    if (hydrated && items.length === 0 && !order && !orderPlaced) {
       router.push("/shop");
     }
-  }, [items, order, router]);
+  }, [hydrated, items, order, orderPlaced, router]);
 
   // Saved addresses
   const [savedAddresses, setSavedAddresses] = useState<{ id: number; label?: string; address: string; city: string; zip_code?: string }[]>([]);
@@ -93,7 +122,7 @@ export default function CheckoutPage() {
 
   const applySavedAddress = (addr: typeof savedAddresses[0]) => {
     setAddress(addr.address);
-    handleCityChange(addr.city);
+    setCity(addr.city);
     if (addr.zip_code) setZipCode(addr.zip_code);
   };
 
@@ -124,24 +153,10 @@ export default function CheckoutPage() {
     }
   };
 
-  // Calculate shipping based on city
-  const handleCityChange = async (newCity: string) => {
-    setCity(newCity);
-    if (!newCity.trim()) { setShippingCost(DEFAULT_SHIPPING); return; }
-    setShippingLoading(true);
-    try {
-      const res = await fetch(`/api/v1/shipping/calculate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ city: newCity, subtotal: totalPrice }),
-      });
-      const data = await res.json();
-      if (data.shipping_cost != null) setShippingCost(Number(data.shipping_cost));
-    } catch {
-      setShippingCost(DEFAULT_SHIPPING);
-    } finally {
-      setShippingLoading(false);
-    }
+  const handleZoneSelect = (zoneId: number) => {
+    setSelectedZone(zoneId);
+    const zone = shippingZones.find(z => z.id === zoneId);
+    if (zone) setShippingCost(zone.rate);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,7 +171,7 @@ export default function CheckoutPage() {
         customer_phone: phone,
         customer_email: email || undefined,
         customer_address: address,
-        city,
+        city: city || (selectedZone ? shippingZones.find(z => z.id === selectedZone)?.name || "" : ""),
         zip_code: zipCode || undefined,
         subtotal: totalPrice,
         shipping_cost: shippingCost,
@@ -164,6 +179,7 @@ export default function CheckoutPage() {
         discount: couponDiscount || undefined,
         total,
         payment_method: paymentMethod,
+        transaction_id: transactionId || undefined,
         notes: notes || undefined,
         items: items.map((item) => ({
           product_id: item.id,
@@ -173,8 +189,14 @@ export default function CheckoutPage() {
         })),
       });
 
-      setOrder(res);
+      setOrderPlaced(true);
       clearCart();
+      // Redirect to unique order page if token available
+      if (res.order_token) {
+        router.push(`/order/${res.order_token}`);
+        return;
+      }
+      setOrder(res);
     } catch (err: unknown) {
       const error = err as { message?: string; errors?: Record<string, string[]> };
       if (error.errors) {
@@ -192,22 +214,14 @@ export default function CheckoutPage() {
     if (!content) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const fontBase = window.location.origin;
     printWindow.document.write(`
       <html><head><title>ইনভয়েস #${order?.id}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
       <style>
-        @font-face {
-          font-family: "LiAbuJMAkkas";
-          src: url("${fontBase}/fonts/LiAbuJMAkkas.ttf") format("truetype");
-          font-weight: normal;
-          font-style: normal;
-          unicode-range: U+09E6-09EF, U+09F3;
-        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'LiAbuJMAkkas', 'Hind Siliguri', sans-serif; color: #333; padding: 40px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { font-family: 'Hind Siliguri', sans-serif; color: #333; padding: 40px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .invoice { max-width: 700px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #0f5931; }
         .brand h1 { color: #0f5931; font-size: 22px; }
@@ -475,172 +489,283 @@ export default function CheckoutPage() {
   }
 
   // === CHECKOUT FORM ===
+  const inputCls = "w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-primary focus:outline-none text-sm";
+
   return (
-    <section className="py-8 md:py-12 bg-background-alt min-h-[70vh]">
-      <div className="container mx-auto px-4">
+    <section className="py-8 md:py-16 bg-gray-100 min-h-[70vh]">
+      <div className="max-w-4xl mx-auto px-4 md:px-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-8">চেকআউট</h1>
+          <div className="bg-white rounded-[2rem] md:rounded-[3rem] p-6 md:p-12 shadow-2xl border border-gray-100">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h1 className="text-2xl md:text-4xl font-extrabold text-primary mb-2">{checkoutSettings.checkout_title || "🛒 আপনার অর্ডার দিন"}</h1>
+              <p className="text-gray-500 text-sm md:text-base">{checkoutSettings.checkout_subtitle || "নিচের ফরমটি পূরণ করে অর্ডারটি কনফার্ম করুন।"}</p>
+            </div>
 
-          {error && (
-            <div className="p-4 mb-6 bg-sale-red/10 text-sale-red text-sm rounded-xl">{error}</div>
-          )}
+            {error && (
+              <div className="p-4 mb-6 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>
+            )}
 
-          <div className="grid lg:grid-cols-[1fr_400px] gap-8">
-            {/* Form */}
-            <form onSubmit={handleSubmit} id="checkout-form" className="bg-white rounded-2xl border border-border p-6 md:p-8 space-y-5">
-              <h2 className="text-lg font-bold text-foreground mb-2">ডেলিভারি তথ্য</h2>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">নাম *</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">ফোন নম্বর *</label>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
-                </div>
-              </div>
-
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Products with qty controls */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">ইমেইল</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
+                <label className="block font-bold text-sm mb-3 px-1">আপনার পণ্য</label>
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item.id} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden shrink-0 relative">
+                          <SafeNextImage src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-sm truncate mb-2">{item.name}</div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => {
+                              if (item.quantity <= 1) removeItem(item.id);
+                              else updateQuantity(item.id, item.quantity - 1);
+                            }}
+                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0">
+                              <FiMinus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="w-8 text-center font-bold text-sm">{toBn(item.quantity)}</span>
+                            <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0">
+                              <FiPlus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <div className="font-bold text-lg text-primary">৳{toBn(item.price * item.quantity)}</div>
+                          <button type="button" onClick={() => removeItem(item.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                            <FiTrash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
+              {/* Name + Phone */}
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="block font-bold text-sm mb-2 px-1">আপনার নাম *</label>
+                  <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="পুরো নাম লিখুন" />
+                </div>
+                <div className="flex-1">
+                  <label className="block font-bold text-sm mb-2 px-1">মোবাইল নম্বর *</label>
+                  <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} placeholder="০১৭XXXXXXXX" />
+                </div>
+              </div>
+
+              {/* Email — conditional */}
+              {checkoutSettings.checkout_show_email === "true" && (
+                <div>
+                  <label className="block font-bold text-sm mb-2 px-1">ইমেইল (ঐচ্ছিক)</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="your@email.com" />
+                </div>
+              )}
+
+              {/* Saved addresses */}
               {savedAddresses.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">সংরক্ষিত ঠিকানা</label>
+                  <label className="block font-bold text-sm mb-2 px-1">সংরক্ষিত ঠিকানা</label>
                   <div className="flex flex-wrap gap-2">
                     {savedAddresses.map((addr) => (
-                      <button
-                        key={addr.id}
-                        type="button"
-                        onClick={() => applySavedAddress(addr)}
-                        className="px-3 py-2 text-xs border border-border rounded-lg hover:border-primary hover:text-primary transition-colors text-left"
-                      >
+                      <button key={addr.id} type="button" onClick={() => applySavedAddress(addr)}
+                        className="px-3 py-2 text-xs border-2 border-gray-100 rounded-xl hover:border-primary hover:text-primary transition-colors text-left">
                         <span className="font-medium">{addr.label || addr.city}</span>
-                        <span className="text-text-muted block truncate max-w-48">{addr.address}</span>
+                        <span className="text-gray-400 block truncate max-w-48">{addr.address}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
+              {/* Address */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">ঠিকানা *</label>
-                <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={3} className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none" />
+                <label className="block font-bold text-sm mb-2 px-1">সম্পূর্ণ ঠিকানা *</label>
+                <textarea required rows={3} value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls + " resize-none"} placeholder="গ্রাম, থানা, জেলা উল্লেখ করুন" />
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
+              {/* Shipping Zone Selector */}
+              {shippingZones.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">শহর *</label>
-                  <input type="text" value={city} onChange={(e) => handleCityChange(e.target.value)} required className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">জিপ কোড</label>
-                  <input type="text" value={zipCode} onChange={(e) => setZipCode(e.target.value)} className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-3">পেমেন্ট মেথড *</label>
-                <div className="space-y-2">
-                  {[
-                    { value: "cod", label: "ক্যাশ অন ডেলিভারি" },
-                    { value: "bkash", label: "বিকাশ" },
-                    { value: "nagad", label: "নগদ" },
-                  ].map((m) => (
-                    <label key={m.value} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${paymentMethod === m.value ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
-                      <input type="radio" name="payment" value={m.value} checked={paymentMethod === m.value} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-primary" />
-                      <span className="text-sm font-medium">{m.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">নোট (ঐচ্ছিক)</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full px-4 py-3 border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none" placeholder="ডেলিভারি সম্পর্কে কোনো নির্দেশনা..." />
-              </div>
-            </form>
-
-            {/* Order Summary */}
-            <div className="bg-white rounded-2xl border border-border p-6 h-fit sticky top-24">
-              <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                <FiShoppingBag className="w-5 h-5 text-primary" />
-                অর্ডার সারাংশ
-              </h2>
-
-              <div className="space-y-3 mb-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-background-alt shrink-0">
-                      <SafeImg src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
-                      <p className="text-xs text-text-muted">{toBn(item.quantity)}টি × ৳{toBn(item.price)}</p>
-                    </div>
-                    <span className="text-sm font-semibold text-foreground">৳{toBn(item.price * item.quantity)}</span>
+                  <label className="block font-bold text-sm mb-3 px-1">ডেলিভারি এরিয়া সিলেক্ট করুন *</label>
+                  <div className="space-y-2">
+                    {shippingZones.map((zone) => (
+                      <label key={zone.id}
+                        className={`flex items-center justify-between p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                          selectedZone === zone.id
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-100 hover:border-gray-200"
+                        }`}>
+                        <div className="flex items-center gap-3">
+                          <input type="radio" name="shipping_zone" checked={selectedZone === zone.id}
+                            onChange={() => handleZoneSelect(zone.id)} className="accent-primary w-4 h-4" />
+                          <div>
+                            <span className="text-sm font-semibold">{zone.name}</span>
+                            {zone.estimated_days && (
+                              <span className="text-xs text-gray-400 ml-2">({zone.estimated_days})</span>
+                            )}
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {Array.isArray(zone.cities) ? zone.cities.join(", ") : zone.cities}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold text-primary shrink-0">৳{toBn(zone.rate)}</span>
+                      </label>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
 
-              {/* Coupon */}
-              <div className="border-t border-border pt-4">
-                <label className="block text-sm font-medium text-foreground mb-1.5">কুপন কোড</label>
+              {/* City fallback if no zones + Zip */}
+              {shippingZones.length === 0 && (
+                <div>
+                  <label className="block font-bold text-sm mb-2 px-1">শহর/জেলা *</label>
+                  <input required value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} placeholder="আপনার জেলা" />
+                </div>
+              )}
+
+              {checkoutSettings.checkout_show_zip === "true" && (
+                <div>
+                  <label className="block font-bold text-sm mb-2 px-1">জিপ কোড</label>
+                  <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} className={inputCls} placeholder="৬৪০০" />
+                </div>
+              )}
+
+              {/* Coupon — conditional */}
+              {checkoutSettings.checkout_show_coupon !== "false" && (
+              <div>
+                <label className="block font-bold text-sm mb-2 px-1">কুপন কোড</label>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder="কুপন কোড লিখুন"
-                    className="flex-1 px-3 py-2.5 border border-border rounded-xl text-sm focus:border-primary focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    disabled={couponLoading || !couponCode.trim()}
-                    className="px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-light transition-colors disabled:opacity-50"
-                  >
+                  <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} className={inputCls + " flex-1"} placeholder="কুপন কোড লিখুন" />
+                  <button type="button" onClick={handleApplyCoupon} disabled={couponLoading || !couponCode.trim()}
+                    className="px-5 py-3 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-light transition-colors disabled:opacity-50 shrink-0">
                     {couponLoading ? "..." : "প্রয়োগ"}
                   </button>
                 </div>
-                {couponMsg && (
-                  <p className={`text-xs mt-1.5 ${couponDiscount > 0 ? "text-green-600" : "text-sale-red"}`}>{couponMsg}</p>
-                )}
+                {couponMsg && <p className={`text-xs mt-1.5 px-1 ${couponDiscount > 0 ? "text-green-600" : "text-red-500"}`}>{couponMsg}</p>}
               </div>
+              )}
 
-              <div className="border-t border-border pt-4 space-y-2">
+              {/* Payment Methods — dynamic from settings */}
+              {(() => {
+                const methods = [
+                  { value: "cod", label: "ক্যাশ অন ডেলিভারি", icon: "💵", enabled: checkoutSettings.checkout_payment_cod !== "false" },
+                  { value: "bkash", label: "বিকাশ", icon: "📱", enabled: checkoutSettings.checkout_payment_bkash === "true" },
+                  { value: "nagad", label: "নগদ", icon: "📲", enabled: checkoutSettings.checkout_payment_nagad === "true" },
+                ].filter(m => m.enabled);
+                if (methods.length === 0) return null;
+                return (
+                  <div>
+                    <label className="block font-bold text-sm mb-3 px-1">পেমেন্ট মেথড *</label>
+                    <div className="space-y-2">
+                      {methods.map((m) => (
+                        <div key={m.value}>
+                          <label className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === m.value ? "border-primary bg-primary/5" : "border-gray-100 hover:border-gray-200"}`}>
+                            <input type="radio" name="payment" value={m.value} checked={paymentMethod === m.value} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-primary w-4 h-4" />
+                            <span className="text-lg">{m.icon}</span>
+                            <span className="text-sm font-semibold">{m.label}</span>
+                            {m.value === "bkash" && checkoutSettings.checkout_bkash_number && (
+                              <span className="text-xs text-gray-400 ml-auto">{checkoutSettings.checkout_bkash_number}</span>
+                            )}
+                            {m.value === "nagad" && checkoutSettings.checkout_nagad_number && (
+                              <span className="text-xs text-gray-400 ml-auto">{checkoutSettings.checkout_nagad_number}</span>
+                            )}
+                          </label>
+                          {/* bKash instructions + TrxID */}
+                          {m.value === "bkash" && paymentMethod === "bkash" && (
+                            <div className="mt-2 ml-2 p-4 bg-pink-50 rounded-xl border border-pink-100 space-y-3">
+                              {checkoutSettings.checkout_bkash_instruction && (
+                                <div>
+                                  <p className="text-xs font-bold text-pink-700 mb-1">📱 বিকাশে পেমেন্ট করার নিয়ম:</p>
+                                  <p className="text-xs text-pink-600 whitespace-pre-line">{checkoutSettings.checkout_bkash_instruction}</p>
+                                </div>
+                              )}
+                              {checkoutSettings.checkout_bkash_number && (
+                                <p className="text-sm font-bold text-pink-700">বিকাশ নম্বর: {checkoutSettings.checkout_bkash_number}</p>
+                              )}
+                              <input value={transactionId} onChange={(e) => setTransactionId(e.target.value)}
+                                className="w-full bg-white border border-pink-200 rounded-xl p-3 focus:ring-2 focus:ring-pink-300 focus:outline-none text-sm placeholder-pink-300"
+                                placeholder="বিকাশ Transaction ID লিখুন" required />
+                            </div>
+                          )}
+                          {/* Nagad instructions + TrxID */}
+                          {m.value === "nagad" && paymentMethod === "nagad" && (
+                            <div className="mt-2 ml-2 p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-3">
+                              {checkoutSettings.checkout_nagad_instruction && (
+                                <div>
+                                  <p className="text-xs font-bold text-orange-700 mb-1">📲 নগদে পেমেন্ট করার নিয়ম:</p>
+                                  <p className="text-xs text-orange-600 whitespace-pre-line">{checkoutSettings.checkout_nagad_instruction}</p>
+                                </div>
+                              )}
+                              {checkoutSettings.checkout_nagad_number && (
+                                <p className="text-sm font-bold text-orange-700">নগদ নম্বর: {checkoutSettings.checkout_nagad_number}</p>
+                              )}
+                              <input value={transactionId} onChange={(e) => setTransactionId(e.target.value)}
+                                className="w-full bg-white border border-orange-200 rounded-xl p-3 focus:ring-2 focus:ring-orange-300 focus:outline-none text-sm placeholder-orange-300"
+                                placeholder="নগদ Transaction ID লিখুন" required />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Notes — conditional */}
+              {checkoutSettings.checkout_show_notes !== "false" && (
+                <div>
+                  <label className="block font-bold text-sm mb-2 px-1">নোট (ঐচ্ছিক)</label>
+                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder="ডেলিভারি সম্পর্কে কোনো নির্দেশনা..." />
+                </div>
+              )}
+
+              {/* Order Summary */}
+              <div className="bg-gray-50 rounded-2xl p-5 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">সাবটোটাল</span>
-                  <span className="font-medium">৳{toBn(totalPrice)}</span>
+                  <span className="text-gray-500">সাবটোটাল</span>
+                  <span className="font-semibold">৳{toBn(totalPrice)}</span>
                 </div>
                 {couponDiscount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-green-600">কুপন ছাড়</span>
-                    <span className="font-medium text-green-600">-৳{toBn(couponDiscount)}</span>
+                    <span className="font-semibold text-green-600">-৳{toBn(couponDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">শিপিং চার্জ {shippingLoading && <span className="text-xs">(গণনা হচ্ছে...)</span>}</span>
-                  <span className="font-medium">৳{toBn(shippingCost)}</span>
+                  <span className="text-gray-500">শিপিং চার্জ</span>
+                  <span className="font-semibold">৳{toBn(shippingCost)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
+                <div className="flex justify-between text-xl font-extrabold pt-3 border-t-2 border-primary/20">
                   <span>সর্বমোট</span>
                   <span className="text-primary">৳{toBn(total)}</span>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                form="checkout-form"
-                disabled={loading}
-                className="mt-6 w-full py-3.5 bg-primary text-white rounded-xl font-semibold hover:bg-primary-light transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "অর্ডার হচ্ছে..." : "অর্ডার দিন"}
+              {/* Submit */}
+              <button type="submit" disabled={loading}
+                className="w-full py-4 md:py-5 rounded-full text-white text-lg font-bold shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary-light">
+                {loading ? "অর্ডার হচ্ছে..." : (checkoutSettings.checkout_btn_text || "✅ অর্ডার কনফার্ম করুন")}
               </button>
-            </div>
+
+              {/* Trust / Guarantee */}
+              {checkoutSettings.checkout_guarantee_text ? (
+                <p className="text-center text-xs font-medium text-gray-400 pt-2">{checkoutSettings.checkout_guarantee_text}</p>
+              ) : (
+                <div className="flex flex-wrap justify-center gap-3 text-xs font-medium text-gray-400 pt-2">
+                  <span>🔒 নিরাপদ অর্ডার</span>
+                  <span>•</span>
+                  <span>🚚 দ্রুত ডেলিভারি</span>
+                  <span>•</span>
+                  <span>💵 ক্যাশ অন ডেলিভারি</span>
+                </div>
+              )}
+            </form>
           </div>
         </motion.div>
       </div>

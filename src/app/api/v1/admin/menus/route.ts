@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    revalidateTag("menus", "max");
+    revalidateAll("menus");
     return jsonResponse(serialize(menu), 201);
   } catch (error) {
     return errorResponse("Failed to create menu", 500);

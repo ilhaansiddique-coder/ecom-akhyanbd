@@ -2,15 +2,7 @@
 
 /* ==================== CUSTOM FONT ==================== */
 
-@font-face {
-  font-family: "LiAbuJMAkkas";
-  src: url("/fonts/LiAbuJMAkkas.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+09E6-09EF, U+09F3;
-  /* ০১২৩৪৫৬৭৮৯ and ৳ — only Bangla digits & taka sign use this font */
-}
+/* LiAbuJMAkkas removed — Hind Siliguri already has proper Bengali digits */
 
 /* ==================== THEME VARIABLES ==================== */
 
@@ -60,9 +52,7 @@
 /* ==================== LANGUAGE FONT SWITCHING ==================== */
 
 /* Bangla mode (default) — Hind Siliguri for everything */
-.lang-bn body {
-  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), system-ui, sans-serif;
-}
+/* Bengali mode handled by default body rule below */
 
 /* English font overrides moved to after body rule for proper cascade */
 
@@ -119,14 +109,35 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Default font — Bengali */
-body {
-  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), system-ui, sans-serif;
+/* Anek Bangla — ONLY for Bengali digits ০-৯ and ৳ (fixes Hind Siliguri ১ clipping) */
+@font-face {
+  font-family: "BanglaDigits";
+  src: url("/fonts/AnekBangla-400.ttf") format("truetype");
+  font-weight: 100 500;
+  font-display: swap;
+  unicode-range: U+09E6-09EF, U+09F3;
+}
+@font-face {
+  font-family: "BanglaDigits";
+  src: url("/fonts/AnekBangla-700.ttf") format("truetype");
+  font-weight: 600 900;
+  font-display: swap;
+  unicode-range: U+09E6-09EF, U+09F3;
 }
 
-/* English font override — must come AFTER default body font */
-html.lang-en body,
-html.lang-en body * {
+/* Force all elements to inherit body font */
+*, *::before, *::after, input, textarea, select, button {
+  font-family: inherit;
+}
+
+/* Prepend BanglaDigits before Hind Siliguri — browser picks Anek Bangla for digits, Hind Siliguri for everything else */
+body {
+  font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
+}
+
+
+/* English font override */
+html.lang-en body {
   font-family: var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
 }
 
@@ -188,7 +199,7 @@ html.lang-en h4 {
 }
 
 .font-num {
-  font-family: "LiAbuJMAkkas", var(--font-hind-siliguri), sans-serif;
+  font-family: var(--font-hind-siliguri), "Hind Siliguri", sans-serif;
 }
 
 .line-clamp-2 {

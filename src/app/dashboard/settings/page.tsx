@@ -5,11 +5,12 @@ import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import DashboardLayout from "@/components/DashboardLayout";
 import Toast from "@/components/Toast";
-import { FiSave, FiTruck, FiCheckCircle, FiXCircle } from "react-icons/fi";
+import { FiSave } from "react-icons/fi";
 import { FormSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
 
 interface Settings {
+  site_language?: string;
   site_name?: string;
   phone?: string;
   email?: string;
@@ -24,6 +25,23 @@ interface Settings {
   copyright_text?: string;
   meta_title?: string;
   meta_description?: string;
+  // Checkout
+  checkout_title?: string;
+  checkout_subtitle?: string;
+  checkout_show_email?: string;
+  checkout_show_zip?: string;
+  checkout_show_notes?: string;
+  checkout_btn_text?: string;
+  checkout_success_msg?: string;
+  checkout_guarantee_text?: string;
+  checkout_payment_cod?: string;
+  checkout_payment_bkash?: string;
+  checkout_payment_nagad?: string;
+  checkout_bkash_number?: string;
+  checkout_bkash_instruction?: string;
+  checkout_nagad_number?: string;
+  checkout_nagad_instruction?: string;
+  checkout_show_coupon?: string;
   // Courier
   steadfast_api_key?: string;
   steadfast_secret_key?: string;
@@ -33,6 +51,7 @@ interface Settings {
 }
 
 const emptySettings: Settings = {
+  site_language: "bn",
   site_name: "",
   phone: "",
   email: "",
@@ -47,6 +66,22 @@ const emptySettings: Settings = {
   copyright_text: "",
   meta_title: "",
   meta_description: "",
+  checkout_title: "",
+  checkout_subtitle: "",
+  checkout_show_email: "false",
+  checkout_show_zip: "false",
+  checkout_show_notes: "true",
+  checkout_btn_text: "",
+  checkout_success_msg: "",
+  checkout_guarantee_text: "",
+  checkout_payment_cod: "true",
+  checkout_payment_bkash: "false",
+  checkout_payment_nagad: "false",
+  checkout_bkash_number: "",
+  checkout_bkash_instruction: "",
+  checkout_nagad_number: "",
+  checkout_nagad_instruction: "",
+  checkout_show_coupon: "true",
   steadfast_api_key: "",
   steadfast_secret_key: "",
   steadfast_enabled: "true",
@@ -60,7 +95,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
-  const [courierTest, setCourierTest] = useState<{ loading: boolean; success?: boolean; balance?: number }>({ loading: false });
 
   const showToast = (message: string, type: "success" | "error" = "success") =>
     setToast({ message, type });
@@ -94,34 +128,6 @@ export default function SettingsPage() {
   const set = (key: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const testCourierConnection = async () => {
-    setCourierTest({ loading: true });
-    try {
-      // Save keys first, then test
-      await api.admin.updateSettings({
-        steadfast_api_key: form.steadfast_api_key,
-        steadfast_secret_key: form.steadfast_secret_key,
-        steadfast_enabled: form.steadfast_enabled,
-        steadfast_auto_send: form.steadfast_auto_send,
-        steadfast_include_notes: form.steadfast_include_notes,
-      });
-      // Use test action which clears key cache first
-      const res = await fetch("/api/v1/admin/courier?action=test", {
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      }).then(r => r.json());
-      if (res.success) {
-        setCourierTest({ loading: false, success: true, balance: res.balance });
-        showToast("কুরিয়ার সংযোগ সফল!");
-      } else {
-        setCourierTest({ loading: false, success: false });
-        showToast(res.message || "কুরিয়ার সংযোগ ব্যর্থ — API কী চেক করুন", "error");
-      }
-    } catch {
-      setCourierTest({ loading: false, success: false });
-      showToast("কুরিয়ার সংযোগ ব্যর্থ", "error");
-    }
-  };
 
   const inputCls = theme.input;
   const labelCls = theme.label;
@@ -220,61 +226,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* কুরিয়ার সেটিংস (Steadfast) */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <FiTruck className="w-5 h-5 text-[#0f5931]" />
-                <h3 className="text-sm font-bold text-gray-700">কুরিয়ার সেটিংস (Steadfast)</h3>
-                {courierTest.success !== undefined && (
-                  <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${courierTest.success ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                    {courierTest.success ? <><FiCheckCircle className="w-3 h-3" /> Connected</> : <><FiXCircle className="w-3 h-3" /> Failed</>}
-                  </span>
-                )}
-              </div>
-              <div className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>API Key</label>
-                    <input value={form.steadfast_api_key || ""} onChange={set("steadfast_api_key")} className={inputCls} placeholder="Enter Steadfast API Key" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Secret Key</label>
-                    <input type="password" value={form.steadfast_secret_key || ""} onChange={set("steadfast_secret_key")} className={inputCls} placeholder="Enter Steadfast Secret Key" />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.steadfast_enabled === "true"} onChange={(e) => setForm((prev) => ({ ...prev, steadfast_enabled: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                    কুরিয়ার সক্রিয়
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.steadfast_auto_send === "true"} onChange={(e) => setForm((prev) => ({ ...prev, steadfast_auto_send: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                    অর্ডার অটো-সেন্ড
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={form.steadfast_include_notes === "true"} onChange={(e) => setForm((prev) => ({ ...prev, steadfast_include_notes: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                    অর্ডার নোট অন্তর্ভুক্ত
-                  </label>
-                </div>
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={testCourierConnection}
-                    disabled={courierTest.loading || !form.steadfast_api_key || !form.steadfast_secret_key}
-                    className="flex items-center gap-2 px-4 py-2 border border-[#0f5931] text-[#0f5931] rounded-xl text-sm font-medium hover:bg-[#0f5931] hover:text-white transition-colors disabled:opacity-50"
-                  >
-                    <FiTruck className="w-4 h-4" />
-                    {courierTest.loading ? "চেক হচ্ছে..." : "Test Connection"}
-                  </button>
-                  {courierTest.success && courierTest.balance !== undefined && (
-                    <span className="text-sm text-[#0f5931] font-semibold">ব্যালেন্স: ৳{courierTest.balance}</span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400">
-                  API কী পেতে <a href="https://portal.packzy.com" target="_blank" rel="noopener noreferrer" className="text-[#0f5931] underline">Steadfast Portal</a> এ যান।
-                </p>
-              </div>
-            </div>
 
             <div className="flex justify-end">
               <button

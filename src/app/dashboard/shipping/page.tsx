@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
-import { toBn } from "@/utils/toBn";
+import { toBn, parseNum } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
@@ -17,7 +17,7 @@ interface ShippingZone {
   name: string;
   cities: string[];
   rate: number;
-  estimated_days: number;
+  estimated_days: string;
   is_active: boolean;
 }
 
@@ -86,8 +86,8 @@ export default function ShippingPage() {
     const payload = {
       ...form,
       cities: citiesArray,
-      rate: Number(form.rate),
-      estimated_days: Number(form.estimated_days),
+      rate: parseNum(form.rate),
+      estimated_days: form.estimated_days || null,
     };
     try {
       if (editId) {
@@ -194,7 +194,7 @@ export default function ShippingPage() {
                           <span className="truncate block">{Array.isArray(item.cities) ? item.cities.join(", ") : "—"}</span>
                         </td>
                         <td className="px-4 py-3 font-semibold text-[#0f5931]">৳{toBn(item.rate)}</td>
-                        <td className="px-4 py-3 text-gray-600">{toBn(item.estimated_days)} দিন</td>
+                        <td className="px-4 py-3 text-gray-600">{item.estimated_days || "—"}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                             {item.is_active ? "সক্রিয়" : "নিষ্ক্রিয়"}
@@ -233,11 +233,11 @@ export default function ShippingPage() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>ডেলিভারি রেট (৳) *</label>
-              <input required type="number" min="0" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} className={inputCls} />
+              <input required value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} className={inputCls} placeholder="যেমন: ৬০ বা 60" inputMode="numeric" />
             </div>
             <div>
-              <label className={labelCls}>আনুমানিক সময় (দিন) *</label>
-              <input required type="number" min="1" value={form.estimated_days} onChange={(e) => setForm({ ...form, estimated_days: e.target.value })} className={inputCls} />
+              <label className={labelCls}>আনুমানিক সময়</label>
+              <input value={form.estimated_days} onChange={(e) => setForm({ ...form, estimated_days: e.target.value })} className={inputCls} placeholder="যেমন: ১-২ দিন" />
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">

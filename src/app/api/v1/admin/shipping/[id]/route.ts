@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -37,7 +37,7 @@ export async function PUT(
       },
     });
 
-    revalidateTag("shipping", "max");
+    revalidateAll("shipping");
     return jsonResponse(serialize(zone));
   } catch (error) {
     return errorResponse("Failed to update shipping zone", 500);
@@ -56,6 +56,6 @@ export async function DELETE(
   if (!existing) return notFound("Shipping zone not found");
 
   await prisma.shippingZone.delete({ where: { id: Number(id) } });
-  revalidateTag("shipping", "max");
+  revalidateAll("shipping");
   return jsonResponse({ message: "Shipping zone deleted" });
 }

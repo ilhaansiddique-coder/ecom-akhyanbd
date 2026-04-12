@@ -23,11 +23,24 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("bn");
 
   useEffect(() => {
+    // 1. Check user's saved preference first
     const saved = localStorage.getItem("lang") as Lang | null;
     if (saved === "en" || saved === "bn") {
       setLangState(saved);
       setNumberLang(saved);
+      return;
     }
+    // 2. No user preference — fetch site default language
+    fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
+      .then(r => r.json())
+      .then(data => {
+        const siteLang = data?.site_language as Lang | undefined;
+        if (siteLang === "en" || siteLang === "bn") {
+          setLangState(siteLang);
+          setNumberLang(siteLang);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const setLang = useCallback((l: Lang) => {

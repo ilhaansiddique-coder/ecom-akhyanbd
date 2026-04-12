@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import Toast from "@/components/Toast";
-import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus } from "react-icons/fi";
+import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus, FiTrash2 } from "react-icons/fi";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import Modal from "@/components/Modal";
 import DateRangePicker from "@/components/DateRangePicker";
@@ -37,6 +37,7 @@ interface Order {
   status: string;
   payment_status: string;
   payment_method: string;
+  transaction_id?: string;
   notes?: string;
   courier_sent?: boolean;
   consignment_id?: string;
@@ -48,7 +49,7 @@ interface Order {
 }
 
 function useStatusOptions() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   return [
     { value: "", label: t("filter.allStatus"), color: "" },
     { value: "pending", label: t("status.pending"), color: "bg-yellow-400" },
@@ -57,6 +58,7 @@ function useStatusOptions() {
     { value: "shipped", label: t("status.shipped"), color: "bg-purple-400" },
     { value: "delivered", label: t("status.delivered"), color: "bg-green-400" },
     { value: "cancelled", label: t("status.cancelled"), color: "bg-red-400" },
+    { value: "trashed", label: lang === "en" ? "Trash" : "ট্র্যাশ", color: "bg-gray-400" },
   ];
 }
 
@@ -67,6 +69,7 @@ const STATUS_COLORS: Record<string, string> = {
   shipped: "bg-purple-100 text-purple-800",
   delivered: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
+  trashed: "bg-gray-100 text-gray-500",
 };
 
 function usePaymentOptions() {
@@ -152,12 +155,16 @@ export default function OrdersPage() {
     if (!background) setLoading(true);
     const params = statusFilter ? `status=${statusFilter}` : "";
     api.admin.getOrders(params)
-      .then((res) => setOrders(res.data || res || []))
+      .then((res) => {
+        const all = res.data || res || [];
+        // Hide trashed orders from "all" view, only show when explicitly filtered
+        setOrders(statusFilter === "trashed" ? all : all.filter((o: Order) => o.status !== "trashed"));
+      })
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  useEffect(() => { fetchAll(); handleCheckBalance(); }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const openDetail = async (orderId: number) => {
     setDetailLoading(true);
@@ -217,6 +224,17 @@ export default function OrdersPage() {
     }
   };
 
+  const handleTrashOrder = async (orderId: number) => {
+    if (!confirm(lang === "en" ? "Move this order to trash?" : "এই অর্ডারটি ট্র্যাশে পাঠাতে চান?")) return;
+    try {
+      await api.admin.updateOrder(orderId, { status: "trashed" });
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      showToast(lang === "en" ? "Moved to trash" : "ট্র্যাশে পাঠানো হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Failed to trash" : "ট্র্যাশে পাঠাতে সমস্যা", "error");
+    }
+  };
+
   const handleSendToCourier = async (orderId: number) => {
     setCourierLoading(orderId);
     try {
@@ -256,12 +274,16 @@ export default function OrdersPage() {
     }
   };
 
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const handleCheckBalance = async () => {
+    setBalanceLoading(true);
     try {
       const res = await api.admin.courierBalance();
-      setCourierBalance(res.balance);
+      setCourierBalance(res.balance ?? null);
     } catch {
-      showToast("ব্যালেন্স চেক করতে সমস্যা হয়েছে", "error");
+      showToast("ব্যালেন্স চেক করতে সমস্যা হয়েছে — কুরিয়ার API কী চেক করুন", "error");
+    } finally {
+      setBalanceLoading(false);
     }
   };
 
@@ -477,10 +499,11 @@ export default function OrdersPage() {
               onChange={setStatusFilter}
               placeholder={t("filter.allStatus")}
             />
-            {/* Courier balance */}
-            <button type="button" onClick={handleCheckBalance} className="flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:shadow-sm transition-all whitespace-nowrap" title="Steadfast Balance">
+            {/* Courier balance — fetch on click only */}
+            <button type="button" onClick={handleCheckBalance} disabled={balanceLoading}
+              className="flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:shadow-sm transition-all whitespace-nowrap disabled:opacity-50" title="Check Courier Balance">
               <FiTruck className="w-4 h-4" />
-              {courierBalance !== null ? `৳${courierBalance}` : t("th.status")}
+              {balanceLoading ? "চেক হচ্ছে..." : courierBalance !== null ? `৳${courierBalance}` : "ব্যালেন্স চেক"}
             </button>
             {/* Search: visible only on desktop, inline */}
             <div className="relative flex-1 min-w-52 hidden md:block">
@@ -639,6 +662,13 @@ export default function OrdersPage() {
                                 <FiEdit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
+                                onClick={() => handleTrashOrder(o.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="ট্র্যাশে পাঠান"
+                              >
+                                <FiTrash2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
                                 onClick={() => setExpandedId(isExpanded ? null : o.id)}
                                 className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
                                 title="স্ট্যাটাস পরিবর্তন"
@@ -733,6 +763,11 @@ export default function OrdersPage() {
                           <FiCreditCard className="inline w-3 h-3 mr-1" />
                           {PAYMENT_LABELS[o.payment_method] || o.payment_method}
                         </span>
+                        {o.transaction_id && (
+                          <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-blue-100 text-blue-700">
+                            TrxID: {o.transaction_id}
+                          </span>
+                        )}
                       </div>
 
                       {/* Customer Info */}

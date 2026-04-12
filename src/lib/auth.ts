@@ -1,9 +1,10 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "mavesoj-secret-change-in-production"
-);
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET environment variable is required. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+}
+const SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET);
 const COOKIE_NAME = "mavesoj_session";
 const MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 

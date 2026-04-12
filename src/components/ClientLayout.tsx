@@ -13,7 +13,6 @@ import FooterBottom from "./FooterBottom";
 
 // Non-critical UI — load after hydration, not in initial bundle
 const FloatingWidgets = dynamic(() => import("./FloatingWidgets"), { ssr: false });
-const CookieConsent = dynamic(() => import("./CookieConsent"), { ssr: false });
 
 // Lazy-load heavy modals — not needed on initial paint
 const CartDrawer = lazy(() => import("./CartDrawer"));
@@ -26,13 +25,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [authOpen, setAuthOpen] = useState(false);
   const pathname = usePathname() ?? "";
   const isDashboard = pathname.startsWith("/dashboard");
+  const isLandingPage = pathname.startsWith("/lp/");
 
   return (
     <LanguageProvider>
     <AuthProvider>
     <CartProvider>
     <WishlistProvider>
-      {!isDashboard && (
+      {!isDashboard && !isLandingPage && (
         <Navbar
           onSearchOpen={() => setSearchOpen(true)}
           onCartOpen={() => setCartOpen(true)}
@@ -40,7 +40,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         />
       )}
       <main>{children}</main>
-      {!isDashboard && (
+      {!isDashboard && !isLandingPage && (
         <>
           <Footer />
           <FooterBottom />
@@ -52,7 +52,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </Suspense>
         </>
       )}
-      <CookieConsent />
     </WishlistProvider>
     </CartProvider>
     </AuthProvider>

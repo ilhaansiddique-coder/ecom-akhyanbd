@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   allowedDevOrigins: ["172.16.0.2"],
   images: {
     remotePatterns: [
@@ -11,6 +12,10 @@ const nextConfig: NextConfig = {
       },
     ],
     formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days cache
+    deviceSizes: [384, 640, 750, 828, 1024, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    qualities: [75],
   },
   experimental: {
     optimizePackageImports: [
@@ -33,6 +38,30 @@ const nextConfig: NextConfig = {
       {
         source: "/storage/:path*",
         destination: "/uploads/:path*",
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/uploads/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        // Next.js optimized images
+        source: "/_next/image",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        // Static assets
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
       },
     ];
   },

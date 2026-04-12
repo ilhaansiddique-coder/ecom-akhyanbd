@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    revalidateTag("categories", "max");
+    revalidateAll("categories");
     bumpVersion("categories");
     return jsonResponse(serialize(category), 201);
   } catch (error) {

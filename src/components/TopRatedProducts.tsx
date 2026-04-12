@@ -32,7 +32,7 @@ export default function TopRatedProducts({ products }: TopRatedProductsProps) {
         </MotionFadeIn>
 
         <LiveRefresh channel="products" event=".product.changed">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {products.map((product, i) => (
               <MotionFadeIn key={product.id} delay={i * 0.06}>
                 <ProductCard product={product} />

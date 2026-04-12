@@ -10,6 +10,7 @@ import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
 import {
   FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud, FiEye,
+  FiBox, FiCheckCircle, FiXCircle, FiTrendingUp,
 } from "react-icons/fi";
 import { useChannel } from "@/lib/useChannel";
 import { useAutoSlug } from "@/lib/useAutoSlug";
@@ -18,6 +19,7 @@ import { TableSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
 import InlineSelect from "@/components/InlineSelect";
 import { SafeImg } from "@/components/SafeImage";
+import MediaGallery from "@/components/MediaGallery";
 
 const API_BASE = "";
 function resolveImg(src: string) { return src.startsWith("/storage/") ? `${API_BASE}${src}` : src; }
@@ -37,6 +39,7 @@ interface Product {
   weight?: string;
   stock: number;
   sold?: number;
+  sold_count?: number;
   is_active: boolean;
   is_featured: boolean;
   description?: string;
@@ -56,6 +59,7 @@ const emptyForm = {
   badge: "",
   weight: "",
   stock: "",
+  unlimited_stock: false,
   is_active: true,
   is_featured: false,
 };
@@ -65,7 +69,7 @@ type FormState = typeof emptyForm;
 // slugify removed — now using useAutoSlug hook with backend transliteration
 
 export default function ProductsPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -85,6 +89,7 @@ export default function ProductsPage() {
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
@@ -132,6 +137,7 @@ export default function ProductsPage() {
       badge: p.badge || "",
       weight: p.weight || "",
       stock: String(p.stock),
+      unlimited_stock: (p as any).unlimited_stock ?? false,
       is_active: p.is_active,
       is_featured: p.is_featured,
     });
@@ -193,6 +199,7 @@ export default function ProductsPage() {
       price: parseNum(f.price),
       original_price: f.original_price ? parseNum(f.original_price) : null,
       stock: parseNum(f.stock),
+      unlimited_stock: f.unlimited_stock,
       category_id: f.category_id ? Number(f.category_id) : null,
       brand_id: f.brand_id ? Number(f.brand_id) : null,
       image: f.image || undefined,
@@ -259,6 +266,45 @@ export default function ProductsPage() {
         loading={deleting}
       />
 
+      {/* Product Stats Cards */}
+      {!loading && products.length > 0 && (() => {
+        const total = products.length;
+        const inStock = products.filter(p => (p as any).unlimited_stock || p.stock > 0).length;
+        const outOfStock = products.filter(p => !(p as any).unlimited_stock && p.stock <= 0).length;
+        const getStockValue = (p: Product) => (p as any).unlimited_stock ? 0 : p.price * p.stock;
+        const totalValue = products.reduce((s, p) => s + getStockValue(p), 0);
+        const inStockValue = products.filter(p => (p as any).unlimited_stock || p.stock > 0).reduce((s, p) => s + getStockValue(p), 0);
+        const getSold = (p: Product) => p.sold_count ?? p.sold ?? 0;
+        const best = [...products].sort((a, b) => getSold(b) - getSold(a))[0];
+        const bestSold = best ? getSold(best) : 0;
+        const bestRevenue = bestSold * (best?.price || 0);
+
+        const cards = [
+          { icon: FiBox, label: t("dash.productCount"), value: toBn(total), sub: `৳${toBn(totalValue)}`, color: "bg-[#0f5931]" },
+          { icon: FiCheckCircle, label: lang === "en" ? "In Stock" : "স্টকে আছে", value: toBn(inStock), sub: `৳${toBn(inStockValue)}`, color: "bg-emerald-500" },
+          { icon: FiXCircle, label: lang === "en" ? "Out of Stock" : "স্টক শেষ", value: toBn(outOfStock), sub: lang === "en" ? "Needs restock" : "রিস্টক দরকার", color: "bg-red-500" },
+          { icon: FiTrendingUp, label: lang === "en" ? "Best Seller" : "সেরা বিক্রিত", value: bestSold > 0 ? (best?.name || "-") : (lang === "en" ? "No sales yet" : "এখনো বিক্রি হয়নি"), sub: bestSold > 0 ? `${toBn(bestSold)} ${lang === "en" ? "sold" : "বিক্রি"} • ৳${toBn(bestRevenue)}` : (lang === "en" ? "Sales will appear here" : "বিক্রি হলে দেখাবে"), color: "bg-violet-500", truncate: true },
+        ];
+
+        return (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
+            {cards.map((c, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 shadow-sm">
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${c.color}`}>
+                  <c.icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className={`text-lg md:text-xl font-bold text-gray-800 ${c.truncate ? "truncate" : ""}`}>{c.value}</div>
+                  <div className="text-[11px] md:text-xs text-gray-500 truncate">{c.label}</div>
+                  <div className="text-[11px] md:text-xs font-semibold text-[#0f5931] truncate">{c.sub}</div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        );
+      })()}
+
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3">
@@ -323,8 +369,8 @@ export default function ProductsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">{p.category?.name || "—"}</td>
                         <td className="px-4 py-3 font-semibold text-[#0f5931] whitespace-nowrap">৳{toBn(p.price)}</td>
-                        <td className="px-4 py-3 text-gray-600">{toBn(p.stock)}</td>
-                        <td className="px-4 py-3 text-gray-600">{toBn(p.sold ?? 0)}</td>
+                        <td className="px-4 py-3 text-gray-600">{(p as any).unlimited_stock ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span> : toBn(p.stock)}</td>
+                        <td className="px-4 py-3 text-gray-600">{toBn((p as any).sold_count ?? p.sold ?? 0)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                             {p.is_active ? t("form.active") : t("form.inactive")}
@@ -382,8 +428,16 @@ export default function ProductsPage() {
                     <input name="original_price" type="number" min="0" step="0.01" value={form.original_price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, original_price: v })); }} className={inputCls} placeholder="0" />
                   </div>
                   <div>
-                    <label className={labelCls}>{t("form.stock")} *</label>
-                    <input name="stock" required type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }} className={inputCls} placeholder="0" />
+                    <label className={labelCls}>{t("form.stock")} {!form.unlimited_stock && "*"}</label>
+                    <input name="stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }}
+                      className={inputCls + (form.unlimited_stock ? " opacity-50" : "")} placeholder="0"
+                      disabled={form.unlimited_stock} required={!form.unlimited_stock} />
+                    <label className="flex items-center gap-2 mt-2 text-sm cursor-pointer select-none">
+                      <input type="checkbox" checked={form.unlimited_stock}
+                        onChange={(e) => setForm(prev => ({ ...prev, unlimited_stock: e.target.checked }))}
+                        className="w-4 h-4 accent-[#0f5931] rounded" />
+                      <span className="text-gray-600">{lang === "en" ? "Unlimited stock" : "আনলিমিটেড স্টক"}</span>
+                    </label>
                   </div>
                   <div className="relative">
                     <label className={labelCls}>{t("form.badge")}</label>
@@ -451,24 +505,24 @@ export default function ProductsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-700 font-medium truncate">{form.image.split("/").pop()}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">ক্লিক করুন বা ড্র্যাগ করুন পরিবর্তন করতে</p>
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <button type="button" onClick={() => setGalleryOpen(true)}
+                              className="px-3 py-1.5 bg-[#0f5931] hover:bg-[#12693a] rounded-lg text-xs font-medium text-white transition-colors flex items-center gap-1">
+                              <FiImage className="w-3 h-3" /> গ্যালারি
+                            </button>
                             <label className="cursor-pointer px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-600 transition-colors">
-                              পরিবর্তন করুন
+                              আপলোড
                               <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => setForm((prev) => ({ ...prev, image: "" }))}
-                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-medium text-red-600 transition-colors"
-                            >
+                            <button type="button" onClick={() => setForm((prev) => ({ ...prev, image: "" }))}
+                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-medium text-red-600 transition-colors">
                               মুছুন
                             </button>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <label className="cursor-pointer flex flex-col items-center gap-2 py-8 px-4">
+                      <div className="py-6 px-4 flex flex-col items-center gap-3">
                         {uploading ? (
                           <div className="w-8 h-8 border-3 border-[#0f5931] border-t-transparent rounded-full animate-spin" />
                         ) : (
@@ -476,14 +530,18 @@ export default function ProductsPage() {
                             <FiUploadCloud className="w-6 h-6 text-gray-400" />
                           </div>
                         )}
-                        <div className="text-center">
-                          <p className="text-sm text-gray-600">
-                            <span className="font-semibold text-[#0f5931]">ক্লিক করুন</span> অথবা ছবি এখানে ড্র্যাগ করুন
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (সর্বোচ্চ ৫MB)</p>
+                        <p className="text-xs text-gray-400">PNG, JPG, WEBP (সর্বোচ্চ ৫MB)</p>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setGalleryOpen(true)}
+                            className="px-4 py-2 bg-[#0f5931] hover:bg-[#12693a] rounded-lg text-xs font-semibold text-white transition-colors flex items-center gap-1.5">
+                            <FiImage className="w-3.5 h-3.5" /> গ্যালারি থেকে বাছুন
+                          </button>
+                          <label className="cursor-pointer px-4 py-2 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-600 transition-colors flex items-center gap-1.5">
+                            <FiUploadCloud className="w-3.5 h-3.5" /> আপলোড করুন
+                            <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
+                          </label>
                         </div>
-                        <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
-                      </label>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -511,6 +569,12 @@ export default function ProductsPage() {
                 </div>
               </form>
       </Modal>
+
+      <MediaGallery
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        onSelect={(url) => { setForm((prev) => ({ ...prev, image: url })); }}
+      />
     </DashboardLayout>
   );
 }

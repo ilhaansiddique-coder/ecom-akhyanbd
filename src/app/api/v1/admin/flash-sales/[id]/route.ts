@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -48,7 +48,7 @@ export async function PUT(
       include: { products: { include: { product: true } } },
     });
 
-    revalidateTag("flash-sales", "max");
+    revalidateAll("flash-sales");
     return jsonResponse(serialize(flashSale));
   } catch (error) {
     return errorResponse("Failed to update flash sale", 500);
@@ -67,6 +67,6 @@ export async function DELETE(
   if (!existing) return notFound("Flash sale not found");
 
   await prisma.flashSale.delete({ where: { id: Number(id) } });
-  revalidateTag("flash-sales", "max");
+  revalidateAll("flash-sales");
   return jsonResponse({ message: "Flash sale deleted" });
 }

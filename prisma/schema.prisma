@@ -85,7 +85,9 @@ model Product {
   badgeColor    String?   @map("badge_color")
   weight        String?
   stock         Int       @default(0)
+  unlimitedStock Boolean? @default(false) @map("unlimited_stock")
   soldCount     Int       @default(0) @map("sold_count")
+  version       Int       @default(0) // Optimistic locking — prevents overselling under concurrent purchases
   isActive      Boolean   @default(true) @map("is_active")
   isFeatured    Boolean   @default(false) @map("is_featured")
   sortOrder     Int       @default(0) @map("sort_order")
@@ -95,7 +97,6 @@ model Product {
   category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
   flashSales  FlashSaleProduct[]
-  landingPage LandingPage?
   reviews     Review[]
   wishlists   Wishlist[]
   orderItems  OrderItem[]
@@ -154,6 +155,8 @@ model Order {
   status          String    @default("pending")
   paymentMethod   String    @default("cod") @map("payment_method")
   paymentStatus   String    @default("unpaid") @map("payment_status")
+  transactionId   String?   @map("transaction_id")
+  orderToken      String?   @unique @map("order_token")
   notes              String?
   courierSent        Boolean   @default(false) @map("courier_sent")
   consignmentId      String?   @map("consignment_id")
@@ -169,6 +172,7 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([userId, createdAt])
+  @@index([transactionId])
   @@map("orders")
 }
 
@@ -309,16 +313,63 @@ model NavMenu {
 }
 
 model LandingPage {
-  id                Int       @id @default(autoincrement())
-  productId         Int       @unique @map("product_id")
-  slug              String    @unique
-  customTitle       String?   @map("custom_title")
-  customDescription String?   @map("custom_description")
-  isActive          Boolean   @default(true) @map("is_active")
-  createdAt         DateTime? @default(now()) @map("created_at")
-  updatedAt         DateTime? @updatedAt @map("updated_at")
+  id               Int       @id @default(autoincrement())
+  slug             String    @unique
+  title            String
+  isActive         Boolean   @default(true) @map("is_active")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Hero
+  heroHeadline     String?   @map("hero_headline")
+  heroSubheadline  String?   @map("hero_subheadline")
+  heroImage        String?   @map("hero_image")
+  heroCta          String?   @map("hero_cta")
+  heroTrustText    String?   @map("hero_trust_text")
+  heroBadge        String?   @map("hero_badge")
+
+  // Problem
+  problemTitle     String?   @map("problem_title")
+  problemPoints    String?   @map("problem_points")
+
+  // Sections (JSON strings)
+  productsTitle    String?   @map("products_title")
+  productsSub      String?   @map("products_subtitle")
+  featuresTitle    String?   @map("features_title")
+  features         String?
+  testimonialsTitle String?  @map("testimonials_title")
+  testimonialsMode String?   @default("custom") @map("testimonials_mode")
+  testimonials     String?
+  howItWorksTitle  String?   @map("how_it_works_title")
+  howItWorksSub    String?   @map("how_it_works_subtitle")
+  howItWorks       String?   @map("how_it_works")
+  faqTitle         String?   @map("faq_title")
+  faq              String?
+
+  // Products (JSON: [{product_id, quantity}])
+  products         String?
+
+  // Checkout
+  checkoutTitle    String?   @map("checkout_title")
+  checkoutSubtitle String?   @map("checkout_subtitle")
+  checkoutBtnText  String?   @map("checkout_btn_text")
+  customShipping   Boolean?  @default(false) @map("custom_shipping")
+  shippingCost     Float?    @default(60) @map("shipping_cost")
+  showEmail        Boolean?  @default(false) @map("show_email")
+  showCity         Boolean?  @default(true) @map("show_city")
+  guaranteeText    String?   @map("guarantee_text")
+  successMessage   String?   @map("success_message")
+
+  // SEO
+  metaTitle        String?   @map("meta_title")
+  metaDescription  String?   @map("meta_description")
+
+  // WhatsApp
+  whatsapp         String?   @map("whatsapp")
+
+  // Style
+  primaryColor     String?   @default("#0f5931") @map("primary_color")
+
+  createdAt        DateTime? @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
 
   @@map("landing_pages")
 }
@@ -352,4 +403,20 @@ model SiteSetting {
   updatedAt DateTime? @updatedAt @map("updated_at")
 
   @@map("site_settings")
+}
+
+model FormSubmission {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String
+  status    String    @default("unread") // unread, read, replied
+  notes     String?   // admin notes
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("form_submissions")
 }

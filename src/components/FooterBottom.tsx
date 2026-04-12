@@ -9,6 +9,12 @@ export default function FooterBottom() {
           © <TNum value={new Date().getFullYear()} /> <T k="footer.copyright" />{" "}
           <span className="text-white font-semibold"><T k="footer.companyName" /></span>
         </p>
+        <p className="text-center text-sm">
+          <T k="footer.developedBy" />{" "}
+          <a href="https://contradigital.agency/" target="_blank" rel="noopener noreferrer" className="text-white hover:text-white/80 transition-colors font-semibold">
+            <T k="footer.developerName" />
+          </a>
+        </p>
         <div className="flex items-center gap-4">
           <Link href="/terms" className="hover:text-white transition-colors"><T k="footer.terms" /></Link>
           <span className="text-white/30">|</span>

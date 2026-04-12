@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { contactSchema } from "@/lib/validation";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { sendAdminContactNotification } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -17,6 +19,28 @@ export async function POST(request: NextRequest) {
     return validationError(errors);
   }
 
-  // TODO: Store contact message or send email notification
+  const data = parsed.data;
+
+  // Store in database
+  const submission = await prisma.formSubmission.create({
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: (data as any).phone || null,
+      subject: data.subject || null,
+      message: data.message,
+    },
+  });
+
+  // Send admin email notification (non-blocking)
+  sendAdminContactNotification({
+    id: submission.id,
+    name: data.name,
+    email: data.email,
+    phone: (data as any).phone || "",
+    subject: data.subject || "",
+    message: data.message,
+  });
+
   return jsonResponse({ message: "আপনার বার্তা পাঠানো হয়েছে। ধন্যবাদ!" });
 }

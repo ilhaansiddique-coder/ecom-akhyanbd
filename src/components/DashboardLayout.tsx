@@ -28,6 +28,9 @@ import {
   FiX,
   FiChevronDown,
   FiChevronRight,
+  FiShoppingCart,
+  FiMail,
+  FiGlobe,
 } from "react-icons/fi";
 
 interface NavItem {
@@ -72,6 +75,7 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       items: [
         { label: t("dash.users"), href: "/dashboard/users", icon: FiUsers },
         { label: t("dash.reviews"), href: "/dashboard/reviews", icon: FiStar },
+        { label: t("dash.formSubmissions"), href: "/dashboard/form-submissions", icon: FiMail },
       ],
     },
     {
@@ -98,6 +102,10 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       items: [
         { label: t("dash.shippingZones"), href: "/dashboard/shipping", icon: FiTruck },
         { label: t("dash.siteSettings"), href: "/dashboard/settings", icon: FiSettings },
+        { label: t("dash.checkoutSettings"), href: "/dashboard/settings/checkout", icon: FiShoppingCart },
+        { label: t("dash.courierSettings"), href: "/dashboard/settings/courier", icon: FiTruck },
+        { label: t("dash.emailSettings"), href: "/dashboard/settings/email", icon: FiMail },
+        { label: t("dash.languageSettings"), href: "/dashboard/settings/language", icon: FiGlobe },
       ],
     },
   ];

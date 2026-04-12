@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -62,6 +62,7 @@ export async function PUT(
         badgeColor: data.badge_color ?? null,
         weight: data.weight ?? null,
         stock: data.stock ?? 0,
+        unlimitedStock: data.unlimited_stock ?? false,
         soldCount: data.sold_count ?? 0,
         isActive: data.is_active ?? true,
         isFeatured: data.is_featured ?? false,
@@ -70,7 +71,7 @@ export async function PUT(
       include: { category: true, brand: true },
     });
 
-    revalidateTag("products", "max");
+    revalidateAll("products");
     bumpVersion("products");
     return jsonResponse(serialize(product));
   } catch (error) {
@@ -90,7 +91,7 @@ export async function DELETE(
   if (!existing) return notFound("Product not found");
 
   await prisma.product.delete({ where: { id: Number(id) } });
-  revalidateTag("products", "max");
+  revalidateAll("products");
   bumpVersion("products");
   return jsonResponse({ message: "Product deleted" });
 }

@@ -212,7 +212,7 @@ function ProductsSkeleton() {
     <section className="py-12 md:py-16 bg-white">
       <div className="container mx-auto px-4">
         <div className="h-8 bg-gray-100 rounded-lg w-40 mb-10 animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-gray-50 rounded-2xl overflow-hidden animate-pulse">
               <div className="aspect-square bg-gray-100" />

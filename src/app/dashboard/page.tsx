@@ -19,19 +19,46 @@ import {
   FiLock,
   FiEdit3,
   FiChevronRight,
+  FiCheckCircle,
+  FiXCircle,
+  FiCalendar,
 } from "react-icons/fi";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useLang } from "@/lib/LanguageContext";
+import dynamic from "next/dynamic";
+
+const RechartsBarChart = dynamic(() => import("recharts").then(m => m.BarChart), { ssr: false });
+const Bar = dynamic(() => import("recharts").then(m => m.Bar), { ssr: false });
+const XAxis = dynamic(() => import("recharts").then(m => m.XAxis), { ssr: false });
+const YAxis = dynamic(() => import("recharts").then(m => m.YAxis), { ssr: false });
+const Tooltip = dynamic(() => import("recharts").then(m => m.Tooltip), { ssr: false });
+const RechartsPieChart = dynamic(() => import("recharts").then(m => m.PieChart), { ssr: false });
+const Pie = dynamic(() => import("recharts").then(m => m.Pie), { ssr: false });
+const Cell = dynamic(() => import("recharts").then(m => m.Cell), { ssr: false });
+const ResponsiveContainer = dynamic(() => import("recharts").then(m => m.ResponsiveContainer), { ssr: false });
 
 // ─── Status labels ───────────────────────────────────────────────────────────
-const statusLabels: Record<string, { label: string; color: string }> = {
-  pending: { label: "অপেক্ষমাণ", color: "bg-yellow-100 text-yellow-800" },
-  confirmed: { label: "নিশ্চিত", color: "bg-blue-100 text-blue-800" },
-  processing: { label: "প্রসেসিং", color: "bg-indigo-100 text-indigo-800" },
-  shipped: { label: "শিপড", color: "bg-purple-100 text-purple-800" },
-  delivered: { label: "ডেলিভারি সম্পন্ন", color: "bg-green-100 text-green-800" },
-  cancelled: { label: "বাতিল", color: "bg-red-100 text-red-800" },
+const statusColors: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800",
+  confirmed: "bg-blue-100 text-blue-800",
+  processing: "bg-indigo-100 text-indigo-800",
+  shipped: "bg-purple-100 text-purple-800",
+  delivered: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800",
+  trashed: "bg-gray-100 text-gray-500",
 };
+const statusLabelsBn: Record<string, string> = {
+  pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং",
+  shipped: "শিপড", delivered: "ডেলিভারি সম্পন্ন", cancelled: "বাতিল", trashed: "ট্র্যাশ",
+};
+const statusLabelsEn: Record<string, string> = {
+  pending: "Pending", confirmed: "Confirmed", processing: "Processing",
+  shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled", trashed: "Trashed",
+};
+const getStatusLabel = (status: string, lang: string) => ({
+  label: (lang === "en" ? statusLabelsEn[status] : statusLabelsBn[status]) || status,
+  color: statusColors[status] || "bg-gray-100 text-gray-800",
+});
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OrderItem {
@@ -57,11 +84,18 @@ interface Stats {
   total_orders: number;
   today_orders: number;
   total_revenue: number;
+  today_revenue: number;
   total_customers: number;
   total_products: number;
   pending_orders: number;
   low_stock: number;
+  low_stock_count: number;
 }
+interface OrderCounts {
+  pending: number; confirmed: number; processing: number;
+  shipped: number; delivered: number; cancelled: number;
+}
+interface DailyOrder { date: string; count: number; }
 interface TopProduct {
   id: number;
   name: string;
@@ -82,34 +116,41 @@ function StatCard({
   value,
   color,
   delay,
+  raw,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   color: string;
   delay: number;
+  raw?: boolean;
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
-      className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm"
+      className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 md:gap-4 shadow-sm"
     >
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-        <Icon className="w-6 h-6 text-white" />
+      <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+        <Icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
       </div>
-      <div>
-        <div className="text-2xl font-bold text-gray-800">{toBn(value)}</div>
-        <div className="text-sm text-gray-500 mt-0.5">{label}</div>
+      <div className="min-w-0">
+        <div className="text-lg md:text-2xl font-bold text-gray-800 truncate">{raw ? value : toBn(value)}</div>
+        <div className="text-xs md:text-sm text-gray-500 mt-0.5 truncate">{label}</div>
       </div>
     </motion.div>
   );
 }
 
+const PIE_COLORS = ["#eab308", "#3b82f6", "#6366f1", "#8b5cf6", "#0f5931", "#ef4444"];
+
 function AdminDashboard() {
   const { t, lang } = useLang();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [orderCounts, setOrderCounts] = useState<OrderCounts>({ pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 });
+  const [revByStatus, setRevByStatus] = useState<OrderCounts>({ pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 });
+  const [dailyOrders, setDailyOrders] = useState<DailyOrder[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
@@ -119,45 +160,116 @@ function AdminDashboard() {
     api.admin.dashboard()
       .then((res) => {
         setStats(res.stats || null);
+        setOrderCounts(res.order_counts || {});
+        setRevByStatus(res.revenue_by_status || {});
+        setDailyOrders(res.daily_orders || []);
         setRecentOrders(res.recent_orders || []);
-        setTopProducts(res.top_products || []);
+        setTopProducts((res.top_products || []).map((p: any) => ({
+          id: p.id, name: p.name,
+          sold: p.sold_count ?? p.sold ?? 0,
+          revenue: (p.sold_count ?? p.sold ?? 0) * (p.price ?? 0),
+          image: p.image,
+        })));
         setLowStockItems(res.low_stock || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return <StatsSkeleton />;
-  }
+  if (loading) return <StatsSkeleton />;
 
-  const statCards = [
-    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[#0f5931]", delay: 0 },
-    { icon: FiClock, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-blue-500", delay: 0.05 },
-    { icon: FiDollarSign, label: t("dash.totalRevenue"), value: stats?.total_revenue ?? 0, color: "bg-emerald-500", delay: 0.1 },
-    { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500", delay: 0.15 },
-    { icon: FiBox, label: t("dash.productCount"), value: stats?.total_products ?? 0, color: "bg-orange-500", delay: 0.2 },
-    { icon: FiAlertCircle, label: t("dash.pendingOrders"), value: stats?.pending_orders ?? 0, color: "bg-yellow-500", delay: 0.25 },
-    { icon: FiTrendingUp, label: t("dash.lowStock"), value: stats?.low_stock ?? 0, color: "bg-red-500", delay: 0.3 },
+  const row1 = [
+    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[#0f5931]" },
+    { icon: FiClock, label: t("dash.pendingOrders"), value: orderCounts.pending, color: "bg-yellow-500" },
+    { icon: FiCheckCircle, label: t("dash.confirmed"), value: orderCounts.confirmed, color: "bg-blue-500" },
+    { icon: FiXCircle, label: t("dash.cancelled"), value: orderCounts.cancelled, color: "bg-red-500" },
+  ];
+  const row2 = [
+    { icon: FiDollarSign, label: t("dash.totalRevenue"), value: `৳${toBn(stats?.total_revenue ?? 0)}`, color: "bg-emerald-500", raw: true },
+    { icon: FiDollarSign, label: t("dash.pendingRev"), value: `৳${toBn(revByStatus.pending)}`, color: "bg-yellow-500", raw: true },
+    { icon: FiDollarSign, label: t("dash.confirmedRev"), value: `৳${toBn(revByStatus.confirmed)}`, color: "bg-blue-500", raw: true },
+    { icon: FiDollarSign, label: t("dash.cancelledAmt"), value: `৳${toBn(revByStatus.cancelled)}`, color: "bg-red-500", raw: true },
+  ];
+  const row3 = [
+    { icon: FiCalendar, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-indigo-500" },
+    { icon: FiTrendingUp, label: t("dash.todayRevenue"), value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true },
+    { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500" },
+    { icon: FiAlertCircle, label: t("dash.lowStock"), value: stats?.low_stock_count ?? stats?.low_stock ?? 0, color: "bg-orange-500" },
   ];
 
+  const pieData = [
+    { name: lang === "en" ? "Pending" : "অপেক্ষমাণ", value: orderCounts.pending },
+    { name: lang === "en" ? "Confirmed" : "নিশ্চিত", value: orderCounts.confirmed },
+    { name: lang === "en" ? "Processing" : "প্রসেসিং", value: orderCounts.processing },
+    { name: lang === "en" ? "Shipped" : "শিপড", value: orderCounts.shipped },
+    { name: lang === "en" ? "Delivered" : "ডেলিভারি", value: orderCounts.delivered },
+    { name: lang === "en" ? "Cancelled" : "বাতিল", value: orderCounts.cancelled },
+  ].filter(d => d.value > 0);
+
   return (
-    <div className="space-y-8">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        {statCards.map((s) => (
-          <StatCard key={s.label} {...s} />
-        ))}
+    <div className="space-y-6">
+      {/* Row 1: Order Counts */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {row1.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={i * 0.05} />)}
       </div>
 
+      {/* Row 2: Revenue Breakdown */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {row2.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.2 + i * 0.05} raw={s.raw} />)}
+      </div>
+
+      {/* Row 3: Business Health */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {row3.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.4 + i * 0.05} raw={s.raw} />)}
+      </div>
+
+      {/* Charts */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Bar Chart — Last 7 Days */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.weeklyOrders")}</h2>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <RechartsBarChart data={dailyOrders} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
+                <Bar dataKey="count" fill="#0f5931" radius={[6, 6, 0, 0]} />
+              </RechartsBarChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+
+        {/* Pie Chart — Status Breakdown */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.statusBreakdown")}</h2>
+          {pieData.length === 0 ? (
+            <p className="text-sm text-gray-400 py-16 text-center">{t("empty.orders")}</p>
+          ) : (
+            <div className="h-64 flex items-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <RechartsPieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value"
+                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
+                </RechartsPieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Tables */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Recent Orders */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.recentOrders")}</h2>
           {recentOrders.length === 0 ? (
             <p className="text-sm text-gray-400 py-8 text-center">{t("empty.orders")}</p>
@@ -174,7 +286,7 @@ function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {recentOrders.slice(0, 8).map((o) => {
-                    const st = statusLabels[o.status] || { label: o.status, color: "bg-gray-100 text-gray-800" };
+                    const st = getStatusLabel(o.status, lang);
                     return (
                       <tr key={o.id}>
                         <td className="py-2.5 text-gray-500">#{toBn(o.id)}</td>
@@ -193,12 +305,8 @@ function AdminDashboard() {
         </motion.div>
 
         {/* Top Products */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75 }}
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.topProducts")}</h2>
           {topProducts.length === 0 ? (
             <p className="text-sm text-gray-400 py-8 text-center">{t("empty.products")}</p>
@@ -229,12 +337,8 @@ function AdminDashboard() {
 
       {/* Low Stock Alerts */}
       {lowStockItems.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.45 }}
-          className="bg-white rounded-2xl border border-red-100 p-5 shadow-sm"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+          className="bg-white rounded-2xl border border-red-100 p-5 shadow-sm">
           <h2 className="text-base font-bold text-red-700 mb-4 flex items-center gap-2">
             <FiAlertCircle className="w-5 h-5" />
             {t("dash.lowStockAlert")}
@@ -398,7 +502,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                   ) : (
                     <div className="space-y-4">
                       {orders.map((order) => {
-                        const st = statusLabels[order.status] || { label: order.status, color: "bg-gray-100 text-gray-800" };
+                        const st = getStatusLabel(order.status, lang);
                         return (
                           <div key={order.id} className="border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
                             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -415,7 +519,9 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                             {/* Order Tracking Timeline */}
                             <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
                               {(["pending", "confirmed", "processing", "shipped", "delivered"] as const).map((step, i) => {
-                                const stepLabels: Record<string, string> = { pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং", shipped: "শিপড", delivered: "ডেলিভারি" };
+                                const stepLabels: Record<string, string> = lang === "en"
+                                  ? { pending: "Pending", confirmed: "Confirmed", processing: "Processing", shipped: "Shipped", delivered: "Delivered" }
+                                  : { pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং", shipped: "শিপড", delivered: "ডেলিভারি" };
                                 const stepOrder = ["pending", "confirmed", "processing", "shipped", "delivered"];
                                 const currentIdx = stepOrder.indexOf(order.status);
                                 const isCancelled = order.status === "cancelled";
