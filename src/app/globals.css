@@ -130,6 +130,13 @@ body {
   font-family: inherit;
 }
 
+/* Pointer cursor on all interactive elements globally */
+a, button, [role="button"], [type="button"], [type="submit"], [type="reset"],
+label[for], select, summary, [tabindex]:not([tabindex="-1"]),
+input[type="checkbox"], input[type="radio"], input[type="file"] {
+  cursor: pointer;
+}
+
 /* Prepend BanglaDigits before Hind Siliguri — browser picks Anek Bangla for digits, Hind Siliguri for everything else */
 body {
   font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;

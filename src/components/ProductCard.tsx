@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { SafeNextImage } from "@/components/SafeImage";
-import { FiShoppingCart, FiHeart, FiCheck, FiShoppingBag } from "react-icons/fi";
+import { FiShoppingCart, FiCheck, FiShoppingBag } from "react-icons/fi";
 import type { Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import { useCart } from "@/lib/CartContext";
-import { useWishlist } from "@/lib/WishlistContext";
 import { useLang } from "@/lib/LanguageContext";
 
 interface ProductCardProps {
@@ -19,11 +18,9 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, priority = false }: ProductCardProps) {
   const { addItem } = useCart();
-  const { isWishlisted, toggle } = useWishlist();
   const { t, lang } = useLang();
   const router = useRouter();
   const [showAdded, setShowAdded] = useState(false);
-  const wishlisted = isWishlisted(product.id);
   const displayName = product.nameBn || product.name;
   const { price, originalPrice, image: rawImage, badge, badgeColor = "bg-primary" } = product;
   const image = rawImage || "/placeholder.svg";
@@ -71,13 +68,6 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
               </span>
             )}
 
-            {/* Wishlist heart */}
-            <button
-              onClick={(e) => { e.preventDefault(); toggle(product.id); }}
-              className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white transition-colors cursor-pointer"
-            >
-              <FiHeart className={`w-4 h-4 ${wishlisted ? "text-sale-red fill-sale-red" : "text-gray-400"}`} />
-            </button>
 
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300 pointer-events-none" />
           </div>

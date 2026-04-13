@@ -43,8 +43,11 @@ export const metadata: Metadata = {
     "প্রকৃতির শক্তিতে সুস্থ থাকুন। ভেষজ গুঁড়ো, চা, হার্ট কেয়ার ও প্রাকৃতিক পণ্য — সরাসরি প্রকৃতি থেকে আপনার দোরগোড়ায়।",
   metadataBase: new URL(SITE_URL),
   icons: {
-    icon: "/logo.svg",
-    apple: "/logo.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     type: "website",
@@ -70,10 +73,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://mavesoj.com" />
-        <link rel="dns-prefetch" href="https://mavesoj.com" />
-      </head>
       <body className={`min-h-screen bg-background ${hindSiliguri.className}`} suppressHydrationWarning>
         {/* Mark JS as active so fade-in animations only apply after hydration.
             Without this, content stays visible (no invisible flash). */}

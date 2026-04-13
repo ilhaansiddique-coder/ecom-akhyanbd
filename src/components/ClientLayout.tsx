@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/AuthContext";
 import { CartProvider } from "@/lib/CartContext";
-import { WishlistProvider } from "@/lib/WishlistContext";
 import { LanguageProvider } from "@/lib/LanguageContext";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
@@ -31,7 +30,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     <LanguageProvider>
     <AuthProvider>
     <CartProvider>
-    <WishlistProvider>
       {!isDashboard && !isLandingPage && (
         <Navbar
           onSearchOpen={() => setSearchOpen(true)}
@@ -52,7 +50,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </Suspense>
         </>
       )}
-    </WishlistProvider>
     </CartProvider>
     </AuthProvider>
     </LanguageProvider>
