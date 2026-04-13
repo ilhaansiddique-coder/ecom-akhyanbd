@@ -2,6 +2,8 @@ import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
 import ShopClient from "./ShopClient";
 
+export const dynamic = "force-dynamic";
+
 const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
 
 async function getProducts(): Promise<Product[]> {

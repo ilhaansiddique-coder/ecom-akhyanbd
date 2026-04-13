@@ -53,6 +53,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 // Pre-render product pages at build time for instant loading
+export const dynamicParams = true; // Allow pages not in generateStaticParams
+
 export async function generateStaticParams() {
   try {
     const res = await fetch(`${API_URL}/products?per_page=100`, {

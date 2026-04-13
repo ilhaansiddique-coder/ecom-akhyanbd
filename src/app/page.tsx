@@ -10,6 +10,8 @@ import Features from "@/components/Features";
 import { mapApiProduct, latestProducts as staticLatest, topRatedProducts as staticTopRated } from "@/data/products";
 import type { Product } from "@/data/products";
 
+export const dynamic = "force-dynamic";
+
 const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
 
 const emojiMap: Record<string, string> = {
