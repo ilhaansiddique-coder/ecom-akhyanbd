@@ -148,6 +148,31 @@ html.lang-en body {
   font-family: var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
 }
 
+/* Swiper pagination dots */
+.testimonial-dots {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.testimonial-dots .swiper-pagination-bullet {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #d1d5db;
+  opacity: 1;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.testimonial-dots .swiper-pagination-bullet:hover {
+  background: #9ca3af;
+}
+.testimonial-dots .swiper-pagination-bullet-active {
+  background: var(--lp, #0f5931);
+  width: 28px;
+}
+
 html.lang-en h1,
 html.lang-en h2,
 html.lang-en h3,

@@ -13,7 +13,7 @@ import { theme } from "@/lib/theme";
 
 import { useAutoSlug } from "@/lib/useAutoSlug";
 import {
-  FiPlus, FiEdit2, FiTrash2, FiEye, FiX,
+  FiPlus, FiEdit2, FiTrash2, FiEye, FiEyeOff, FiX,
   FiChevronDown, FiChevronUp, FiSearch,
 } from "react-icons/fi";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
@@ -44,6 +44,7 @@ interface LandingPage {
   products_title: string;
   products_subtitle: string;
   features_title: string;
+  features_image: string;
   testimonials_title: string;
   testimonials_mode: string; // "all_site" | "select" | "custom"
   how_it_works_title: string;
@@ -61,6 +62,7 @@ interface LandingPage {
   meta_title: string;
   meta_description: string;
   whatsapp: string;
+  section_visibility: Record<string, boolean>;
 }
 
 interface ProductOption {
@@ -99,6 +101,7 @@ const emptyForm = {
   products_title: "",
   products_subtitle: "",
   features_title: "",
+  features_image: "",
   testimonials_title: "",
   testimonials_mode: "custom",
   how_it_works_title: "",
@@ -116,6 +119,7 @@ const emptyForm = {
   meta_title: "",
   meta_description: "",
   whatsapp: "",
+  section_visibility: { hero: true, problem: true, products: true, features: true, how_it_works: true, testimonials: true, faq: true, checkout: true } as Record<string, boolean>,
 };
 
 type FormState = typeof emptyForm;
@@ -126,26 +130,36 @@ function Section({
   icon,
   open,
   onToggle,
+  visible,
+  onVisibilityToggle,
   children,
 }: {
   title: string;
   icon: string;
   open: boolean;
   onToggle: () => void;
+  visible?: boolean;
+  onVisibilityToggle?: () => void;
   children: React.ReactNode;
 }) {
+  const isHidden = visible === false;
   return (
-    <div className="border border-gray-100 rounded-xl">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          {icon} {title}
-        </span>
-        {open ? <FiChevronUp /> : <FiChevronDown />}
-      </button>
+    <div className={`border rounded-xl transition-opacity ${isHidden ? "border-red-200 opacity-60" : "border-gray-100"}`}>
+      <div className="flex items-center bg-gray-50 hover:bg-gray-100 transition-colors rounded-t-xl">
+        <button type="button" onClick={onToggle} className="flex-1 flex items-center justify-between px-4 py-3">
+          <span className={`flex items-center gap-2 text-sm font-semibold ${isHidden ? "text-gray-400 line-through" : "text-gray-700"}`}>
+            {icon} {title}
+            {isHidden && <span className="text-[10px] text-red-400 font-normal no-underline ml-1">(hidden)</span>}
+          </span>
+          {open ? <FiChevronUp /> : <FiChevronDown />}
+        </button>
+        {onVisibilityToggle && (
+          <button type="button" onClick={onVisibilityToggle} className={`px-3 py-3 transition-colors ${isHidden ? "text-red-400 hover:text-red-600" : "text-green-500 hover:text-green-700"}`}
+            title={isHidden ? "Show section" : "Hide section"}>
+            {isHidden ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
       {open && <div className="p-4 space-y-3">{children}</div>}
     </div>
   );
@@ -180,6 +194,10 @@ export default function LandingPagesPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   const isOpen = (key: string) => !!expanded[key];
+  const toggleVis = (key: string) => setForm((f) => ({
+    ...f,
+    section_visibility: { ...f.section_visibility, [key]: f.section_visibility[key] === false ? true : false },
+  }));
 
   // Products picker
   const [allProducts, setAllProducts] = useState<ProductOption[]>([]);
@@ -251,6 +269,7 @@ export default function LandingPagesPage() {
       products_title: item.products_title || "",
       products_subtitle: item.products_subtitle || (item as any).products_sub || "",
       features_title: item.features_title || "",
+      features_image: item.features_image || "",
       testimonials_title: item.testimonials_title || "",
       testimonials_mode: item.testimonials_mode || "custom",
       how_it_works_title: item.how_it_works_title || "",
@@ -268,6 +287,9 @@ export default function LandingPagesPage() {
       meta_title: item.meta_title || "",
       meta_description: item.meta_description || "",
       whatsapp: item.whatsapp || "",
+      section_visibility: (() => {
+        try { return JSON.parse(String(item.section_visibility || "{}")); } catch { return {}; }
+      })(),
     });
     setExpanded({});
     setModalOpen(true);
@@ -393,6 +415,7 @@ export default function LandingPagesPage() {
       products_title: form.products_title || undefined,
       products_subtitle: form.products_subtitle || undefined,
       features_title: form.features_title || undefined,
+      features_image: form.features_image || undefined,
       testimonials_title: form.testimonials_title || undefined,
       testimonials_mode: form.testimonials_mode,
       how_it_works_title: form.how_it_works_title || undefined,
@@ -410,6 +433,7 @@ export default function LandingPagesPage() {
       meta_title: form.meta_title || undefined,
       meta_description: form.meta_description || undefined,
       whatsapp: form.whatsapp || undefined,
+      section_visibility: JSON.stringify(form.section_visibility),
     };
 
     try {
@@ -658,7 +682,8 @@ export default function LandingPagesPage() {
           </div>
 
           {/* ─── 2. Hero Section ─── */}
-          <Section title="Hero Section" icon="🎯" open={isOpen("hero")} onToggle={() => toggle("hero")}>
+          <Section title="Hero Section" icon="🎯" open={isOpen("hero")} onToggle={() => toggle("hero")}
+            visible={form.section_visibility.hero !== false} onVisibilityToggle={() => toggleVis("hero")}>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Headline</label>
@@ -733,7 +758,8 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 3. Problem Section ─── */}
-          <Section title="Problem Section" icon="⚠️" open={isOpen("problem")} onToggle={() => toggle("problem")}>
+          <Section title="Problem Section" icon="⚠️" open={isOpen("problem")} onToggle={() => toggle("problem")}
+            visible={form.section_visibility.problem !== false} onVisibilityToggle={() => toggleVis("problem")}>
             <div>
               <label className={labelCls}>Section Title</label>
               <input
@@ -793,7 +819,8 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 4. Products ─── */}
-          <Section title="Products" icon="📦" open={isOpen("products")} onToggle={() => toggle("products")}>
+          <Section title="Products" icon="📦" open={isOpen("products")} onToggle={() => toggle("products")}
+            visible={form.section_visibility.products !== false} onVisibilityToggle={() => toggleVis("products")}>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelCls}>Section Title</label>
@@ -862,7 +889,8 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 5. Features / Benefits ─── */}
-          <Section title="Features / Benefits" icon="✨" open={isOpen("features")} onToggle={() => toggle("features")}>
+          <Section title="Features / Benefits" icon="✨" open={isOpen("features")} onToggle={() => toggle("features")}
+            visible={form.section_visibility.features !== false} onVisibilityToggle={() => toggleVis("features")}>
             <div className="mb-3">
               <label className={labelCls}>Section Title</label>
               <input value={form.features_title} onChange={(e) => setForm({ ...form, features_title: e.target.value })} className={inputCls} placeholder="🔥 কেন এই প্রোডাক্ট ব্যবহার করবেন?" />
@@ -876,6 +904,34 @@ export default function LandingPagesPage() {
                 placeholder="100% Natural"
               />
               <p className="text-[10px] text-gray-400 mt-1">Floating badge on the image. Use \n for line break (e.g. &quot;100%\nNatural&quot;)</p>
+            </div>
+            <div className="mb-3">
+              <label className={labelCls}>Features Image / Video</label>
+              {form.features_image ? (
+                <div className="relative rounded-xl overflow-hidden border border-gray-200 mb-2">
+                  {form.features_image.match(/\.(mp4|webm|mov)$/i) ? (
+                    <video src={form.features_image} className="w-full max-h-40 object-cover" controls />
+                  ) : form.features_image.includes("youtube.com") || form.features_image.includes("youtu.be") ? (
+                    <div className="aspect-video"><iframe src={form.features_image.replace("watch?v=", "embed/")} className="w-full h-full rounded-xl" allowFullScreen /></div>
+                  ) : (
+                    <SafeImg src={form.features_image} alt="Features" className="w-full max-h-40 object-cover" />
+                  )}
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button type="button" onClick={() => { setGalleryTarget("features"); setGalleryOpen(true); }}
+                      className="p-1.5 bg-white/90 rounded-lg text-xs hover:bg-white">🖼️</button>
+                    <button type="button" onClick={() => setForm({ ...form, features_image: "" })}
+                      className="p-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600">✕</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setGalleryTarget("features"); setGalleryOpen(true); }}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-[#0f5931] transition-colors text-sm text-gray-500 flex-1">
+                    🖼️ গ্যালারি থেকে বাছুন
+                  </button>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">This image shows alongside the features list. If empty, hero image will be used.</p>
             </div>
             {form.features.map((feat, idx) => (
               <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
@@ -932,7 +988,8 @@ export default function LandingPagesPage() {
 
           {/* ─── 6. Testimonials ─── */}
           {/* ─── 6. How It Works ─── */}
-          <Section title="How It Works" icon="🔢" open={isOpen("how_it_works")} onToggle={() => toggle("how_it_works")}>
+          <Section title="How It Works" icon="🔢" open={isOpen("how_it_works")} onToggle={() => toggle("how_it_works")}
+            visible={form.section_visibility.how_it_works !== false} onVisibilityToggle={() => toggleVis("how_it_works")}>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelCls}>Section Title</label>
@@ -995,7 +1052,8 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 7. Testimonials ─── */}
-          <Section title="Testimonials" icon="💬" open={isOpen("testimonials")} onToggle={() => toggle("testimonials")}>
+          <Section title="Testimonials" icon="💬" open={isOpen("testimonials")} onToggle={() => toggle("testimonials")}
+            visible={form.section_visibility.testimonials !== false} onVisibilityToggle={() => toggleVis("testimonials")}>
             <div className="mb-3">
               <label className={labelCls}>Section Title</label>
               <input value={form.testimonials_title} onChange={(e) => setForm({ ...form, testimonials_title: e.target.value })} className={inputCls} placeholder="গ্রাহকদের মন্তব্য" />
@@ -1136,7 +1194,8 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 8. FAQ ─── */}
-          <Section title="FAQ" icon="❓" open={isOpen("faq")} onToggle={() => toggle("faq")}>
+          <Section title="FAQ" icon="❓" open={isOpen("faq")} onToggle={() => toggle("faq")}
+            visible={form.section_visibility.faq !== false} onVisibilityToggle={() => toggleVis("faq")}>
             <div className="mb-3">
               <label className={labelCls}>Section Title</label>
               <input value={form.faq_title} onChange={(e) => setForm({ ...form, faq_title: e.target.value })} className={inputCls} placeholder="সাধারণ কিছু প্রশ্ন (FAQ)" />
@@ -1297,6 +1356,8 @@ export default function LandingPagesPage() {
         onSelect={(url) => {
           if (galleryTarget === "hero") {
             setForm({ ...form, hero_image: url });
+          } else if (galleryTarget === "features") {
+            setForm({ ...form, features_image: url });
           } else if (galleryTarget.startsWith("testimonial-")) {
             const idx = Number(galleryTarget.split("-")[1]);
             if (!isNaN(idx) && idx >= 0 && idx < form.testimonials.length) {

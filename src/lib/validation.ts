@@ -253,6 +253,7 @@ export const landingPageSchema = z.object({
   products_title: strOpt,
   products_subtitle: strOpt,
   features_title: strOpt,
+  features_image: strOpt,
   features: strOpt,
   testimonials_title: strOpt,
   testimonials_mode: strOpt, // "all_site" | "select" | "custom"
@@ -275,6 +276,7 @@ export const landingPageSchema = z.object({
   meta_title: strOpt,
   meta_description: strOpt,
   whatsapp: strOpt,
+  section_visibility: strOpt,
   primary_color: strOpt,
 });
 

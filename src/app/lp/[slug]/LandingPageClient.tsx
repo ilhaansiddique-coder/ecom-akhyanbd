@@ -2,8 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FiCheck, FiStar, FiChevronDown, FiMinus, FiPlus, FiPhone } from "react-icons/fi";
+import { FiCheck, FiStar, FiChevronDown, FiMinus, FiPlus, FiPhone, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { SafeImg, SafeNextImage } from "@/components/SafeImage";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Autoplay, Pagination, Navigation } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
 import { api } from "@/lib/api";
 
 interface Product {
@@ -18,13 +22,14 @@ interface PageData {
   problem_title?: string; problem_points?: string;
   features?: string; testimonials?: string; how_it_works?: string; faq?: string;
   products?: string; products_title?: string; products_subtitle?: string; products_sub?: string;
-  features_title?: string; testimonials_title?: string; testimonials_mode?: string;
+  features_title?: string; features_image?: string; testimonials_title?: string; testimonials_mode?: string;
   how_it_works_title?: string; how_it_works_subtitle?: string; how_it_works_sub?: string;
   faq_title?: string;
   checkout_title?: string; checkout_subtitle?: string;
   checkout_btn_text?: string; custom_shipping?: boolean; shipping_cost?: number;
   show_email?: boolean; show_city?: boolean;
   guarantee_text?: string; success_message?: string;
+  section_visibility?: string;
   whatsapp?: string;
   primary_color?: string; resolved_products?: Product[];
 }
@@ -37,6 +42,10 @@ function parseJSON<T>(str?: string | null): T[] {
 export default function LandingPageClient({ page }: { page: PageData }) {
   const router = useRouter();
   const color = page.primary_color || "#0f5931";
+  const vis: Record<string, boolean> = (() => {
+    try { return JSON.parse(page.section_visibility || "{}"); } catch { return {}; }
+  })();
+  const show = (key: string) => vis[key] !== false; // default true if not set
 
   const products = page.resolved_products || [];
   const [quantities, setQuantities] = useState<Record<number, number>>(
@@ -133,8 +142,8 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     <div className="min-h-screen bg-[#faf9f8] text-[#1a1c1c] selection:bg-[color:var(--lp)] selection:text-white" suppressHydrationWarning style={{ "--lp": color, "--lp-light": `${color}15`, "--lp-medium": `${color}30` } as React.CSSProperties}>
 
       {/* ── HERO ── */}
-      {page.hero_headline && (
-        <header className="relative pt-[20px] pb-10 md:pt-[40px] md:pb-16 overflow-hidden">
+      {show("hero") && page.hero_headline && (
+        <header className="relative pt-[20px] pb-8 md:pt-[30px] md:pb-10 overflow-hidden">
           <div className="absolute inset-0 opacity-5" style={{ background: `radial-gradient(circle at top right, ${color}, transparent)` }} />
           <div className="max-w-4xl mx-auto px-6 md:px-8 flex flex-col items-center text-center relative z-10">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight mb-3 md:mb-6" style={{ color }}>
@@ -177,8 +186,8 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       )}
 
       {/* ── PROBLEM ── */}
-      {(page.problem_title || problemPoints.length > 0) && (
-        <section className="py-12 md:py-16 bg-gray-50">
+      {show("problem") && (page.problem_title || problemPoints.length > 0) && (
+        <section className="py-8 md:py-10 bg-gray-50">
           <div className="max-w-7xl mx-auto px-6 md:px-8">
             {page.problem_title && (
               <div className="text-center mb-8">
@@ -216,8 +225,8 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       )}
 
       {/* ── PRODUCTS ── */}
-      {products.length > 0 && (
-        <section className="py-12 md:py-16" id="products">
+      {show("products") && products.length > 0 && (
+        <section className="py-8 md:py-10" id="products">
           <div className="max-w-7xl mx-auto px-6 md:px-8">
             <div className="text-center mb-8">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-2">{page.products_title || "আমাদের প্রোডাক্ট"}</h2>
@@ -266,8 +275,8 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       )}
 
       {/* ── FEATURES/BENEFITS ── */}
-      {features.length > 0 && (
-        <section className="py-12 md:py-16 text-white" id="benefits" style={{ backgroundColor: color }}>
+      {show("features") && features.length > 0 && (
+        <section className="py-8 md:py-10 text-white" id="benefits" style={{ backgroundColor: color }}>
           <div className="max-w-7xl mx-auto px-6 md:px-8 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div className="order-2 lg:order-1">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold mb-10 text-center lg:text-left">{page.features_title || "🔥 কেন এই প্রোডাক্ট ব্যবহার করবেন?"}</h2>
@@ -285,10 +294,20 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                 ))}
               </div>
             </div>
-            {page.hero_image && (
+            {(page.features_image || page.hero_image) && (
               <div className="relative order-1 lg:order-2">
                 <div className="bg-white/10 backdrop-blur-md p-2 rounded-[2rem] border border-white/20">
-                  <SafeNextImage src={page.hero_image} alt="Feature" width={600} height={600} sizes="(max-width: 768px) 100vw, 50vw" className="rounded-[1.8rem] w-full h-auto" />
+                  {(() => {
+                    const src = page.features_image || page.hero_image;
+                    if (!src) return null;
+                    if (src.includes("youtube.com") || src.includes("youtu.be")) {
+                      return <iframe src={src.replace("watch?v=", "embed/")} className="w-full aspect-video rounded-[1.8rem]" allowFullScreen allow="autoplay; encrypted-media" />;
+                    }
+                    if (src.match(/\.(mp4|webm|mov)$/i)) {
+                      return <video src={src} autoPlay muted loop playsInline className="w-full rounded-[1.8rem] object-cover" />;
+                    }
+                    return <SafeNextImage src={src} alt="Feature" width={600} height={600} sizes="(max-width: 768px) 100vw, 50vw" className="rounded-[1.8rem] w-full h-auto" />;
+                  })()}
                 </div>
                 {page.hero_badge && (
                   <div className="absolute -top-3 -right-3 bg-green-100 text-green-800 px-3 py-2 rounded-xl shadow-lg text-center">
@@ -306,8 +325,8 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       )}
 
       {/* ── HOW IT WORKS ── */}
-      {howItWorks.length > 0 && (
-        <section className="py-12 md:py-16" id="how-it-works">
+      {show("how_it_works") && howItWorks.length > 0 && (
+        <section className="py-8 md:py-10" id="how-it-works">
           <div className="max-w-7xl mx-auto px-6 md:px-8">
             <div className="text-center mb-8">
               <h2 className="text-3xl md:text-4xl font-extrabold mb-3">{page.how_it_works_title || "কিভাবে ব্যবহার করবেন?"}</h2>
@@ -335,42 +354,72 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         </section>
       )}
 
-      {/* ── TESTIMONIALS ── */}
-      {testimonials.length > 0 && (
-        <section className="py-12 md:py-16 bg-gray-50 overflow-hidden">
+      {/* ── TESTIMONIALS CAROUSEL ── */}
+      {show("testimonials") && testimonials.length > 0 && (
+        <section className="py-10 md:py-14 bg-gray-50 overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 md:px-8">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-center mb-8">{page.testimonials_title || "গ্রাহকদের মন্তব্য"}</h2>
-            <div className={`mx-auto grid grid-cols-1 gap-6 ${testimonials.length === 1 ? "max-w-md" : testimonials.length === 2 ? "max-w-3xl md:grid-cols-2" : "md:grid-cols-3"}`}>
-              {testimonials.map((t, i) => (
-                <div key={i} className="bg-white p-8 md:p-10 rounded-[2rem] shadow-sm border-b-4" style={{ borderColor: color }}>
-                  <div className="flex mb-4 text-amber-400">
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <FiStar key={j} className={`w-5 h-5 ${j < t.rating ? "fill-amber-400" : "text-gray-200"}`} />
-                    ))}
-                  </div>
-                  <p className="text-lg italic text-gray-700 mb-6 leading-relaxed">"{t.review}"</p>
-                  <div className="flex items-center gap-3">
-                    {t.image ? (
-                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 relative">
-                        <SafeNextImage src={t.image} alt={t.name} fill sizes="40px" className="object-cover" />
+            <h2 className="text-3xl md:text-4xl font-extrabold text-center mb-6">{page.testimonials_title || "গ্রাহকদের মন্তব্য"}</h2>
+            <div className="relative">
+              <Swiper
+                modules={[Autoplay, Pagination, Navigation]}
+                spaceBetween={24}
+                slidesPerView={1}
+                breakpoints={{
+                  640: { slidesPerView: 2 },
+                  1024: { slidesPerView: 3 },
+                }}
+                autoplay={{ delay: 4000, disableOnInteraction: false }}
+                pagination={{ clickable: true, el: ".testimonial-dots" }}
+                navigation={{ nextEl: ".testimonial-next", prevEl: ".testimonial-prev" }}
+                loop={testimonials.length > 3}
+                className="pb-12"
+              >
+                {testimonials.map((t, i) => (
+                  <SwiperSlide key={i}>
+                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border-b-4 h-full" style={{ borderColor: color }}>
+                      <div className="flex mb-3 text-amber-400">
+                        {Array.from({ length: 5 }).map((_, j) => (
+                          <FiStar key={j} className={`w-4 h-4 ${j < t.rating ? "fill-amber-400" : "text-gray-200"}`} />
+                        ))}
                       </div>
-                    ) : (
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style={{ backgroundColor: color }}>
-                        {t.name[0]}
+                      <p className="text-sm italic text-gray-700 mb-4 leading-relaxed line-clamp-4">&ldquo;{t.review}&rdquo;</p>
+                      <div className="flex items-center gap-3">
+                        {t.image ? (
+                          <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 relative">
+                            <SafeNextImage src={t.image} alt={t.name} fill sizes="36px" className="object-cover" />
+                          </div>
+                        ) : (
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: color }}>
+                            {t.name[0]}
+                          </div>
+                        )}
+                        <div className="font-bold text-gray-800 text-sm">{t.name}</div>
                       </div>
-                    )}
-                    <div className="font-bold text-gray-800">{t.name}</div>
-                  </div>
-                </div>
-              ))}
+                    </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+              {/* Navigation arrows */}
+              {testimonials.length > 3 && (
+                <>
+                  <button className="testimonial-prev absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow hidden md:flex">
+                    <FiChevronLeft className="w-5 h-5 text-gray-600" />
+                  </button>
+                  <button className="testimonial-next absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow hidden md:flex">
+                    <FiChevronRight className="w-5 h-5 text-gray-600" />
+                  </button>
+                </>
+              )}
+              {/* Pagination dots */}
+              <div className="testimonial-dots flex justify-center gap-1.5 mt-6" />
             </div>
           </div>
         </section>
       )}
 
       {/* ── FAQ ── */}
-      {faqItems.length > 0 && (
-        <section className="py-12 md:py-16" id="faq">
+      {show("faq") && faqItems.length > 0 && (
+        <section className="py-8 md:py-10" id="faq">
           <div className="max-w-3xl mx-auto px-6 md:px-8">
             <h2 className="text-3xl md:text-4xl font-extrabold text-center mb-12">{page.faq_title || "সাধারণ কিছু প্রশ্ন (FAQ)"}</h2>
             <div className="space-y-3">
@@ -399,7 +448,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
 
       {/* ── CHECKOUT ── */}
       {products.length > 0 && (
-        <section className="py-12 md:py-16 bg-gray-100 relative overflow-hidden" id="checkout">
+        <section className="py-8 md:py-10 bg-gray-100 relative overflow-hidden" id="checkout">
           <div className="max-w-4xl mx-auto px-6 md:px-8">
             <div className="bg-white rounded-[2rem] md:rounded-[3rem] p-8 md:p-14 shadow-2xl relative z-10 border border-gray-100">
               <div className="text-center mb-10">

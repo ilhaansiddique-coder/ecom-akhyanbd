@@ -334,6 +334,7 @@ model LandingPage {
   productsTitle    String?   @map("products_title")
   productsSub      String?   @map("products_subtitle")
   featuresTitle    String?   @map("features_title")
+  featuresImage    String?   @map("features_image")
   features         String?
   testimonialsTitle String?  @map("testimonials_title")
   testimonialsMode String?   @default("custom") @map("testimonials_mode")
@@ -364,6 +365,9 @@ model LandingPage {
 
   // WhatsApp
   whatsapp         String?   @map("whatsapp")
+
+  // Section Visibility (JSON string: {"hero":true,"problem":true,...})
+  sectionVisibility String?  @map("section_visibility")
 
   // Style
   primaryColor     String?   @default("#0f5931") @map("primary_color")

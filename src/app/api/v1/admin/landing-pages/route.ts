@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
         productsTitle: data.products_title || null,
         productsSub: data.products_subtitle || null,
         featuresTitle: data.features_title || null,
+        featuresImage: data.features_image || null,
         features: data.features || null,
         testimonialsTitle: data.testimonials_title || null,
         testimonialsMode: data.testimonials_mode || "custom",
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         metaTitle: data.meta_title || null,
         metaDescription: data.meta_description || null,
         whatsapp: data.whatsapp || null,
+        sectionVisibility: data.section_visibility || null,
         primaryColor: data.primary_color || "#0f5931",
       },
     });
