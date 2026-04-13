@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
 export type Lang = "bn" | "en";
 
@@ -21,38 +22,35 @@ const dicts: Record<Lang, Record<string, string>> = { bn, en };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("bn");
+  const pathname = usePathname();
+  const isDashboard = pathname?.startsWith("/dashboard");
 
   useEffect(() => {
-    // 1. Check user's saved preference first
-    const saved = localStorage.getItem("lang") as Lang | null;
-    if (saved === "en" || saved === "bn") {
-      setLangState(saved);
-      setNumberLang(saved);
-      return;
-    }
-    // 2. No user preference — fetch site default language
+    // Fetch site language settings (frontend + dashboard)
     fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
       .then(r => r.json())
       .then(data => {
-        const siteLang = data?.site_language as Lang | undefined;
-        if (siteLang === "en" || siteLang === "bn") {
-          setLangState(siteLang);
-          setNumberLang(siteLang);
+        const frontendLang = (data?.site_language || "bn") as Lang;
+        const dashboardLang = (data?.dashboard_language || "en") as Lang;
+        const activeLang = isDashboard ? dashboardLang : frontendLang;
+
+        if (activeLang === "en" || activeLang === "bn") {
+          setLangState(activeLang);
+          setNumberLang(activeLang);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [isDashboard]);
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
     setNumberLang(l);
-    localStorage.setItem("lang", l);
     document.documentElement.lang = l === "en" ? "en" : "bn";
     document.documentElement.classList.toggle("lang-en", l === "en");
     document.documentElement.classList.toggle("lang-bn", l === "bn");
   }, []);
 
-  // Set initial classes
+  // Set HTML lang classes
   useEffect(() => {
     document.documentElement.lang = lang === "en" ? "en" : "bn";
     document.documentElement.classList.toggle("lang-en", lang === "en");

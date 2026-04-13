@@ -8,6 +8,8 @@ import ProductCard from "@/components/ProductCard";
 import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
 import { api } from "@/lib/api";
+import InlineSelect from "@/components/InlineSelect";
+import { useLang } from "@/lib/LanguageContext";
 import { toBn } from "@/utils/toBn";
 import { useChannel } from "@/lib/useChannel";
 
@@ -21,6 +23,7 @@ interface ShopClientProps {
 export default function ShopClient({ initialProducts, apiCategories }: ShopClientProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { lang } = useLang();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeBrand, setActiveBrand] = useState<string>("");
@@ -139,17 +142,13 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
                 </button>
               ))}
             </div>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-              className="px-4 py-2.5 border border-border rounded-xl text-sm bg-white focus:border-primary focus:outline-none"
-            >
-              <option value="default">ডিফল্ট সর্টিং</option>
-              <option value="price_asc">দাম: কম থেকে বেশি</option>
-              <option value="price_desc">দাম: বেশি থেকে কম</option>
-              <option value="newest">নতুন পণ্য</option>
-              <option value="popular">জনপ্রিয়</option>
-            </select>
+            <InlineSelect value={sort} options={[
+              { value: "default", label: lang === "en" ? "Default" : "ডিফল্ট সর্টিং" },
+              { value: "price_asc", label: lang === "en" ? "Price: Low → High" : "দাম: কম → বেশি" },
+              { value: "price_desc", label: lang === "en" ? "Price: High → Low" : "দাম: বেশি → কম" },
+              { value: "newest", label: lang === "en" ? "Newest" : "নতুন পণ্য" },
+              { value: "popular", label: lang === "en" ? "Popular" : "জনপ্রিয়" },
+            ]} onChange={(v) => setSort(v as SortOption)} />
           </div>
 
           {/* Products Grid */}

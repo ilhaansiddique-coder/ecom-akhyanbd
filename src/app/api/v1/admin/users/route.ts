@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     prisma.user.findMany({
       where,
       select: {
-        id: true, name: true, email: true, phone: true, role: true,
+        id: true, name: true, email: true, phone: true, address: true, role: true,
         avatar: true, createdAt: true, updatedAt: true,
       },
       orderBy: { createdAt: "desc" },
@@ -68,13 +68,14 @@ export async function POST(request: NextRequest) {
         email: data.email,
         password: hashedPassword,
         phone: data.phone ?? null,
+        address: data.address ?? null,
         role: data.role ?? "customer",
       },
     });
 
     const created = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+      select: { id: true, name: true, email: true, phone: true, address: true, role: true, createdAt: true },
     });
     return jsonResponse(serialize(created), 201);
   } catch (error) {

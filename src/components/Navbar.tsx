@@ -8,7 +8,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { useCart } from "@/lib/CartContext";
 import { useLang } from "@/lib/LanguageContext";
 import { toBn } from "@/utils/toBn";
-import LanguageToggle from "./LanguageToggle";
 
 interface NavbarProps {
   onSearchOpen: () => void;
@@ -139,7 +138,6 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
 
             {/* Actions */}
             <div className="flex items-center gap-1.5">
-              <div className="hidden md:block"><LanguageToggle compact /></div>
               <button
                 onClick={onSearchOpen}
                 className="p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
@@ -182,7 +180,6 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
                   <FiPhone className="w-4 h-4" />
                   <span>+880 1731492117</span>
                 </div>
-                <LanguageToggle />
               </div>
             </div>
           </div>

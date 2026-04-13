@@ -40,20 +40,23 @@ const ResponsiveContainer = dynamic(() => import("recharts").then(m => m.Respons
 // ─── Status labels ───────────────────────────────────────────────────────────
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
-  confirmed: "bg-blue-100 text-blue-800",
   processing: "bg-indigo-100 text-indigo-800",
+  on_hold: "bg-orange-100 text-orange-800",
+  confirmed: "bg-blue-100 text-blue-800",
   shipped: "bg-purple-100 text-purple-800",
   delivered: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
   trashed: "bg-gray-100 text-gray-500",
 };
 const statusLabelsBn: Record<string, string> = {
-  pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং",
-  shipped: "শিপড", delivered: "ডেলিভারি সম্পন্ন", cancelled: "বাতিল", trashed: "ট্র্যাশ",
+  pending: "অপেক্ষমাণ", processing: "প্রসেসিং", on_hold: "অন হোল্ড",
+  confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি সম্পন্ন",
+  cancelled: "বাতিল", trashed: "ট্র্যাশ",
 };
 const statusLabelsEn: Record<string, string> = {
-  pending: "Pending", confirmed: "Confirmed", processing: "Processing",
-  shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled", trashed: "Trashed",
+  pending: "Pending", processing: "Processing", on_hold: "On Hold",
+  confirmed: "Confirmed", shipped: "Shipped", delivered: "Delivered",
+  cancelled: "Cancelled", trashed: "Trashed",
 };
 const getStatusLabel = (status: string, lang: string) => ({
   label: (lang === "en" ? statusLabelsEn[status] : statusLabelsBn[status]) || status,
@@ -518,11 +521,11 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
 
                             {/* Order Tracking Timeline */}
                             <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
-                              {(["pending", "confirmed", "processing", "shipped", "delivered"] as const).map((step, i) => {
+                              {(["pending", "processing", "confirmed", "shipped", "delivered"] as const).map((step, i) => {
                                 const stepLabels: Record<string, string> = lang === "en"
-                                  ? { pending: "Pending", confirmed: "Confirmed", processing: "Processing", shipped: "Shipped", delivered: "Delivered" }
-                                  : { pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং", shipped: "শিপড", delivered: "ডেলিভারি" };
-                                const stepOrder = ["pending", "confirmed", "processing", "shipped", "delivered"];
+                                  ? { pending: "Pending", processing: "Processing", confirmed: "Confirmed", shipped: "Shipped", delivered: "Delivered" }
+                                  : { pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি" };
+                                const stepOrder = ["pending", "processing", "confirmed", "shipped", "delivered"];
                                 const currentIdx = stepOrder.indexOf(order.status);
                                 const isCancelled = order.status === "cancelled";
                                 const isActive = !isCancelled && i <= currentIdx;

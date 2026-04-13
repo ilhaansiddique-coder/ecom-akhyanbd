@@ -22,7 +22,11 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   const router = useRouter();
   const [showAdded, setShowAdded] = useState(false);
   const displayName = product.nameBn || product.name;
-  const { price, originalPrice, image: rawImage, badge, badgeColor = "bg-primary" } = product;
+  const { originalPrice, image: rawImage, badge, badgeColor = "bg-primary" } = product;
+  const hasVar = !!(product.hasVariations || (product.variants && product.variants.length > 0));
+  const lowestVariantPrice = hasVar ? Math.min(...product.variants!.map(v => v.price)) : product.price;
+  const highestVariantPrice = hasVar ? Math.max(...product.variants!.map(v => v.price)) : product.price;
+  const price = hasVar ? lowestVariantPrice : product.price;
   const image = rawImage || "/placeholder.svg";
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
   const slug = product.slug || product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -31,11 +35,13 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   useEffect(() => { setMounted(true); }, []);
 
   const handleAddToCart = () => {
+    if (hasVar) { router.push(`/products/${slug}`); return; }
     addItem({ id: product.id, name: displayName, price, image });
     setShowAdded(true);
   };
 
   const handleOrderNow = () => {
+    if (hasVar) { router.push(`/products/${slug}`); return; }
     addItem({ id: product.id, name: displayName, price, image });
     router.push("/checkout");
   };
@@ -75,14 +81,16 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
 
         <div className="p-4 flex flex-col flex-1">
           <Link href={`/products/${slug}`} className="flex-1">
-            <h3 className="font-semibold text-foreground text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+            <h3 className="font-semibold text-foreground text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors">
               {displayName}
             </h3>
           </Link>
 
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-primary text-lg" suppressHydrationWarning>৳{toBn(price)}</span>
-            {originalPrice && (
+            <span className="font-bold text-primary text-lg" suppressHydrationWarning>
+              ৳{toBn(price)}{hasVar && highestVariantPrice > lowestVariantPrice && <> - ৳{toBn(highestVariantPrice)}</>}
+            </span>
+            {!hasVar && originalPrice && (
               <span className="text-text-light line-through text-sm" suppressHydrationWarning>৳{toBn(originalPrice)}</span>
             )}
           </div>

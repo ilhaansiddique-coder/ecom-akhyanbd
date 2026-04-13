@@ -12,6 +12,7 @@ export async function GET() {
         OR: [
           { key: { startsWith: "checkout_" } },
           { key: "site_language" },
+          { key: "dashboard_language" },
         ],
       },
     });

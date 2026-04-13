@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true, brand: true },
+      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
       take: perPage,
@@ -85,9 +85,26 @@ export async function POST(request: NextRequest) {
         soldCount: data.sold_count ?? 0,
         isActive: data.is_active ?? true,
         isFeatured: data.is_featured ?? false,
+        hasVariations: data.has_variations ?? false,
+        variationType: data.variation_type ?? null,
         sortOrder: data.sort_order ?? 0,
+        ...(data.variants && Array.isArray(data.variants) && data.variants.length > 0 ? {
+          variants: {
+            create: data.variants.map((v: any, i: number) => ({
+              label: v.label,
+              price: Number(v.price),
+              originalPrice: v.original_price ? Number(v.original_price) : null,
+              sku: v.sku || null,
+              stock: Number(v.stock) || 0,
+              unlimitedStock: v.unlimited_stock ?? false,
+              image: v.image || null,
+              sortOrder: v.sort_order ?? i,
+              isActive: v.is_active ?? true,
+            })),
+          },
+        } : {}),
       },
-      include: { category: true, brand: true },
+      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
     });
 
     revalidateAll("products");

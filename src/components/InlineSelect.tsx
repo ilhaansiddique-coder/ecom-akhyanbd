@@ -99,7 +99,7 @@ export default function InlineSelect({ value, options, onChange, fullWidth, plac
             animation: "fadeSlideIn 0.12s ease-out",
           }}
         >
-          <div className="p-1 max-h-56 overflow-y-auto">
+          <div className="p-1 max-h-56 overflow-y-auto inline-select-scroll">
             {options.map((opt) => {
               const isSelected = opt.value === value;
               return (

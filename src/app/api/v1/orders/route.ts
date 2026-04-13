@@ -55,22 +55,40 @@ export async function POST(request: NextRequest) {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const result = await prisma.$transaction(async (tx: any) => {
-        // 1. Fetch products with version for optimistic locking
+        // 1. Fetch products + variants for optimistic locking
         const productIds = data.items.map((i) => i.product_id);
-        const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+        const products = await tx.product.findMany({ where: { id: { in: productIds } }, include: { variants: true } });
         const pMap = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
-        // 2. Validate stock and build server-side price items
+        // 2. Validate stock and build server-side price items (variant-aware)
         const verifiedItems = data.items.map((item) => {
           const product = pMap.get(item.product_id);
           if (!product) throw new Error(`Product not found: ${item.product_id}`);
-          if (!product.unlimitedStock && product.stock < item.quantity) {
-            throw new Error(`${product.name} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${product.stock}`);
+
+          const variantId = (item as any).variant_id;
+          let price = product.price as number;
+          let variantLabel: string | null = null;
+          let stockSource = product;
+
+          if (variantId && product.hasVariations) {
+            const variant = product.variants?.find((v: any) => v.id === variantId);
+            if (!variant) throw new Error(`Variant not found for ${product.name}`);
+            price = variant.price;
+            variantLabel = variant.label;
+            stockSource = variant;
           }
+
+          if (!stockSource.unlimitedStock && stockSource.stock < item.quantity) {
+            const label = variantLabel ? `${product.name} (${variantLabel})` : product.name;
+            throw new Error(`${label} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${stockSource.stock}`);
+          }
+
           return {
             productId: item.product_id,
             productName: product.name,
-            price: product.price as number,
+            variantId: variantId || null,
+            variantLabel,
+            price,
             quantity: item.quantity,
           };
         });
@@ -81,21 +99,35 @@ export async function POST(request: NextRequest) {
         const serverDiscount = data.discount || 0;
         const serverTotal = serverSubtotal + serverShipping - serverDiscount;
 
-        // 4. Update stock with optimistic locking (version check prevents overselling)
-        for (const item of data.items) {
-          const prod = pMap.get(item.product_id);
+        // 4. Update stock with optimistic locking
+        for (const vItem of verifiedItems) {
+          const prod = pMap.get(vItem.productId);
           if (!prod) continue;
 
+          // Decrement variant stock if applicable
+          if (vItem.variantId && prod.hasVariations) {
+            const variant = prod.variants?.find((v: any) => v.id === vItem.variantId);
+            if (variant && !variant.unlimitedStock) {
+              const vResult = await tx.productVariant.updateMany({
+                where: { id: vItem.variantId, version: variant.version, stock: { gte: vItem.quantity } },
+                data: { stock: { decrement: vItem.quantity }, version: { increment: 1 } },
+              });
+              if (vResult.count === 0) throw new Error(`CONFLICT:${prod.name}`);
+            }
+          }
+
+          // Update product soldCount + stock (skip stock decrement if variant handles it)
+          const skipProductStock = prod.unlimitedStock || vItem.variantId;
           const updateResult = await tx.product.updateMany({
             where: {
-              id: item.product_id,
-              version: prod.version, // Only succeeds if version hasn't changed
-              ...(prod.unlimitedStock ? {} : { stock: { gte: item.quantity } }), // Double-check stock
+              id: vItem.productId,
+              version: prod.version,
+              ...(skipProductStock ? {} : { stock: { gte: vItem.quantity } }),
             },
             data: {
-              ...(prod.unlimitedStock ? {} : { stock: { decrement: item.quantity } }),
-              soldCount: { increment: item.quantity },
-              version: { increment: 1 }, // Bump version
+              ...(skipProductStock ? {} : { stock: { decrement: vItem.quantity } }),
+              soldCount: { increment: vItem.quantity },
+              version: { increment: 1 },
             },
           });
 
@@ -172,6 +204,7 @@ export async function POST(request: NextRequest) {
             email: (data.customer_email || data.email || `${customerPhone}@guest.local`),
             password: await bcrypt.hash(randomPass, 10),
             phone: customerPhone,
+            address: data.customer_address || data.address || null,
             role: "customer",
           },
         }).catch(() => {}); // Silently fail if email exists

@@ -20,6 +20,7 @@ interface User {
   name: string;
   email: string;
   phone?: string;
+  address?: string;
   role: string;
   created_at: string;
 }
@@ -29,6 +30,7 @@ const emptyForm = {
   email: "",
   password: "",
   phone: "",
+  address: "",
   role: "customer",
 };
 type FormState = typeof emptyForm;
@@ -69,7 +71,7 @@ export default function UsersPage() {
 
   const openEdit = (u: User) => {
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, password: "", phone: u.phone || "", role: u.role });
+    setForm({ name: u.name, email: u.email, password: "", phone: u.phone || "", address: u.address || "", role: u.role });
     setModalOpen(true);
   };
 
@@ -222,6 +224,10 @@ export default function UsersPage() {
           <div>
             <label className={labelCls}>{t("form.phone")}</label>
             <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>{t("form.address")}</label>
+            <textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Full address..." : "সম্পূর্ণ ঠিকানা..."} />
           </div>
           <div>
             <label className={labelCls}>{t("form.role")} *</label>

@@ -15,7 +15,7 @@ export async function GET(
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id: Number(id) },
-    include: { items: true, user: true },
+    include: { items: { include: { product: { select: { image: true } } } }, user: true },
   });
 
   if (!order) return notFound("Order not found");
@@ -48,11 +48,31 @@ export async function PUT(
     if (body.payment_status !== undefined) updateData.paymentStatus = body.payment_status;
     if (body.payment_method !== undefined) updateData.paymentMethod = body.payment_method;
     if (body.shipping_cost !== undefined) updateData.shippingCost = Number(body.shipping_cost);
+    if (body.discount !== undefined) updateData.discount = Number(body.discount) || 0;
     if (body.notes !== undefined) updateData.notes = body.notes || null;
+    if (body.courier_sent !== undefined) updateData.courierSent = Boolean(body.courier_sent);
+    if (body.consignment_id !== undefined) updateData.consignmentId = body.consignment_id || null;
+    if (body.courier_status !== undefined) updateData.courierStatus = body.courier_status || null;
 
-    // Recalculate total if shipping changed
-    if (body.shipping_cost !== undefined) {
+    // Recalculate totals
+    if (body.subtotal !== undefined) updateData.subtotal = Number(body.subtotal);
+    if (body.total !== undefined) updateData.total = Number(body.total);
+    if (body.shipping_cost !== undefined && body.total === undefined) {
       updateData.total = Number(existing.subtotal) + Number(body.shipping_cost);
+    }
+
+    // Update items if provided
+    if (body.items && Array.isArray(body.items)) {
+      await prisma.orderItem.deleteMany({ where: { orderId: Number(id) } });
+      await prisma.orderItem.createMany({
+        data: body.items.map((i: any) => ({
+          orderId: Number(id),
+          productId: i.product_id || null,
+          productName: i.product_name || "",
+          price: Number(i.price),
+          quantity: Number(i.quantity),
+        })),
+      });
     }
 
     const order = await prisma.order.update({

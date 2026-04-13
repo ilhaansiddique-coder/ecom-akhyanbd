@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 
@@ -73,13 +74,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
-      <body className={`min-h-screen bg-background ${hindSiliguri.className}`} suppressHydrationWarning>
-        {/* Mark JS as active so fade-in animations only apply after hydration.
-            Without this, content stays visible (no invisible flash). */}
-        <script dangerouslySetInnerHTML={{ __html: 'document.documentElement.classList.add("js-ready")' }} />
+      <body className="min-h-screen bg-background" suppressHydrationWarning>
+        {/* Mark JS as active so fade-in animations only apply after hydration */}
+        <Script id="js-ready" strategy="beforeInteractive">{`document.documentElement.classList.add("js-ready")`}</Script>
         {/* Organization JSON-LD */}
-        <script
-          type="application/ld+json"
+        <Script id="org-jsonld" type="application/ld+json" strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",

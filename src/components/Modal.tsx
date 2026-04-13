@@ -9,10 +9,11 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   size?: "sm" | "md" | "lg" | "xl";
+  persistent?: boolean; // Don't close on backdrop click
   children: ReactNode;
 }
 
-export default function Modal({ open, onClose, title, size = "md", children }: ModalProps) {
+export default function Modal({ open, onClose, title, size = "md", persistent, children }: ModalProps) {
   const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-2xl" };
 
   return (
@@ -25,7 +26,7 @@ export default function Modal({ open, onClose, title, size = "md", children }: M
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/50"
-            onMouseDown={onClose}
+            onMouseDown={persistent ? undefined : onClose}
           />
 
           {/* Modal box */}

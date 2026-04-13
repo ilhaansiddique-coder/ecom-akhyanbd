@@ -148,6 +148,26 @@ html.lang-en body {
   font-family: var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
 }
 
+/* InlineSelect dropdown scrollbar — thin, inside */
+.inline-select-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.inline-select-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.inline-select-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.inline-select-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 99px;
+}
+.inline-select-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
 /* Swiper pagination dots */
 .testimonial-dots {
   display: flex !important;

@@ -9,7 +9,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
 import {
-  FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud, FiEye,
+  FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud, FiEye, FiCopy,
   FiBox, FiCheckCircle, FiXCircle, FiTrendingUp,
 } from "react-icons/fi";
 import { useChannel } from "@/lib/useChannel";
@@ -62,6 +62,9 @@ const emptyForm = {
   unlimited_stock: false,
   is_active: true,
   is_featured: false,
+  has_variations: false,
+  variation_type: "",
+  variants: [] as { label: string; price: string; original_price: string; sku: string; stock: string; unlimited_stock: boolean; image: string; is_active: boolean }[],
 };
 
 type FormState = typeof emptyForm;
@@ -90,6 +93,7 @@ export default function ProductsPage() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryTarget, setGalleryTarget] = useState<string>("product"); // "product" or "variant-{idx}"
 
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
@@ -123,6 +127,35 @@ export default function ProductsPage() {
     setModalOpen(true);
   };
 
+  const duplicateProduct = (p: Product) => {
+    setEditId(null); // Create mode, not edit
+    setForm({
+      name: p.name + " (Copy)",
+      slug: p.slug + "-copy",
+      category_id: String(p.category?.id || p.category_id || ""),
+      brand_id: String(p.brand?.id || p.brand_id || ""),
+      description: p.description || "",
+      price: String(p.price),
+      original_price: p.original_price != null ? String(p.original_price) : "",
+      image: p.image || "",
+      badge: p.badge || "",
+      weight: p.weight || "",
+      stock: String(p.stock),
+      unlimited_stock: (p as any).unlimited_stock ?? false,
+      is_active: false, // Duplicates start as inactive
+      is_featured: false,
+      has_variations: (p as any).has_variations || false,
+      variation_type: (p as any).variation_type || "",
+      variants: ((p as any).variants || []).map((v: any) => ({
+        label: v.label || "", price: String(v.price), original_price: v.original_price != null ? String(v.original_price) : "",
+        sku: "", stock: String(v.stock || 0), unlimited_stock: Boolean(v.unlimited_stock),
+        image: v.image || "", is_active: v.is_active !== false,
+      })),
+    });
+    setModalOpen(true);
+    showToast(lang === "en" ? "Product duplicated — edit and save" : "পণ্য ডুপ্লিকেট হয়েছে — সম্পাদনা করে সংরক্ষণ করুন");
+  };
+
   const openEdit = (p: Product) => {
     setEditId(p.id);
     setForm({
@@ -140,6 +173,13 @@ export default function ProductsPage() {
       unlimited_stock: (p as any).unlimited_stock ?? false,
       is_active: p.is_active,
       is_featured: p.is_featured,
+      has_variations: (p as any).has_variations || (p as any).hasVariations || false,
+      variation_type: (p as any).variation_type || (p as any).variationType || "",
+      variants: ((p as any).variants || []).map((v: any) => ({
+        label: v.label || "", price: String(v.price), original_price: v.original_price != null ? String(v.original_price) : "",
+        sku: v.sku || "", stock: String(v.stock || 0), unlimited_stock: Boolean(v.unlimited_stock || v.unlimitedStock),
+        image: v.image || "", is_active: v.is_active !== false,
+      })),
     });
     setModalOpen(true);
   };
@@ -207,6 +247,13 @@ export default function ProductsPage() {
       weight: f.weight || undefined,
       is_active: f.is_active,
       is_featured: f.is_featured,
+      has_variations: f.has_variations,
+      variation_type: f.variation_type || undefined,
+      variants: f.has_variations ? f.variants.map((v, i) => ({
+        label: v.label, price: parseNum(v.price), original_price: v.original_price ? parseNum(v.original_price) : null,
+        sku: v.sku || null, stock: parseNum(v.stock), unlimited_stock: v.unlimited_stock,
+        image: v.image || null, sort_order: i, is_active: v.is_active,
+      })) : [],
     };
     try {
       if (editId) {
@@ -384,6 +431,9 @@ export default function ProductsPage() {
                             <button onClick={() => openEdit(p)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="সম্পাদনা">
                               <FiEdit2 className="w-3.5 h-3.5" />
                             </button>
+                            <button onClick={() => duplicateProduct(p)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="ডুপ্লিকেট">
+                              <FiCopy className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="মুছুন">
                               <FiTrash2 className="w-3.5 h-3.5" />
                             </button>
@@ -400,7 +450,7 @@ export default function ProductsPage() {
       </motion.div>
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("modal.editProduct") : t("modal.newProduct")} size="xl">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("modal.editProduct") : t("modal.newProduct")} size="xl" persistent>
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
@@ -419,136 +469,193 @@ export default function ProductsPage() {
                     <label className={labelCls}>{t("form.brand")}</label>
                     <InlineSelect fullWidth value={form.brand_id} options={[{ value: "", label: t("form.select") }, ...brands.map(b => ({ value: String(b.id), label: b.name }))]} onChange={(v) => { setForm(prev => ({ ...prev, brand_id: v })); }} placeholder={t("form.select")} />
                   </div>
-                  <div>
-                    <label className={labelCls}>{t("form.price")} *</label>
-                    <input name="price" required type="number" min="0" step="0.01" value={form.price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, price: v })); }} className={inputCls} placeholder="0" />
+                  {/* Row: Price | Original Price | Stock — 33% each */}
+                  <div className="grid grid-cols-3 gap-3 col-span-2">
+                    <div>
+                      <label className={labelCls}>{t("form.price")} *</label>
+                      <input name="price" required type="number" min="0" step="0.01" value={form.price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, price: v })); }} className={inputCls} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t("form.originalPrice")}</label>
+                      <input name="original_price" type="number" min="0" step="0.01" value={form.original_price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, original_price: v })); }} className={inputCls} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t("form.stock")}</label>
+                      <input name="stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }}
+                        className={inputCls + (form.unlimited_stock ? " opacity-50" : "")} placeholder="0"
+                        disabled={form.unlimited_stock} />
+                    </div>
                   </div>
-                  <div>
-                    <label className={labelCls}>{t("form.originalPrice")}</label>
-                    <input name="original_price" type="number" min="0" step="0.01" value={form.original_price} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, original_price: v })); }} className={inputCls} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>{t("form.stock")} {!form.unlimited_stock && "*"}</label>
-                    <input name="stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }}
-                      className={inputCls + (form.unlimited_stock ? " opacity-50" : "")} placeholder="0"
-                      disabled={form.unlimited_stock} required={!form.unlimited_stock} />
-                    <label className="flex items-center gap-2 mt-2 text-sm cursor-pointer select-none">
-                      <input type="checkbox" checked={form.unlimited_stock}
-                        onChange={(e) => setForm(prev => ({ ...prev, unlimited_stock: e.target.checked }))}
-                        className="w-4 h-4 accent-[#0f5931] rounded" />
-                      <span className="text-gray-600">{lang === "en" ? "Unlimited stock" : "আনলিমিটেড স্টক"}</span>
-                    </label>
-                  </div>
-                  <div className="relative">
-                    <label className={labelCls}>{t("form.badge")}</label>
-                    <input
-                      name="badge"
-                      value={form.badge}
-                      onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, badge: v })); setBadgeOpen(true); }}
-                      onFocus={() => setBadgeOpen(true)}
-                      onBlur={() => setTimeout(() => setBadgeOpen(false), 150)}
-                      className={inputCls}
-                      placeholder="যেমন: নতুন, জনপ্রিয়"
-                      autoComplete="off"
-                    />
-                    {badgeOpen && (() => {
-                      const allBadges = [...new Set(products.map((p) => p.badge).filter(Boolean) as string[])];
-                      const filtered = form.badge
-                        ? allBadges.filter((b) => b.toLowerCase().includes(form.badge.toLowerCase()))
-                        : allBadges;
-                      if (filtered.length === 0 && form.badge.trim()) {
-                        return (
+                  {/* Row: Unlimited toggle | Badge | Weight — 33% each */}
+                  <div className="grid grid-cols-3 gap-3 col-span-2">
+                    <div>
+                      <label className={labelCls}>&nbsp;</label>
+                      <button type="button" onClick={() => setForm(prev => ({ ...prev, unlimited_stock: !prev.unlimited_stock }))}
+                        className={`w-full h-[42px] flex items-center justify-between gap-2 px-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                          form.unlimited_stock ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                        }`}>
+                        <span>{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
+                        <div className={`relative w-8 h-[18px] rounded-full transition-colors ${form.unlimited_stock ? "bg-[#0f5931]" : "bg-gray-300"}`}>
+                          <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${form.unlimited_stock ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+                        </div>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <label className={labelCls}>{t("form.badge")}</label>
+                      <input name="badge" value={form.badge}
+                        onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, badge: v })); setBadgeOpen(true); }}
+                        onFocus={() => setBadgeOpen(true)}
+                        onBlur={() => setTimeout(() => setBadgeOpen(false), 150)}
+                        className={inputCls} placeholder="যেমন: নতুন, জনপ্রিয়" autoComplete="off" />
+                      {badgeOpen && (() => {
+                        const allBadges = [...new Set(products.map((p) => p.badge).filter(Boolean) as string[])];
+                        const filtered = form.badge ? allBadges.filter((b) => b.toLowerCase().includes(form.badge.toLowerCase())) : allBadges;
+                        if (filtered.length === 0 && form.badge.trim()) return (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 p-2">
-                            <div className="px-3 py-2 text-xs text-text-muted">
-                              &quot;{form.badge}&quot; নতুন ব্যাজ হিসেবে তৈরি হবে
-                            </div>
+                            <div className="px-3 py-2 text-xs text-text-muted">&quot;{form.badge}&quot; নতুন ব্যাজ হিসেবে তৈরি হবে</div>
                           </div>
                         );
-                      }
-                      if (filtered.length === 0) return null;
-                      return (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-36 overflow-y-auto">
-                          {filtered.map((b) => (
-                            <button
-                              key={b}
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => { setForm(prev => ({ ...prev, badge: b })); setBadgeOpen(false); }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-primary/5 hover:text-primary transition-colors"
-                            >
-                              {b}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    <label className={labelCls}>{t("form.weight")}</label>
-                    <input name="weight" value={form.weight} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, weight: v })); }} className={inputCls} placeholder="যেমন: ১০০গ্রাম" />
+                        if (filtered.length === 0) return null;
+                        return (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-36 overflow-y-auto">
+                            {filtered.map((b) => (
+                              <button key={b} type="button" onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => { setForm(prev => ({ ...prev, badge: b })); setBadgeOpen(false); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-primary/5 hover:text-primary transition-colors">{b}</button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t("form.weight")}</label>
+                      <input name="weight" value={form.weight} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, weight: v })); }} className={inputCls} placeholder="যেমন: ১০০গ্রাম" />
+                    </div>
                   </div>
                 </div>
 
-                {/* Image Upload */}
-                <div>
-                  <label className={labelCls}>{t("form.image")}</label>
-                  <div
+                {/* Description (80%) + Image (20%) in one row */}
+                <div className="flex gap-4 col-span-2">
+                  <div className="flex-[4] flex flex-col">
+                    <label className={labelCls}>{t("form.description")}</label>
+                    <textarea name="description" value={form.description} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, description: v })); }} className={inputCls + " resize-none flex-1 min-h-[120px]"} />
+                  </div>
+                  <div className="flex-[1]"
                     onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    className={`relative border-2 border-dashed rounded-xl transition-colors ${dragOver ? "border-[#0f5931] bg-green-50/50" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    {form.image ? (
-                      <div className="p-3 flex items-center gap-4">
-                        <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-100 shrink-0">
-                          <SafeImg src={resolveImg(form.image)} alt="Preview" className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-700 font-medium truncate">{form.image.split("/").pop()}</p>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            <button type="button" onClick={() => setGalleryOpen(true)}
-                              className="px-3 py-1.5 bg-[#0f5931] hover:bg-[#12693a] rounded-lg text-xs font-medium text-white transition-colors flex items-center gap-1">
-                              <FiImage className="w-3 h-3" /> গ্যালারি
-                            </button>
-                            <label className="cursor-pointer px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-600 transition-colors">
-                              আপলোড
-                              <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-                            </label>
-                            <button type="button" onClick={() => setForm((prev) => ({ ...prev, image: "" }))}
-                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-medium text-red-600 transition-colors">
-                              মুছুন
+                    onDrop={handleDrop}>
+                    <label className={labelCls}>{t("form.image")}</label>
+                    <div className={`border-2 border-dashed rounded-xl transition-colors cursor-pointer ${dragOver ? "border-[#0f5931] bg-green-50/50" : "border-gray-200 hover:border-gray-300"}`}
+                      onClick={() => { if (!form.image) { setGalleryTarget("product"); setGalleryOpen(true); } }}>
+                      {form.image ? (
+                        <div className="p-2">
+                          <div className="relative w-full aspect-square rounded-lg overflow-hidden border border-gray-100">
+                            <SafeImg src={resolveImg(form.image)} alt="Preview" className="w-full h-full object-cover" />
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setForm((prev) => ({ ...prev, image: "" })); }}
+                              className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-sm">
+                              <FiX className="w-3 h-3" />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="py-6 px-4 flex flex-col items-center gap-3">
-                        {uploading ? (
-                          <div className="w-8 h-8 border-3 border-[#0f5931] border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">
-                            <FiUploadCloud className="w-6 h-6 text-gray-400" />
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-400">PNG, JPG, WEBP (সর্বোচ্চ ৫MB)</p>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => setGalleryOpen(true)}
-                            className="px-4 py-2 bg-[#0f5931] hover:bg-[#12693a] rounded-lg text-xs font-semibold text-white transition-colors flex items-center gap-1.5">
-                            <FiImage className="w-3.5 h-3.5" /> গ্যালারি থেকে বাছুন
-                          </button>
-                          <label className="cursor-pointer px-4 py-2 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-600 transition-colors flex items-center gap-1.5">
-                            <FiUploadCloud className="w-3.5 h-3.5" /> আপলোড করুন
-                            <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
-                          </label>
+                      ) : (
+                        <div className="py-6 px-2 flex flex-col items-center gap-2">
+                          {uploading ? (
+                            <div className="w-6 h-6 border-2 border-[#0f5931] border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <FiUploadCloud className="w-8 h-8 text-gray-300" />
+                          )}
+                          <p className="text-[10px] text-gray-400 text-center">Click to browse</p>
                         </div>
-                      </div>
+                      )}
+                    </div>
+                    {form.image && (
+                      <button type="button" onClick={() => { setGalleryTarget("product"); setGalleryOpen(true); }}
+                        className="w-full py-1.5 mt-2 bg-[#0f5931] hover:bg-[#12693a] rounded-lg text-[10px] font-medium text-white transition-colors flex items-center justify-center gap-1">
+                        <FiImage className="w-3 h-3" /> {lang === "en" ? "Change" : "পরিবর্তন"}
+                      </button>
                     )}
                   </div>
                 </div>
-                <div>
-                  <label className={labelCls}>{t("form.description")}</label>
-                  <textarea name="description" rows={3} value={form.description} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, description: v })); }} className={inputCls + " resize-none"} />
+                {/* Has Variations — full width row */}
+                <div className="col-span-2">
+                  <button type="button" onClick={() => setForm(prev => ({ ...prev, has_variations: !prev.has_variations }))}
+                    className={`w-full h-[42px] flex items-center justify-between gap-2 px-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                      form.has_variations ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                    }`}>
+                    <span>{lang === "en" ? "Has Variations" : "ভ্যারিয়েশন আছে"}</span>
+                    <div className={`relative w-9 h-5 rounded-full transition-colors ${form.has_variations ? "bg-[#0f5931]" : "bg-gray-300"}`}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${form.has_variations ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </div>
+                  </button>
                 </div>
+                {/* Variations Detail (shown when toggle is on) */}
+                {form.has_variations && (
+                  <div className="border border-[#0f5931]/20 bg-[#0f5931]/[0.02] rounded-xl p-4 space-y-3">
+                    <input value={form.variation_type} onChange={(e) => setForm(prev => ({ ...prev, variation_type: e.target.value }))}
+                      className={inputCls} placeholder={lang === "en" ? "Variation type (e.g. Weight, Size, Color)" : "ভ্যারিয়েশন টাইপ (যেমন: ওজন, সাইজ, রং)"} />
+                    {form.variants.map((v, idx) => (
+                      <div key={idx} className="bg-white rounded-xl p-3 space-y-2 border border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-400 w-6">{idx + 1}</span>
+                          <input value={v.label} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], label: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
+                            className={inputCls + " flex-1"} placeholder={lang === "en" ? "Label (e.g. 400g)" : "লেবেল (যেমন: ৪০০ গ্রাম)"} />
+                          <button type="button" onClick={() => { const variants = form.variants.filter((_, i) => i !== idx); setForm(prev => ({ ...prev, variants })); }}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><FiX className="w-4 h-4" /></button>
+                        </div>
+                        <div className="grid grid-cols-[1fr_1fr_1fr_42px] gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-400">{lang === "en" ? "Price" : "দাম"} *</label>
+                            <input type="number" min="0" value={v.price} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], price: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
+                              className={inputCls} placeholder="0" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-400">{lang === "en" ? "Original Price" : "আসল দাম"}</label>
+                            <input type="number" min="0" value={v.original_price} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], original_price: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
+                              className={inputCls} placeholder="0" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-400">{lang === "en" ? "Stock" : "স্টক"}</label>
+                            <input type="number" min="0" value={v.stock} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], stock: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
+                              className={inputCls} placeholder="0" disabled={v.unlimited_stock} />
+                          </div>
+                          <div className="flex items-end pb-0.5">
+                            {v.image ? (
+                              <div className="relative w-10 h-10 shrink-0">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200">
+                                  <SafeImg src={v.image} alt="" className="w-full h-full object-cover" />
+                                </div>
+                                <button type="button" onClick={() => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], image: "" }; setForm(prev => ({ ...prev, variants })); }}
+                                  className="absolute -top-1.5 -right-1.5 p-0.5 bg-red-500 text-white rounded-full z-10 shadow-sm"><FiX className="w-2.5 h-2.5" /></button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setGalleryTarget(`variant-${idx}`); setGalleryOpen(true); }}
+                                className="w-10 h-10 rounded-lg border border-dashed border-gray-300 flex items-center justify-center hover:border-[#0f5931] transition-colors shrink-0" title={lang === "en" ? "Add image" : "ছবি যোগ করুন"}>
+                                <FiImage className="w-4 h-4 text-gray-400" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="checkbox" checked={v.unlimited_stock} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], unlimited_stock: e.target.checked }; setForm(prev => ({ ...prev, variants })); }}
+                              className="w-3.5 h-3.5 accent-[#0f5931]" />
+                            {lang === "en" ? "Unlimited" : "আনলিমিটেড"}
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="checkbox" checked={v.is_active} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], is_active: e.target.checked }; setForm(prev => ({ ...prev, variants })); }}
+                              className="w-3.5 h-3.5 accent-[#0f5931]" />
+                            {lang === "en" ? "Active" : "সক্রিয়"}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setForm(prev => ({ ...prev, variants: [...prev.variants, { label: "", price: "", original_price: "", sku: "", stock: "0", unlimited_stock: true, image: "", is_active: true }] }))}
+                      className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline">
+                      <FiPlus className="w-3.5 h-3.5" /> {lang === "en" ? "Add Variant" : "ভ্যারিয়েন্ট যোগ করুন"}
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-6">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input name="is_active" type="checkbox" checked={form.is_active} onChange={(e) => { const v = e.target.checked; setForm(prev => ({ ...prev, is_active: v })); }} className="w-4 h-4 accent-[#0f5931]" />
@@ -573,7 +680,18 @@ export default function ProductsPage() {
       <MediaGallery
         open={galleryOpen}
         onClose={() => setGalleryOpen(false)}
-        onSelect={(url) => { setForm((prev) => ({ ...prev, image: url })); }}
+        onSelect={(url) => {
+          if (galleryTarget === "product") {
+            setForm((prev) => ({ ...prev, image: url }));
+          } else if (galleryTarget.startsWith("variant-")) {
+            const idx = Number(galleryTarget.split("-")[1]);
+            if (!isNaN(idx) && idx >= 0 && idx < form.variants.length) {
+              const variants = [...form.variants];
+              variants[idx] = { ...variants[idx], image: url };
+              setForm((prev) => ({ ...prev, variants }));
+            }
+          }
+        }}
       />
     </DashboardLayout>
   );

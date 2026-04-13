@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
-import LanguageToggle from "./LanguageToggle";
+
 import {
   FiHome,
   FiBox,
@@ -28,6 +29,7 @@ import {
   FiX,
   FiChevronDown,
   FiChevronRight,
+  FiChevronLeft,
   FiShoppingCart,
   FiMail,
   FiGlobe,
@@ -116,14 +118,28 @@ interface DashboardLayoutProps {
   title: string;
 }
 
+// Read collapsed state synchronously to prevent flash on navigation
+function getInitialCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem("sidebar_collapsed") === "true";
+}
+
 export default function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, logout } = useAuth();
   const { t } = useLang();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const navGroups = buildNavGroups(t);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      localStorage.setItem("sidebar_collapsed", String(!prev));
+      return !prev;
+    });
+  };
 
   // Auto-expand the active group when pathname changes
   useEffect(() => {
@@ -154,19 +170,22 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
     if (shouldRedirect) router.push("/");
   }, [shouldRedirect, router]);
 
+  // Expanded sidebar content (used for desktop expanded + mobile)
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-5 py-6 border-b border-white/10">
-        <div className="text-white font-bold text-lg leading-tight">{t("footer.companyName")}</div>
-        <div className="text-white/60 text-xs mt-1 font-medium tracking-wide uppercase">{t("dash.adminPanel")}</div>
+      <div className="px-5 py-5 border-b border-white/10 flex justify-center">
+        <Image src="/logo.svg" alt="মা ভেষজ বাণিজ্যালয়" width={160} height={48} className="h-10 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "block"; }} />
+        <div className="hidden text-center">
+          <div className="text-white font-bold text-lg leading-tight">মা ভেষজ বাণিজ্যালয়</div>
+          <div className="text-white/60 text-xs mt-1 font-medium tracking-wide uppercase">{t("dash.adminPanel")}</div>
+        </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         {navGroups.map((group) => {
           if (!group.items) {
-            // Single link (Dashboard)
             const isActive = pathname === group.href;
             return (
               <Link
@@ -260,11 +279,117 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
     </div>
   );
 
+  // Collapsed sidebar content (icon-only)
+  const collapsedSidebarContent = (
+    <div className="flex flex-col h-full items-center overflow-visible">
+      {/* Collapsed header */}
+      <div className="py-5 border-b border-white/10 w-full flex justify-center">
+        <Image src="/logo.svg" alt="মা ভেষজ বাণিজ্যালয়" width={36} height={28} className="h-7 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"; }} />
+        <div className="hidden w-9 h-9 rounded-xl bg-white/20 items-center justify-center text-white font-bold text-sm">ম</div>
+      </div>
+
+      {/* Nav icons */}
+      <nav className="flex-1 overflow-visible py-4 px-2 space-y-1 w-full">
+        {navGroups.map((group) => {
+          if (!group.items) {
+            const isActive = pathname === group.href;
+            return (
+              <Link
+                key={group.label}
+                href={group.href!}
+                className={`relative group flex items-center justify-center w-full h-10 rounded-xl transition-all ${
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <group.icon className="w-5 h-5" />
+                {/* Tooltip */}
+                <div className="absolute left-full ml-3 px-3 py-2 bg-[#0f5931] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
+                  {group.label}
+                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+                </div>
+              </Link>
+            );
+          }
+
+          const isGroupActive = group.items.some(
+            (item) => pathname === item.href || pathname.startsWith(item.href)
+          );
+
+          return (
+            <div key={group.label} className="relative group">
+              <div
+                className={`flex items-center justify-center w-full h-10 rounded-xl transition-all cursor-pointer ${
+                  isGroupActive
+                    ? "bg-white/20 text-white"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <group.icon className="w-5 h-5" />
+              </div>
+              {/* Flyout menu */}
+              <div className="absolute left-full top-0 ml-3 py-2 bg-[#0f5931] rounded-xl shadow-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] min-w-[200px]">
+                <div className="px-3.5 py-2 text-white/50 text-[10px] font-bold uppercase tracking-wider border-b border-white/10 mb-1">{group.label}</div>
+                {group.items.map((item) => {
+                  const isItemActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                        isItemActive
+                          ? "text-white bg-white/15"
+                          : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+                <div className="absolute top-3 -left-1.5 w-3 h-3 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* User avatar at bottom */}
+      <div className="py-4 border-t border-white/10 w-full flex justify-center">
+        <div className="relative group">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold cursor-pointer">
+            {user?.name?.charAt(0).toUpperCase()}
+          </div>
+          <div className="absolute left-full ml-3 px-3 py-2 bg-[#0f5931] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
+            {user?.name}
+            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-[260px] flex-shrink-0 bg-[#0f5931]">
-        {sidebarContent}
+      {/* Desktop Sidebar — no width transition to prevent flash on navigation */}
+      <aside
+        className={`hidden lg:flex flex-col flex-shrink-0 bg-[#0f5931] relative ${
+          collapsed ? "w-[68px] overflow-visible" : "w-[260px]"
+        }`}
+      >
+        {collapsed ? collapsedSidebarContent : sidebarContent}
+        {/* Collapse toggle button */}
+        <button
+          onClick={toggleCollapsed}
+          className="absolute -right-3 top-8 w-6 h-6 bg-[#0f5931] border-2 border-gray-200 rounded-full flex items-center justify-center text-white hover:bg-[#12693a] transition-colors z-10 shadow-sm"
+        >
+          {collapsed ? (
+            <FiChevronRight className="w-3 h-3" />
+          ) : (
+            <FiChevronLeft className="w-3 h-3" />
+          )}
+        </button>
       </aside>
 
       {/* Mobile Sidebar Overlay */}
@@ -285,14 +410,13 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
               transition={{ type: "tween", duration: 0.25 }}
               className="fixed left-0 top-0 bottom-0 w-[260px] bg-[#0f5931] z-50 lg:hidden flex flex-col"
             >
-              <div className="flex items-center justify-end px-4 py-3">
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="text-white/70 hover:text-white p-1"
-                >
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
+              {/* Close button floating top-right */}
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="absolute top-4 right-4 text-white/70 hover:text-white p-1 z-10"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
               <div className="flex-1 overflow-hidden">
                 {sidebarContent}
               </div>
@@ -313,7 +437,6 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
           </button>
           <h1 className="text-lg font-bold text-gray-800 flex-1">{title}</h1>
           <div className="flex items-center gap-3">
-            <LanguageToggle compact />
             <Link
               href="/"
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-[#0f5931] hover:bg-green-50 rounded-lg transition-colors"

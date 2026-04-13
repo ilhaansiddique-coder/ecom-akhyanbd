@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { FiShoppingCart, FiShoppingBag, FiMinus, FiPlus, FiStar, FiCheck } from "react-icons/fi";
 import { useCart } from "@/lib/CartContext";
@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
+import ProductGallery from "@/components/ProductGallery";
 
 interface Review {
   id: number;
@@ -17,33 +18,125 @@ interface Review {
   created_at: string;
 }
 
+interface Variant {
+  id: number;
+  label: string;
+  price: number;
+  original_price?: number;
+  stock: number;
+  unlimited_stock?: boolean;
+  image?: string;
+}
+
 interface ProductDetailClientProps {
   productId: number;
   productName: string;
   price: number;
   image: string;
+  hasVariations?: boolean;
+  variationType?: string;
+  variants?: Variant[];
+  onVariantImageChange?: (image: string | undefined) => void;
 }
 
-export function AddToCartSection({ productId, productName, price, image }: ProductDetailClientProps) {
+export function AddToCartSection({ productId, productName, price, image, hasVariations, variationType, variants, onVariantImageChange }: ProductDetailClientProps) {
   const { addItem } = useCart();
   const { lang } = useLang();
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
   const [showAdded, setShowAdded] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
+  const needsVariantSelection = hasVariations && variants && variants.length > 0;
+  const isDisabled = !!needsVariantSelection && !selectedVariant;
+
+  // Notify parent when variant image changes
+  useEffect(() => {
+    onVariantImageChange?.(selectedVariant?.image);
+  }, [selectedVariant, onVariantImageChange]);
+
+  const activePrice = selectedVariant ? selectedVariant.price : price;
+  const activeImage = selectedVariant?.image || image;
+  const activeOriginalPrice = selectedVariant?.original_price;
 
   const handleAddToBag = () => {
-    addItem({ id: productId, name: productName, price, image }, quantity);
+    addItem({
+      id: productId,
+      variantId: selectedVariant?.id,
+      name: productName,
+      variantLabel: selectedVariant?.label,
+      price: activePrice,
+      image: activeImage,
+    }, quantity);
     setShowAdded(true);
   };
 
   const handleOrderNow = () => {
-    addItem({ id: productId, name: productName, price, image }, quantity);
+    addItem({
+      id: productId,
+      variantId: selectedVariant?.id,
+      name: productName,
+      variantLabel: selectedVariant?.label,
+      price: activePrice,
+      image: activeImage,
+    }, quantity);
     router.push("/checkout");
   };
 
   return (
     <>
       <div className="space-y-3">
+        {/* Variant Price + Selector */}
+        {needsVariantSelection && (
+          <div>
+            {/* Variant price — shown at top */}
+            <div className="flex items-center gap-3 mb-4">
+              {selectedVariant ? (
+                <>
+                  <span className="text-3xl font-bold text-primary" suppressHydrationWarning>৳{toBn(activePrice)}</span>
+                  {activeOriginalPrice && activeOriginalPrice > activePrice && (
+                    <>
+                      <span className="text-xl text-text-light line-through" suppressHydrationWarning>৳{toBn(activeOriginalPrice)}</span>
+                      <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>
+                        {toBn(Math.round(((activeOriginalPrice - activePrice) / activeOriginalPrice) * 100))}% {lang === "en" ? "off" : "ছাড়"}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span className="text-3xl font-bold text-primary" suppressHydrationWarning>
+                  ৳{toBn(Math.min(...variants!.map(v => v.price)))}
+                  {Math.min(...variants!.map(v => v.price)) !== Math.max(...variants!.map(v => v.price)) && <> - ৳{toBn(Math.max(...variants!.map(v => v.price)))}</>}
+                </span>
+              )}
+            </div>
+            {/* Variant buttons */}
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold text-foreground">{variationType || (lang === "en" ? "Select Option" : "অপশন বাছুন")}</label>
+              {selectedVariant && (
+                <button type="button" onClick={() => setSelectedVariant(null)}
+                  className="text-xs text-text-muted hover:text-sale-red transition-colors">
+                  {lang === "en" ? "Clear" : "মুছুন"}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {variants!.map((v) => (
+                <button key={v.id} type="button" onClick={() => setSelectedVariant(v)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                    selectedVariant?.id === v.id
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-foreground hover:border-primary/50"
+                  }`}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {isDisabled && (
+              <p className="mt-2 text-xs text-sale-red">{lang === "en" ? "Please select an option" : "অনুগ্রহ করে একটি অপশন বাছুন"}</p>
+            )}
+          </div>
+        )}
+
         {/* Row 1: Quantity */}
         <div className="flex items-center gap-1 bg-white rounded-xl border border-border w-fit">
           <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:text-primary transition-colors">
@@ -58,7 +151,8 @@ export function AddToCartSection({ productId, productName, price, image }: Produ
         {/* Row 2: Add to Bag */}
         <button
           onClick={handleAddToBag}
-          className="w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border-2 border-primary text-primary hover:bg-primary/5"
+          disabled={isDisabled}
+          className={`w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border-2 ${isDisabled ? "border-gray-200 text-gray-300 cursor-not-allowed" : "border-primary text-primary hover:bg-primary/5"}`}
         >
           <FiShoppingCart className="w-5 h-5" />
           {lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন"}
@@ -67,7 +161,8 @@ export function AddToCartSection({ productId, productName, price, image }: Produ
         {/* Row 3: Order Now */}
         <button
           onClick={handleOrderNow}
-          className="w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm bg-primary text-white hover:bg-primary-light"
+          disabled={isDisabled}
+          className={`w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm ${isDisabled ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-primary text-white hover:bg-primary-light"}`}
         >
           <FiShoppingBag className="w-5 h-5" />
           {lang === "en" ? "Order Now" : "অর্ডার করুন"}
@@ -104,6 +199,56 @@ export function AddToCartSection({ productId, productName, price, image }: Produ
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+interface ProductGalleryWithVariantsProps {
+  mainImage: string;
+  images: string[];
+  alt: string;
+  productId: number;
+  productName: string;
+  price: number;
+  hasVariations?: boolean;
+  variationType?: string;
+  variants?: Variant[];
+  galleryOverlay?: React.ReactNode;
+  detailsTop?: React.ReactNode;
+  detailsBottom?: React.ReactNode;
+}
+
+export function ProductGalleryWithVariants({
+  mainImage, images, alt, productId, productName, price, hasVariations, variationType, variants,
+  galleryOverlay, detailsTop, detailsBottom,
+}: ProductGalleryWithVariantsProps) {
+  const [variantImage, setVariantImage] = useState<string | undefined>(undefined);
+  const handleVariantImageChange = useCallback((img: string | undefined) => {
+    setVariantImage(img);
+  }, []);
+
+  return (
+    <>
+      <div className="relative">
+        <ProductGallery mainImage={mainImage} images={images} alt={alt} overrideImage={variantImage} />
+        {galleryOverlay}
+      </div>
+      <div>
+        {detailsTop}
+        <div className="mt-6">
+          <AddToCartSection
+            productId={productId}
+            productName={productName}
+            price={price}
+            image={mainImage}
+            hasVariations={hasVariations}
+            variationType={variationType}
+            variants={variants}
+            onVariantImageChange={handleVariantImageChange}
+          />
+        </div>
+        {detailsBottom}
+      </div>
     </>
   );
 }

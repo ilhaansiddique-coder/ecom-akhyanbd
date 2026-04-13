@@ -31,6 +31,7 @@ export async function PUT(
       name: data.name,
       email: data.email,
       phone: data.phone ?? null,
+      address: data.address ?? null,
       role: data.role ?? "customer",
     };
 

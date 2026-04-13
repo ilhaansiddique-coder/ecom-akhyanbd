@@ -295,6 +295,7 @@ export const en: Record<string, string> = {
   "status.pending": "Pending",
   "status.confirmed": "Confirmed",
   "status.processing": "Processing",
+  "status.onHold": "On Hold",
   "status.shipped": "Shipped",
   "status.delivered": "Delivered",
   "status.cancelled": "Cancelled",
@@ -437,7 +438,7 @@ export const en: Record<string, string> = {
   "filter.pending": "Pending",
 
   /* Payment */
-  "payment.cod": "Cash on Delivery",
+  "payment.cod": "COD",
   "payment.bkash": "bKash",
   "payment.nagad": "Nagad",
   "payment.bank": "Bank Transfer",

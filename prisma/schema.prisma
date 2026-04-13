@@ -14,6 +14,7 @@ model User {
   emailVerifiedAt DateTime? @map("email_verified_at")
   password        String
   phone           String?
+  address         String?
   role            String    @default("customer")
   avatar          String?
   provider        String?
@@ -90,12 +91,15 @@ model Product {
   version       Int       @default(0) // Optimistic locking — prevents overselling under concurrent purchases
   isActive      Boolean   @default(true) @map("is_active")
   isFeatured    Boolean   @default(false) @map("is_featured")
+  hasVariations Boolean?  @default(false) @map("has_variations")
+  variationType String?   @map("variation_type") // "ওজন", "সাইজ", "রং", etc.
   sortOrder     Int       @default(0) @map("sort_order")
   createdAt     DateTime? @default(now()) @map("created_at")
   updatedAt     DateTime? @updatedAt @map("updated_at")
 
   category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  variants    ProductVariant[]
   flashSales  FlashSaleProduct[]
   reviews     Review[]
   wishlists   Wishlist[]
@@ -147,10 +151,11 @@ model Order {
   customerPhone   String    @map("customer_phone")
   customerEmail   String?   @map("customer_email")
   customerAddress String    @map("customer_address")
-  city            String
+  city            String?
   zipCode         String?   @map("zip_code")
   subtotal        Float
   shippingCost    Float     @default(0) @map("shipping_cost")
+  discount        Float     @default(0)
   total           Float
   status          String    @default("pending")
   paymentMethod   String    @default("cod") @map("payment_method")
@@ -180,9 +185,11 @@ model OrderItem {
   id          Int       @id @default(autoincrement())
   orderId     Int       @map("order_id")
   productId   Int?      @map("product_id")
-  productName String    @map("product_name")
-  price       Float
-  quantity    Int
+  productName  String    @map("product_name")
+  variantId    Int?      @map("variant_id")
+  variantLabel String?   @map("variant_label")
+  price        Float
+  quantity     Int
   createdAt   DateTime? @default(now()) @map("created_at")
   updatedAt   DateTime? @updatedAt @map("updated_at")
 
@@ -423,4 +430,25 @@ model FormSubmission {
   @@index([status])
   @@index([createdAt])
   @@map("form_submissions")
+}
+
+model ProductVariant {
+  id            Int       @id @default(autoincrement())
+  productId     Int       @map("product_id")
+  label         String
+  price         Float
+  originalPrice Float?    @map("original_price")
+  sku           String?
+  stock         Int       @default(0)
+  unlimitedStock Boolean? @default(false) @map("unlimited_stock")
+  image         String?
+  sortOrder     Int       @default(0) @map("sort_order")
+  isActive      Boolean   @default(true) @map("is_active")
+  version       Int       @default(0)
+  createdAt     DateTime? @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_variants")
 }

@@ -11,7 +11,7 @@ export async function GET(
 
   const product = await prisma.product.findFirst({
     where: { slug, isActive: true },
-    include: { category: true, brand: true },
+    include: { category: true, brand: true, variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
   });
 
   if (!product) return notFound("Product not found");

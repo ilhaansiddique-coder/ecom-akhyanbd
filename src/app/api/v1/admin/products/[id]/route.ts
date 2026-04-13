@@ -66,10 +66,41 @@ export async function PUT(
         soldCount: data.sold_count ?? 0,
         isActive: data.is_active ?? true,
         isFeatured: data.is_featured ?? false,
+        hasVariations: data.has_variations ?? false,
+        variationType: data.variation_type ?? null,
         sortOrder: data.sort_order ?? 0,
       },
-      include: { category: true, brand: true },
+      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
     });
+
+    // Handle variants: delete old, create new
+    if (data.variants !== undefined && Array.isArray(data.variants)) {
+      await prisma.productVariant.deleteMany({ where: { productId: Number(id) } });
+      if (data.variants.length > 0) {
+        await prisma.productVariant.createMany({
+          data: data.variants.map((v: any, i: number) => ({
+            productId: Number(id),
+            label: v.label,
+            price: Number(v.price),
+            originalPrice: v.original_price ? Number(v.original_price) : null,
+            sku: v.sku || null,
+            stock: Number(v.stock) || 0,
+            unlimitedStock: v.unlimited_stock ?? false,
+            image: v.image || null,
+            sortOrder: v.sort_order ?? i,
+            isActive: v.is_active ?? true,
+          })),
+        });
+      }
+      // Re-fetch with variants
+      const updated = await prisma.product.findUnique({
+        where: { id: Number(id) },
+        include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      });
+      revalidateAll("products");
+      bumpVersion("products");
+      return jsonResponse(serialize(updated));
+    }
 
     revalidateAll("products");
     bumpVersion("products");

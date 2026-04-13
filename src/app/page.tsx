@@ -1,13 +1,10 @@
 import { Suspense } from "react";
 import Hero from "@/components/Hero";
-import Categories from "@/components/Categories";
 import FlashSale from "@/components/FlashSale";
-import LatestProducts from "@/components/LatestProducts";
-import AdBanners from "@/components/AdBanners";
-import TopRatedProducts from "@/components/TopRatedProducts";
+import AllProducts from "@/components/AllProducts";
 import LazyCustomerReviews from "@/components/LazyCustomerReviews";
 import Features from "@/components/Features";
-import { mapApiProduct, latestProducts as staticLatest, topRatedProducts as staticTopRated } from "@/data/products";
+import { mapApiProduct, latestProducts as staticLatest } from "@/data/products";
 import type { Product } from "@/data/products";
 
 export const dynamic = "force-dynamic";
@@ -92,35 +89,20 @@ async function fetchFlashSale(): Promise<FlashSaleData | null> {
   }
 }
 
-async function fetchLatestProducts(): Promise<Product[]> {
+async function fetchAllProducts(): Promise<{ products: Product[]; total: number }> {
   try {
-    const res = await fetch(`${API_URL}/products?sort_by=created_at&sort_dir=desc&per_page=4`, {
+    const res = await fetch(`${API_URL}/products?per_page=20&page=1`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 300, tags: ["products"] },
     });
-    if (!res.ok) return staticLatest;
+    if (!res.ok) return { products: staticLatest, total: staticLatest.length };
     const json = await res.json();
     const data = json.data || json;
-    if (Array.isArray(data) && data.length > 0) return data.map(mapApiProduct);
-    return staticLatest;
+    const total = json.total || json.meta?.total || (Array.isArray(data) ? data.length : 0);
+    if (Array.isArray(data) && data.length > 0) return { products: data.map(mapApiProduct), total };
+    return { products: staticLatest, total: staticLatest.length };
   } catch {
-    return staticLatest;
-  }
-}
-
-async function fetchTopRatedProducts(): Promise<Product[]> {
-  try {
-    const res = await fetch(`${API_URL}/products/top-rated`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["products", "top-rated"] },
-    });
-    if (!res.ok) return staticTopRated;
-    const json = await res.json();
-    const data = json.data || json;
-    if (Array.isArray(data) && data.length > 0) return data.map(mapApiProduct);
-    return staticTopRated;
-  } catch {
-    return staticTopRated;
+    return { products: staticLatest, total: staticLatest.length };
   }
 }
 
@@ -156,29 +138,14 @@ async function fetchApprovedReviews() {
 
 /* ---------- Independent async section components ---------- */
 
-async function CategoriesSection() {
-  const categories = await fetchCategories();
-  return <Categories categories={categories} />;
-}
-
 async function FlashSaleSection() {
   const flashSale = await fetchFlashSale();
   return <FlashSale data={flashSale} />;
 }
 
-async function LatestProductsSection() {
-  const products = await fetchLatestProducts();
-  return <LatestProducts products={products} />;
-}
-
-async function TopRatedProductsSection() {
-  const products = await fetchTopRatedProducts();
-  return <TopRatedProducts products={products} />;
-}
-
-async function BannersSection() {
-  const banners = await fetchBanners();
-  return <AdBanners banners={banners} />;
+async function AllProductsSection() {
+  const { products, total } = await fetchAllProducts();
+  return <AllProducts initialProducts={products} total={total} />;
 }
 
 async function ReviewsSection() {
@@ -188,7 +155,7 @@ async function ReviewsSection() {
 
 /* ---------- Lightweight skeleton placeholders ---------- */
 
-function CategorySkeleton() {
+function _unused_CategorySkeleton() {
   return (
     <section className="py-12 md:py-16 bg-white">
       <div className="container mx-auto px-4">
@@ -237,20 +204,11 @@ export default function Home() {
   return (
     <>
       <Hero />
-      <Suspense fallback={<CategorySkeleton />}>
-        <CategoriesSection />
-      </Suspense>
       <Suspense fallback={null}>
         <FlashSaleSection />
       </Suspense>
       <Suspense fallback={<ProductsSkeleton />}>
-        <LatestProductsSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <BannersSection />
-      </Suspense>
-      <Suspense fallback={<ProductsSkeleton />}>
-        <TopRatedProductsSection />
+        <AllProductsSection />
       </Suspense>
       <Suspense fallback={null}>
         <ReviewsSection />

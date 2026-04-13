@@ -65,6 +65,7 @@ export async function isAutoSendEnabled(): Promise<boolean> {
 export interface SteadfastOrder {
   invoice: string; recipient_name: string; recipient_phone: string;
   recipient_address: string; cod_amount: number; note?: string;
+  item_description?: string;
 }
 
 export interface SteadfastCreateResponse {
@@ -74,7 +75,41 @@ export interface SteadfastCreateResponse {
 }
 
 export async function sendToSteadfast(order: SteadfastOrder): Promise<SteadfastCreateResponse> {
-  const res = await fetch(`${API_BASE}/create_order`, { method: "POST", headers: await apiHeaders(), body: JSON.stringify(order) });
+  const { apiKey, secretKey } = await getKeys();
+  // Steadfast API accepts both JSON and form-data — use form-data for better compatibility
+  const formData = new URLSearchParams();
+  formData.append("invoice", order.invoice);
+  formData.append("recipient_name", order.recipient_name);
+  formData.append("recipient_phone", order.recipient_phone);
+  formData.append("recipient_address", order.recipient_address);
+  formData.append("cod_amount", String(order.cod_amount));
+  if (order.note) formData.append("note", order.note);
+  if (order.item_description) formData.append("item_description", order.item_description);
+
+  const res = await fetch(`${API_BASE}/create_order`, {
+    method: "POST",
+    headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/x-www-form-urlencoded" },
+    body: formData.toString(),
+  });
+  return res.json();
+}
+
+export interface SteadfastBulkResponse {
+  status: number; message?: string;
+  data?: Array<{
+    invoice: string; recipient_name: string; recipient_phone: string;
+    recipient_address: string; cod_amount: string; note: string | null;
+    consignment_id: number | null; tracking_code: string | null; status: string;
+  }>;
+}
+
+export async function sendBulkToSteadfast(orders: SteadfastOrder[]): Promise<SteadfastBulkResponse> {
+  const { apiKey, secretKey } = await getKeys();
+  const res = await fetch(`${API_BASE}/create_order/bulk-order`, {
+    method: "POST",
+    headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/json" },
+    body: JSON.stringify(orders),
+  });
   return res.json();
 }
 

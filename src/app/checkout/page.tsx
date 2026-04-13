@@ -184,6 +184,8 @@ export default function CheckoutPage() {
         items: items.map((item) => ({
           product_id: item.id,
           product_name: item.name,
+          variant_id: item.variantId || undefined,
+          variant_label: item.variantLabel || undefined,
           quantity: item.quantity,
           price: item.price,
         })),
@@ -512,23 +514,21 @@ export default function CheckoutPage() {
                 <label className="block font-bold text-sm mb-3 px-1">আপনার পণ্য</label>
                 <div className="space-y-3">
                   {items.map((item) => (
-                    <div key={item.id} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
+                    <div key={`${item.id}-${item.variantId || 0}`} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden shrink-0 relative">
                           <SafeNextImage src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-sm truncate mb-2">{item.name}</div>
+                          <div className="font-bold text-sm truncate">{item.name}{item.variantLabel ? ` - ${item.variantLabel}` : ""}</div>
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => {
-                              if (item.quantity <= 1) removeItem(item.id);
-                              else updateQuantity(item.id, item.quantity - 1);
-                            }}
-                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0">
+                            <button type="button" onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1), item.variantId)}
+                              disabled={item.quantity <= 1}
+                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
                             <span className="w-8 text-center font-bold text-sm">{toBn(item.quantity)}</span>
-                            <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1, item.variantId)}
                               className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
@@ -536,7 +536,7 @@ export default function CheckoutPage() {
                         </div>
                         <div className="flex flex-col items-end gap-2 shrink-0">
                           <div className="font-bold text-lg text-primary">৳{toBn(item.price * item.quantity)}</div>
-                          <button type="button" onClick={() => removeItem(item.id)}
+                          <button type="button" onClick={() => removeItem(item.id, item.variantId)}
                             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                             <FiTrash2 className="w-4 h-4" />
                           </button>

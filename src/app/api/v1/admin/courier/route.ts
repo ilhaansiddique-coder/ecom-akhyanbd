@@ -5,6 +5,7 @@ import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/auth-helpers";
 import {
   sendToSteadfast,
+  sendBulkToSteadfast,
   checkDeliveryStatus,
   checkBalance,
   checkCourierScore,
@@ -95,10 +96,39 @@ export async function GET(request: NextRequest) {
   return errorResponse("Invalid action. Use: balance, status, score, test", 400);
 }
 
+// Helper: build clean Steadfast payload from order
+function buildSteadfastPayload(order: any) {
+  const skipCityWords = ["সারা দেশ", "সারাদেশ", "all over", "nationwide"];
+  const cityClean = order.city && !skipCityWords.some((w: string) => order.city.toLowerCase().includes(w.toLowerCase())) ? order.city : "";
+  const address = [order.customerAddress, cityClean, order.zipCode].filter(Boolean).join(", ");
+
+  // Product names × quantities × prices (1 line per item)
+  const items = (order.items || []).map((i: any) => {
+    const name = i.productName || i.product_name;
+    const variant = i.variantLabel || i.variant_label;
+    const label = variant ? `${name} (${variant})` : name;
+    const price = Number(i.price) * Number(i.quantity);
+    return `${label} x${i.quantity} = ৳${price}`;
+  });
+  const itemsDescription = items.join(" / ");
+  const note = [itemsDescription, order.notes].filter(Boolean).join(" | ");
+
+  return {
+    invoice: generateInvoice(order.id),
+    recipient_name: order.customerName,
+    recipient_phone: formatPhone(order.customerPhone),
+    recipient_address: address,
+    cod_amount: Math.round(Number(order.total)),
+    note,
+    item_description: itemsDescription,
+  };
+}
+
 /**
  * POST /api/v1/admin/courier
  * Body: { order_id: number } — Send order to Steadfast
  * Body: { order_ids: number[] } — Bulk send orders
+ * Body: { action: "bulk_send", order_ids: number[] } — Bulk send via Steadfast bulk API
  * Body: { action: "check_status", order_id: number } — Check & update status
  */
 export async function POST(request: NextRequest) {
@@ -154,7 +184,42 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Bulk send orders
+  // Bulk send — sends each order one by one (reliable)
+  if (body.action === "bulk_send" && body.order_ids && Array.isArray(body.order_ids)) {
+    const orders = await prisma.order.findMany({
+      where: { id: { in: body.order_ids.map(Number) }, courierSent: false },
+      include: { items: true },
+    });
+
+    const validOrders = orders.filter(o => isValidBDPhone(o.customerPhone));
+    if (validOrders.length === 0) return errorResponse("No valid orders to send", 400);
+
+    const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+
+    for (const order of validOrders) {
+      try {
+        const payload = buildSteadfastPayload(order);
+        const res = await sendToSteadfast(payload);
+
+        if (res.status === 200 && res.consignment) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { courierSent: true, consignmentId: String(res.consignment.consignment_id), courierStatus: "pending" },
+          });
+          results.push({ order_id: order.id, status: "success", consignment_id: String(res.consignment.consignment_id) });
+        } else {
+          const errMsg = res.errors ? Object.values(res.errors).flat().join(", ") : res.message || "Failed";
+          results.push({ order_id: order.id, status: "error", error: errMsg });
+        }
+      } catch (err) {
+        results.push({ order_id: order.id, status: "error", error: "Request failed" });
+      }
+    }
+
+    return jsonResponse({ results, total: validOrders.length, sent: results.filter(r => r.status === "success").length });
+  }
+
+  // Bulk send orders (one by one fallback)
   if (body.order_ids && Array.isArray(body.order_ids)) {
     const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
 
@@ -180,14 +245,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const res = await sendToSteadfast({
-          invoice: generateInvoice(order.id),
-          recipient_name: order.customerName,
-          recipient_phone: formatPhone(order.customerPhone),
-          recipient_address: `${order.customerAddress}, ${order.city}${order.zipCode ? "-" + order.zipCode : ""}`,
-          cod_amount: order.total,
-          note: order.notes || "",
-        });
+        const res = await sendToSteadfast(buildSteadfastPayload(order));
 
         if (res.status === 200 && res.consignment) {
           await prisma.order.update({
@@ -234,17 +292,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const payload = {
-        invoice: generateInvoice(order.id),
-        recipient_name: order.customerName,
-        recipient_phone: formatPhone(order.customerPhone),
-        recipient_address: `${order.customerAddress}, ${order.city}${order.zipCode ? "-" + order.zipCode : ""}`,
-        cod_amount: Math.round(Number(order.total)),
-        note: order.notes || "",
-      };
-      console.log("Sending to Steadfast:", JSON.stringify(payload));
+      const payload = buildSteadfastPayload(order);
       const res = await sendToSteadfast(payload);
-      console.log("Steadfast response:", JSON.stringify(res));
 
       if (res.status === 200 && res.consignment) {
         const updated = await prisma.order.update({

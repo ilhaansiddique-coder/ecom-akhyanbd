@@ -26,8 +26,9 @@ interface OrderData {
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   pending: { label: "অপেক্ষমাণ", color: "bg-yellow-100 text-yellow-800" },
-  confirmed: { label: "নিশ্চিত", color: "bg-blue-100 text-blue-800" },
   processing: { label: "প্রসেসিং", color: "bg-indigo-100 text-indigo-800" },
+  on_hold: { label: "অন হোল্ড", color: "bg-orange-100 text-orange-800" },
+  confirmed: { label: "নিশ্চিত", color: "bg-blue-100 text-blue-800" },
   shipped: { label: "শিপড", color: "bg-purple-100 text-purple-800" },
   delivered: { label: "ডেলিভারি সম্পন্ন", color: "bg-green-100 text-green-800" },
   cancelled: { label: "বাতিল", color: "bg-red-100 text-red-800" },
@@ -87,9 +88,9 @@ export default function OrderConfirmationPage() {
   }
 
   const st = statusLabels[order.status] || { label: order.status, color: "bg-gray-100 text-gray-800" };
-  const steps = ["pending", "confirmed", "processing", "shipped", "delivered"];
+  const steps = ["pending", "processing", "confirmed", "shipped", "delivered"];
   const currentIdx = steps.indexOf(order.status);
-  const isCancelled = order.status === "cancelled";
+  const isCancelled = order.status === "cancelled" || order.status === "on_hold";
 
   return (
     <section className="py-8 md:py-16 bg-gray-100 min-h-[70vh]">
@@ -119,7 +120,7 @@ export default function OrderConfirmationPage() {
                   const isActive = i <= currentIdx;
                   const isCurrent = i === currentIdx;
                   const stepLabels: Record<string, string> = {
-                    pending: "অপেক্ষমাণ", confirmed: "নিশ্চিত", processing: "প্রসেসিং", shipped: "শিপড", delivered: "ডেলিভারি"
+                    pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি"
                   };
                   return (
                     <div key={step} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : "none" }}>

@@ -4,8 +4,7 @@ import { FiTruck, FiShield, FiStar } from "react-icons/fi";
 import { products as staticProducts } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import ProductCard from "@/components/ProductCard";
-import { AddToCartSection, ReviewsSection } from "@/components/ProductDetailClient";
-import ProductGallery from "@/components/ProductGallery";
+import { ProductGalleryWithVariants, ReviewsSection } from "@/components/ProductDetailClient";
 import type { Metadata } from "next";
 
 const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
@@ -90,6 +89,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     description: (raw.description as string) || "",
     descriptionBn: (raw.description_bn as string) || (raw.descriptionBn as string) || (raw.description as string) || "",
     images: Array.isArray(raw.images) && raw.images.length > 0 ? (raw.images as string[]).map(resolveImage) : [],
+    hasVariations: raw.has_variations || raw.hasVariations || false,
+    variationType: (raw.variation_type as string) || (raw.variationType as string) || "",
+    variants: Array.isArray(raw.variants) ? raw.variants.map((v: any) => ({
+      id: v.id,
+      label: v.label,
+      price: Number(v.price),
+      original_price: v.original_price != null ? Number(v.original_price) : undefined,
+      stock: Number(v.stock) || 0,
+      unlimited_stock: v.unlimited_stock || v.unlimitedStock || false,
+      image: v.image ? resolveImage(v.image) : undefined,
+    })) : [],
   };
 
   const displayName = product.nameBn || product.name;
@@ -134,56 +144,58 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 md:gap-12">
-          {/* Image gallery */}
-          <div className="relative">
-            <ProductGallery mainImage={product.image} images={product.images} alt={displayName} />
-            {discount > 0 && (
-              <span className="absolute top-4 right-4 z-10 bg-sale-red text-white text-sm font-bold px-3 py-1.5 rounded-full" suppressHydrationWarning>-{toBn(discount)}%</span>
-            )}
-            {product.badge && (
-              <span className={`absolute top-4 left-4 z-10 ${product.badgeColor || "bg-primary"} text-white text-sm font-bold px-3 py-1.5 rounded-full`}>{product.badge}</span>
-            )}
-          </div>
-
-          {/* Details — server rendered for SEO */}
-          <div>
-            {product.categoryBn && (
-              <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full mb-3">
-                {product.categoryBn}
-              </span>
-            )}
-
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">{displayName}</h1>
-
-            <div className="mt-4 flex items-center gap-3">
-              <span className="text-3xl font-bold text-primary" suppressHydrationWarning>৳{toBn(product.price)}</span>
-              {product.originalPrice && (
-                <span className="text-xl text-text-light line-through" suppressHydrationWarning>৳{toBn(product.originalPrice)}</span>
-              )}
+          <ProductGalleryWithVariants
+            mainImage={product.image}
+            images={product.images}
+            alt={displayName}
+            productId={product.id}
+            productName={displayName}
+            price={product.price}
+            hasVariations={product.hasVariations}
+            variationType={product.variationType}
+            variants={product.variants}
+            galleryOverlay={<>
               {discount > 0 && (
-                <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>{toBn(discount)}% ছাড়</span>
+                <span className="absolute top-4 right-4 z-10 bg-sale-red text-white text-sm font-bold px-3 py-1.5 rounded-full" suppressHydrationWarning>-{toBn(discount)}%</span>
               )}
-            </div>
-
-            {/* Client island: Add to cart + quantity */}
-            <div className="mt-6">
-              <AddToCartSection productId={product.id} productName={displayName} price={product.price} image={product.image} />
-            </div>
-
-            {/* Trust badges — static */}
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              {[
-                { icon: FiTruck, text: "দ্রুত ডেলিভারি" },
-                { icon: FiShield, text: "১০০% খাঁটি" },
-                { icon: FiStar, text: "সেরা মান" },
-              ].map((b) => (
-                <div key={b.text} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-border">
-                  <b.icon className="w-4 h-4 text-primary shrink-0" />
-                  <span className="text-xs font-medium text-text-body">{b.text}</span>
+              {product.badge && (
+                <span className={`absolute top-4 left-4 z-10 ${product.badgeColor || "bg-primary"} text-white text-sm font-bold px-3 py-1.5 rounded-full`}>{product.badge}</span>
+              )}
+            </>}
+            detailsTop={<>
+              {product.categoryBn && (
+                <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full mb-3">
+                  {product.categoryBn}
+                </span>
+              )}
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{displayName}</h1>
+              {!product.hasVariations && (
+                <div className="mt-4 flex items-center gap-3">
+                  <span className="text-3xl font-bold text-primary" suppressHydrationWarning>৳{toBn(product.price)}</span>
+                  {product.originalPrice && (
+                    <span className="text-xl text-text-light line-through" suppressHydrationWarning>৳{toBn(product.originalPrice)}</span>
+                  )}
+                  {discount > 0 && (
+                    <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>{toBn(discount)}% ছাড়</span>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
+            </>}
+            detailsBottom={
+              <div className="mt-6 grid grid-cols-3 gap-3">
+                {[
+                  { icon: FiTruck, text: "দ্রুত ডেলিভারি" },
+                  { icon: FiShield, text: "১০০% খাঁটি" },
+                  { icon: FiStar, text: "সেরা মান" },
+                ].map((b) => (
+                  <div key={b.text} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-border">
+                    <b.icon className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-xs font-medium text-text-body">{b.text}</span>
+                  </div>
+                ))}
+              </div>
+            }
+          />
         </div>
 
         {/* Product Description */}

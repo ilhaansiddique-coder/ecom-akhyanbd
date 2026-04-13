@@ -82,6 +82,8 @@ export const createOrderSchema = z.object({
     z.object({
       product_id: z.coerce.number(),
       product_name: z.string().optional(),
+      variant_id: z.coerce.number().optional(),
+      variant_label: z.string().optional(),
       quantity: z.coerce.number().int().min(1),
       price: z.coerce.number(),
     })
@@ -148,6 +150,19 @@ export const productSchema = z.object({
   sold_count: int.optional(),
   is_active: boolDef(true),
   is_featured: boolDef(false),
+  has_variations: z.boolean().optional(),
+  variation_type: strOpt,
+  variants: z.array(z.object({
+    label: z.string().min(1),
+    price: z.coerce.number(),
+    original_price: z.coerce.number().optional().nullable(),
+    sku: z.string().optional().nullable(),
+    stock: z.coerce.number().optional(),
+    unlimited_stock: z.boolean().optional(),
+    image: z.string().optional().nullable(),
+    sort_order: z.coerce.number().optional(),
+    is_active: z.boolean().optional(),
+  })).optional(),
   sort_order: intDef(0),
 });
 
@@ -286,11 +301,12 @@ export const userSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   phone: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
   role: z.enum(["customer", "admin"]).default("customer"),
 });
 
 // ─── Admin: Orders status ───
 export const orderStatusSchema = z.object({
-  status: z.enum(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]),
+  status: z.enum(["pending", "processing", "on_hold", "confirmed", "shipped", "delivered", "cancelled", "trashed"]),
   payment_status: z.enum(["unpaid", "paid"]).optional(),
 });

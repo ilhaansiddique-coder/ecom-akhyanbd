@@ -295,6 +295,7 @@ export const bn: Record<string, string> = {
   "status.pending": "অপেক্ষমাণ",
   "status.confirmed": "নিশ্চিত",
   "status.processing": "প্রসেসিং",
+  "status.onHold": "অন হোল্ড",
   "status.shipped": "শিপড",
   "status.delivered": "ডেলিভারি সম্পন্ন",
   "status.cancelled": "বাতিল",
@@ -437,7 +438,7 @@ export const bn: Record<string, string> = {
   "filter.pending": "অপেক্ষমাণ",
 
   /* Payment */
-  "payment.cod": "ক্যাশ অন ডেলিভারি",
+  "payment.cod": "COD",
   "payment.bkash": "বিকাশ",
   "payment.nagad": "নগদ",
   "payment.bank": "ব্যাংক ট্রান্সফার",
