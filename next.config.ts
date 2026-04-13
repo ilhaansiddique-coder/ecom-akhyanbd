@@ -47,13 +47,15 @@ const nextConfig: NextConfig = {
         source: "/uploads/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
       {
-        // Next.js optimized images
+        // Next.js optimized images - AGGRESSIVE CACHING
         source: "/_next/image",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=86400" },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
       {
