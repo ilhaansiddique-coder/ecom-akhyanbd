@@ -125,9 +125,9 @@ body {
   unicode-range: U+09E6-09EF, U+09F3;
 }
 
-/* Force all elements to inherit body font */
+/* Force all elements to use BanglaDigits + Hind Siliguri */
 *, *::before, *::after, input, textarea, select, button {
-  font-family: inherit;
+  font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
 }
 
 /* Pointer cursor on all interactive elements globally */
@@ -144,8 +144,10 @@ body {
 
 
 /* English font override */
-html.lang-en body {
-  font-family: var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
+html.lang-en body,
+html.lang-en *, html.lang-en *::before, html.lang-en *::after,
+html.lang-en input, html.lang-en textarea, html.lang-en select, html.lang-en button {
+  font-family: "BanglaDigits", var(--font-bricolage), "Bricolage Grotesque", system-ui, -apple-system, sans-serif !important;
 }
 
 /* InlineSelect dropdown scrollbar — thin, inside */

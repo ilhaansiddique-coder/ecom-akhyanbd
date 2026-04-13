@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 export type Lang = "bn" | "en";
@@ -23,24 +23,44 @@ const dicts: Record<Lang, Record<string, string>> = { bn, en };
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("bn");
   const pathname = usePathname();
-  const isDashboard = pathname?.startsWith("/dashboard");
+  const isDashboard = pathname?.startsWith("/dashboard") || pathname?.startsWith("/cdlogin");
+  const settingsRef = useRef<{ site_language?: string; dashboard_language?: string } | null>(null);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    // Fetch site language settings (frontend + dashboard)
-    fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
-      .then(r => r.json())
-      .then(data => {
-        const frontendLang = (data?.site_language || "bn") as Lang;
-        const dashboardLang = (data?.dashboard_language || "en") as Lang;
-        const activeLang = isDashboard ? dashboardLang : frontendLang;
-
-        if (activeLang === "en" || activeLang === "bn") {
-          setLangState(activeLang);
-          setNumberLang(activeLang);
-        }
-      })
-      .catch(() => {});
+    // Fetch settings once, then apply based on current route
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      try {
+        fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
+          .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+          .then(data => {
+            settingsRef.current = data || {};
+            applyLang(data);
+          })
+          .catch(() => {
+            // Fallback: use defaults
+            settingsRef.current = {};
+          });
+      } catch {
+        settingsRef.current = {};
+      }
+    } else if (settingsRef.current) {
+      applyLang(settingsRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDashboard]);
+
+  function applyLang(data: Record<string, string | undefined>) {
+    const frontendLang = (data?.site_language || "bn") as Lang;
+    const dashboardLang = (data?.dashboard_language || "en") as Lang;
+    const activeLang = isDashboard ? dashboardLang : frontendLang;
+
+    if (activeLang === "en" || activeLang === "bn") {
+      setLangState(activeLang);
+      setNumberLang(activeLang);
+    }
+  }
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
