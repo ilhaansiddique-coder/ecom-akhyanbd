@@ -16,13 +16,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/refund`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  // Dynamic product pages
+  // Dynamic product pages — use short timeout so build doesn't hang when API unavailable
   let productPages: MetadataRoute.Sitemap = [];
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`${API_URL}/products?per_page=100`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 3600 },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (res.ok) {
       const json = await res.json();
       const products = json.data || json;
