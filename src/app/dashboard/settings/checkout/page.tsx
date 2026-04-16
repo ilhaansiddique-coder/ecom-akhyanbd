@@ -51,7 +51,7 @@ const defaults: CheckoutSettings = {
 };
 
 export default function CheckoutSettingsPage() {
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const [form, setForm] = useState<CheckoutSettings>(defaults);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,7 +65,7 @@ export default function CheckoutSettingsPage() {
         const data = res.data || res || {};
         setForm({ ...defaults, ...data });
       })
-      .catch(() => showToast(lang === "en" ? "Failed to load" : "লোড করতে সমস্যা", "error"))
+      .catch(() => showToast(t("toast.loadError"), "error"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -74,9 +74,9 @@ export default function CheckoutSettingsPage() {
     setSaving(true);
     try {
       await api.admin.updateSettings(form as Record<string, unknown>);
-      showToast(lang === "en" ? "Settings saved!" : "সেটিংস সংরক্ষিত হয়েছে!");
+      showToast(t("toast.updated"));
     } catch {
-      showToast(lang === "en" ? "Save failed" : "সংরক্ষণ করতে সমস্যা", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -86,83 +86,83 @@ export default function CheckoutSettingsPage() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
-    <DashboardLayout title={lang === "en" ? "Checkout Form Customizer" : "চেকআউট ফর্ম কাস্টমাইজার"}>
+    <DashboardLayout title={t("checkout.customizer")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       {loading ? <FormSkeleton /> : (
         <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
           {/* Form Title & Subtitle */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">{lang === "en" ? "Form Layout" : "ফর্ম লেআউট"}</h3>
+            <h3 className="text-sm font-bold text-gray-700 mb-4">{t("checkout.formLayout")}</h3>
             <div className="space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>{lang === "en" ? "Form Title" : "ফর্ম শিরোনাম"}</label>
-                  <input value={form.checkout_title || ""} onChange={set("checkout_title")} className={inputCls} placeholder="🛒 আপনার অর্ডার দিন" />
+                  <label className={labelCls}>{t("checkout.formTitleLabel")}</label>
+                  <input value={form.checkout_title || ""} onChange={set("checkout_title")} className={inputCls} placeholder={t("checkout.formTitlePlaceholder")} />
                 </div>
                 <div>
-                  <label className={labelCls}>{lang === "en" ? "Form Subtitle" : "ফর্ম সাবটাইটেল"}</label>
-                  <input value={form.checkout_subtitle || ""} onChange={set("checkout_subtitle")} className={inputCls} placeholder="নিচের ফরমটি পূরণ করে অর্ডারটি কনফার্ম করুন।" />
+                  <label className={labelCls}>{t("checkout.formSubtitle")}</label>
+                  <input value={form.checkout_subtitle || ""} onChange={set("checkout_subtitle")} className={inputCls} placeholder={t("checkout.formSubtitlePlaceholder")} />
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>{lang === "en" ? "Submit Button Text" : "সাবমিট বাটন টেক্সট"}</label>
-                  <input value={form.checkout_btn_text || ""} onChange={set("checkout_btn_text")} className={inputCls} placeholder="✅ অর্ডার কনফার্ম করুন" />
+                  <label className={labelCls}>{t("checkout.submitBtnText")}</label>
+                  <input value={form.checkout_btn_text || ""} onChange={set("checkout_btn_text")} className={inputCls} placeholder={t("checkout.submitBtnPlaceholder")} />
                 </div>
                 <div>
-                  <label className={labelCls}>{lang === "en" ? "Success Message" : "সাফল্য বার্তা"}</label>
-                  <input value={form.checkout_success_msg || ""} onChange={set("checkout_success_msg")} className={inputCls} placeholder="আপনার অর্ডার গ্রহণ করা হয়েছে।" />
+                  <label className={labelCls}>{t("checkout.successMsg")}</label>
+                  <input value={form.checkout_success_msg || ""} onChange={set("checkout_success_msg")} className={inputCls} placeholder={t("checkout.successMsgPlaceholder")} />
                 </div>
               </div>
               <div>
-                <label className={labelCls}>{lang === "en" ? "Guarantee / Trust Text" : "গ্যারান্টি টেক্সট"}</label>
-                <input value={form.checkout_guarantee_text || ""} onChange={set("checkout_guarantee_text")} className={inputCls} placeholder="🔒 নিরাপদ অর্ডার • 🚚 দ্রুত ডেলিভারি" />
+                <label className={labelCls}>{t("checkout.guaranteeText")}</label>
+                <input value={form.checkout_guarantee_text || ""} onChange={set("checkout_guarantee_text")} className={inputCls} placeholder={t("checkout.guaranteePlaceholder")} />
               </div>
             </div>
           </div>
 
           {/* Field Toggles */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">{lang === "en" ? "Form Fields" : "ফর্ম ফিল্ড"}</h3>
+            <h3 className="text-sm font-bold text-gray-700 mb-4">{t("checkout.formFields")}</h3>
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={form.checkout_show_email === "true"} onChange={(e) => setForm(p => ({ ...p, checkout_show_email: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                {lang === "en" ? "Show Email" : "ইমেইল দেখান"}
+                {t("checkout.showEmail")}
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={form.checkout_show_zip === "true"} onChange={(e) => setForm(p => ({ ...p, checkout_show_zip: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                {lang === "en" ? "Show Zip Code" : "জিপ কোড দেখান"}
+                {t("checkout.showZip")}
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={form.checkout_show_notes !== "false"} onChange={(e) => setForm(p => ({ ...p, checkout_show_notes: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                {lang === "en" ? "Show Notes" : "নোট দেখান"}
+                {t("checkout.showNotes")}
               </label>
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={form.checkout_show_coupon !== "false"} onChange={(e) => setForm(p => ({ ...p, checkout_show_coupon: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                {lang === "en" ? "Show Coupon" : "কুপন দেখান"}
+                {t("checkout.showCoupon")}
               </label>
             </div>
-            <p className="text-xs text-gray-400 mt-3">{lang === "en" ? "Shipping zones are managed from the" : "শিপিং জোন পরিচালনা করুন"} <a href="/dashboard/shipping" className="text-[#0f5931] underline">{lang === "en" ? "Shipping page" : "শিপিং পেজ"}</a></p>
+            <p className="text-xs text-gray-400 mt-3">{t("checkout.shippingNote")} <a href="/dashboard/shipping" className="text-[#0f5931] underline">{t("checkout.shippingPage")}</a></p>
           </div>
 
           {/* Payment Methods */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">{lang === "en" ? "Payment Methods" : "পেমেন্ট মেথড"}</h3>
+            <h3 className="text-sm font-bold text-gray-700 mb-4">{t("checkout.paymentMethods")}</h3>
             <div className="space-y-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={form.checkout_payment_cod !== "false"} onChange={(e) => setForm(p => ({ ...p, checkout_payment_cod: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                💵 {lang === "en" ? "Cash on Delivery (COD)" : "ক্যাশ অন ডেলিভারি (COD)"}
+                {t("checkout.cod")}
               </label>
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input type="checkbox" checked={form.checkout_payment_bkash === "true"} onChange={(e) => setForm(p => ({ ...p, checkout_payment_bkash: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                  📱 {lang === "en" ? "bKash" : "বিকাশ (bKash)"}
+                  {t("checkout.bkash")}
                 </label>
                 {form.checkout_payment_bkash === "true" && (
                   <div className="ml-6 space-y-2">
-                    <input value={form.checkout_bkash_number || ""} onChange={set("checkout_bkash_number")} className={inputCls} placeholder={lang === "en" ? "bKash Number" : "বিকাশ নম্বর (01XXXXXXXXX)"} />
-                    <textarea rows={3} value={form.checkout_bkash_instruction || ""} onChange={set("checkout_bkash_instruction")} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Payment instructions for bKash..." : "বিকাশে পেমেন্ট করার নির্দেশনা..."} />
+                    <input value={form.checkout_bkash_number || ""} onChange={set("checkout_bkash_number")} className={inputCls} placeholder={t("checkout.bkashNum")} />
+                    <textarea rows={3} value={form.checkout_bkash_instruction || ""} onChange={set("checkout_bkash_instruction")} className={inputCls + " resize-none"} placeholder={t("checkout.bkashInstructions")} />
                   </div>
                 )}
               </div>
@@ -170,12 +170,12 @@ export default function CheckoutSettingsPage() {
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input type="checkbox" checked={form.checkout_payment_nagad === "true"} onChange={(e) => setForm(p => ({ ...p, checkout_payment_nagad: e.target.checked ? "true" : "false" }))} className="w-4 h-4 accent-[#0f5931]" />
-                  📲 {lang === "en" ? "Nagad" : "নগদ (Nagad)"}
+                  {t("checkout.nagad")}
                 </label>
                 {form.checkout_payment_nagad === "true" && (
                   <div className="ml-6 space-y-2">
-                    <input value={form.checkout_nagad_number || ""} onChange={set("checkout_nagad_number")} className={inputCls} placeholder={lang === "en" ? "Nagad Number" : "নগদ নম্বর (01XXXXXXXXX)"} />
-                    <textarea rows={3} value={form.checkout_nagad_instruction || ""} onChange={set("checkout_nagad_instruction")} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Payment instructions for Nagad..." : "নগদে পেমেন্ট করার নির্দেশনা..."} />
+                    <input value={form.checkout_nagad_number || ""} onChange={set("checkout_nagad_number")} className={inputCls} placeholder={t("checkout.nagadNum")} />
+                    <textarea rows={3} value={form.checkout_nagad_instruction || ""} onChange={set("checkout_nagad_instruction")} className={inputCls + " resize-none"} placeholder={t("checkout.nagadInstructions")} />
                   </div>
                 )}
               </div>
@@ -185,7 +185,7 @@ export default function CheckoutSettingsPage() {
           <div className="flex justify-end">
             <button type="submit" disabled={saving} className="flex items-center gap-2 px-6 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
               <FiSave className="w-4 h-4" />
-              {saving ? (lang === "en" ? "Saving..." : "সংরক্ষণ হচ্ছে...") : (lang === "en" ? "Save Settings" : "সেটিংস সংরক্ষণ করুন")}
+              {saving ? t("btn.saving") : t("settings.saveBtn")}
             </button>
           </div>
         </form>

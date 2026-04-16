@@ -1,13 +1,25 @@
+"use client";
+
 import Link from "next/link";
 import T, { TNum } from "./T";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 export default function FooterBottom() {
+  const settings = useSiteSettings();
+  const copyrightText = settings?.copyright_text?.trim();
+
   return (
     <div className="bg-primary-darker text-white/60 py-4">
       <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-2 text-sm">
         <p className="text-center md:text-left">
-          © <TNum value={new Date().getFullYear()} /> <T k="footer.copyright" />{" "}
-          <span className="text-white font-semibold"><T k="footer.companyName" /></span>
+          {copyrightText ? (
+            <span dangerouslySetInnerHTML={{ __html: copyrightText }} />
+          ) : (
+            <>
+              © <TNum value={new Date().getFullYear()} /> <T k="footer.copyright" />{" "}
+              <span className="text-white font-semibold"><T k="footer.companyName" /></span>
+            </>
+          )}
         </p>
         <p className="text-center text-sm">
           <T k="footer.developedBy" />{" "}

@@ -6,12 +6,15 @@ import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/AuthContext";
 import { CartProvider } from "@/lib/CartContext";
 import { LanguageProvider } from "@/lib/LanguageContext";
+import { SiteSettingsProvider } from "@/lib/SiteSettingsContext";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import FooterBottom from "./FooterBottom";
 
 // Non-critical UI — load after hydration, not in initial bundle
 const FloatingWidgets = dynamic(() => import("./FloatingWidgets"), { ssr: false });
+const FacebookPixel = dynamic(() => import("./FacebookPixel"), { ssr: false });
+const FingerprintCollector = dynamic(() => import("./FingerprintCollector"), { ssr: false });
 
 // Lazy-load heavy modals — not needed on initial paint
 const CartDrawer = lazy(() => import("./CartDrawer"));
@@ -28,6 +31,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <LanguageProvider>
+    <SiteSettingsProvider>
+    <FacebookPixel />
+    <FingerprintCollector />
     <AuthProvider>
     <CartProvider>
       {!isDashboard && !isLandingPage && (
@@ -52,6 +58,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       )}
     </CartProvider>
     </AuthProvider>
+    </SiteSettingsProvider>
     </LanguageProvider>
   );
 }

@@ -113,6 +113,7 @@ model Product {
   @@index([categoryId, isActive])
   @@index([brandId, isActive])
   @@index([isActive, soldCount])
+  @@index([isActive, sortOrder])
   @@map("products")
 }
 
@@ -167,18 +168,87 @@ model Order {
   consignmentId      String?   @map("consignment_id")
   courierStatus      String?   @map("courier_status")
   courierScore       String?   @map("courier_score")
+  trackingData       String?   @map("tracking_data")
+  fpHash             String?   @map("fp_hash")
+  riskScore          Int?      @default(0) @map("risk_score")
   createdAt          DateTime? @default(now()) @map("created_at")
   updatedAt          DateTime? @updatedAt @map("updated_at")
 
-  user  User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items OrderItem[]
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items       OrderItem[]
+  fingerprint OrderFingerprint?
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([transactionId])
+  @@index([riskScore])
   @@map("orders")
+}
+
+model DeviceFingerprint {
+  id               Int       @id @default(autoincrement())
+  fpHash           String    @unique @map("fp_hash")
+  canvasHash       String?   @map("canvas_hash")
+  webglHash        String?   @map("webgl_hash")
+  audioHash        String?   @map("audio_hash")
+  screenResolution String?   @map("screen_resolution")
+  platform         String?
+  timezone         String?
+  languages        String?
+  cpuCores         Int?      @map("cpu_cores")
+  memoryGb         Float?    @map("memory_gb")
+  touchPoints      Int?      @map("touch_points")
+  userAgent        String?   @map("user_agent")
+  lastIp           String?   @map("last_ip")
+  riskScore        Int       @default(0) @map("risk_score")
+  status           String    @default("active") // active | blocked | safe
+  seenCount        Int       @default(1) @map("seen_count")
+  blockReason      String?   @map("block_reason")
+  blockedAt        DateTime? @map("blocked_at")
+  lastSeenAt       DateTime? @map("last_seen_at")
+  createdAt        DateTime? @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
+
+  orderFingerprints OrderFingerprint[]
+
+  @@index([status])
+  @@index([riskScore])
+  @@map("device_fingerprints")
+}
+
+model OrderFingerprint {
+  id                  Int       @id @default(autoincrement())
+  orderId             Int       @unique @map("order_id")
+  fpHash              String?   @map("fp_hash")
+  ipAddress           String?   @map("ip_address")
+  deviceFingerprintId Int?      @map("device_fingerprint_id")
+  fillDurationMs      Int?      @map("fill_duration_ms")
+  mouseMovements      Int?      @map("mouse_movements")
+  pasteDetected       Boolean   @default(false) @map("paste_detected")
+  honeypotTriggered   Boolean   @default(false) @map("honeypot_triggered")
+  tabSwitches         Int?      @map("tab_switches")
+  riskScore           Int       @default(0) @map("risk_score")
+  riskFlags           String?   @map("risk_flags")
+  createdAt           DateTime? @default(now()) @map("created_at")
+
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deviceFingerprint DeviceFingerprint? @relation(fields: [deviceFingerprintId], references: [id], onDelete: SetNull)
+
+  @@index([fpHash])
+  @@index([ipAddress])
+  @@index([riskScore])
+  @@map("order_fingerprints")
+}
+
+model BlockedIp {
+  id        Int       @id @default(autoincrement())
+  ipAddress String    @unique @map("ip_address")
+  reason    String?
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  @@map("blocked_ips")
 }
 
 model OrderItem {

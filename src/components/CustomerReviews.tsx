@@ -1,6 +1,7 @@
 "use client";
 
 import { FiStar } from "react-icons/fi";
+import Image from "next/image";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination } from "swiper/modules";
 import "swiper/css";
@@ -14,6 +15,8 @@ interface Review {
   rating: number;
   review: string;
   product_name?: string;
+  avatar?: string;
+  image?: string;
 }
 
 const avatarColors = [
@@ -27,11 +30,17 @@ function getInitials(name: string): string {
   return name.slice(0, 2);
 }
 
-const fallbackReviews: Review[] = [
+const HARDCODED_FALLBACK: Review[] = [
   { id: 1, customer_name: "মোঃ বেলাল শেখ", review: "খুবই ভালো মানের পণ্য পেয়েছি। একদম খাঁটি। ডেলিভারিও খুব দ্রুত হয়েছে।", rating: 5 },
   { id: 2, customer_name: "মোঃ মিলন মাহমুদ", review: "একদম ফ্রেশ এবং ভালো মানের পণ্য। প্যাকেজিংও অনেক সুন্দর ছিল।", rating: 5 },
   { id: 3, customer_name: "শুহেভ আহমেদ", review: "বাজারের চেয়ে অনেক ভালো মান। রিকমেন্ড করছি সবাইকে।", rating: 5 },
 ];
+
+interface ReviewsContent {
+  title?: string;
+  subtitle?: string;
+  testimonials?: { name: string; rating: number; text: string; avatar?: string; image?: string }[];
+}
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -46,18 +55,31 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export default function CustomerReviews({ reviews }: { reviews?: Review[] }) {
+export default function CustomerReviews({ reviews, content }: { reviews?: Review[]; content?: ReviewsContent }) {
   const { t } = useLang();
-  const items = reviews && reviews.length > 0 ? reviews : fallbackReviews;
+
+  // Priority: 1) Dashboard testimonials (if any have names) → 2) DB reviews → 3) Hardcoded fallback
+  const dashboardTestimonials: Review[] | null = content?.testimonials?.some(t => t.name)
+    ? content.testimonials.filter(t => t.name).map((t, i) => ({
+        id: 900 + i,
+        customer_name: t.name,
+        review: t.text,
+        rating: t.rating,
+        avatar: t.avatar || undefined,
+        image: t.image || undefined,
+      }))
+    : null;
+
+  const items = dashboardTestimonials || (reviews && reviews.length > 0 ? reviews : HARDCODED_FALLBACK);
 
   return (
     <section className="py-12 md:py-16 bg-background-alt">
       <div className="container mx-auto px-4">
         <MotionFadeIn className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground section-heading">
-            {t("reviews.title")}
+            {content?.title || t("reviews.title")}
           </h2>
-          <p className="text-text-muted mt-4">{t("reviews.subtitle")}</p>
+          <p className="text-text-muted mt-4">{content?.subtitle || t("reviews.subtitle")}</p>
         </MotionFadeIn>
 
         <MotionFadeIn>
@@ -77,11 +99,13 @@ export default function CustomerReviews({ reviews }: { reviews?: Review[] }) {
               <SwiperSlide key={review.id}>
                 <div className="bg-white rounded-2xl p-6 border border-border shadow-sm h-full">
                   <div className="flex items-center gap-3 mb-4">
-                    <div
-                      className={`w-12 h-12 rounded-full ${avatarColors[idx % avatarColors.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}
-                    >
-                      {getInitials(review.customer_name)}
-                    </div>
+                    {review.avatar ? (
+                      <Image src={review.avatar} alt={review.customer_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover shrink-0" unoptimized />
+                    ) : (
+                      <div className={`w-12 h-12 rounded-full ${avatarColors[idx % avatarColors.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
+                        {getInitials(review.customer_name)}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <h4 className="font-semibold text-foreground text-sm truncate">
                         {review.customer_name}
@@ -92,6 +116,11 @@ export default function CustomerReviews({ reviews }: { reviews?: Review[] }) {
                   <p className="text-text-body text-sm leading-relaxed line-clamp-3">
                     {review.review}
                   </p>
+                  {review.image && (
+                    <div className="mt-3">
+                      <Image src={review.image} alt="" width={300} height={200} className="w-full h-auto rounded-xl object-cover max-h-40" unoptimized />
+                    </div>
+                  )}
                 </div>
               </SwiperSlide>
             ))}

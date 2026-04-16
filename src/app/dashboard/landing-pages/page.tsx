@@ -7,6 +7,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
+import { useLang } from "@/lib/LanguageContext";
 import { SafeImg } from "@/components/SafeImage";
 import MediaGallery from "@/components/MediaGallery";
 import { theme } from "@/lib/theme";
@@ -167,6 +168,7 @@ function Section({
 
 /* ───── main page ───── */
 export default function LandingPagesPage() {
+  const { t } = useLang();
   const generateSlug = useAutoSlug();
 
   const [items, setItems] = useState<LandingPage[]>([]);
@@ -210,7 +212,7 @@ export default function LandingPagesPage() {
       .getLandingPages()
       .then((res: { data?: LandingPage[] }) => setItems(res.data || (res as unknown as LandingPage[]) || []))
       .catch(() => {
-        if (!background) showToast("Failed to load data", "error");
+        if (!background) showToast(t("landingPages.loadError"), "error");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -441,16 +443,16 @@ export default function LandingPagesPage() {
         const res = await api.admin.updateLandingPage(editId, payload);
         const updated = res.data || res;
         setItems((prev) => prev.map((x) => (x.id === editId ? { ...x, ...updated } : x)));
-        showToast("Updated successfully!");
+        showToast(t("landingPages.updated"));
       } else {
         const res = await api.admin.createLandingPage(payload);
         const created = res.data || res;
         setItems((prev) => [created, ...prev]);
-        showToast("Created successfully!");
+        showToast(t("landingPages.created"));
       }
       setModalOpen(false);
     } catch {
-      showToast("Something went wrong", "error");
+      showToast(t("landingPages.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -463,10 +465,10 @@ export default function LandingPagesPage() {
     try {
       await api.admin.deleteLandingPage(deleteId);
       setItems((prev) => prev.filter((x) => x.id !== deleteId));
-      showToast("Deleted successfully!");
+      showToast(t("landingPages.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("Delete failed", "error");
+      showToast(t("landingPages.deleteError"), "error");
     } finally {
       setDeleting(false);
     }
@@ -487,11 +489,11 @@ export default function LandingPagesPage() {
 
   /* ───── render ───── */
   return (
-    <DashboardLayout title="Landing Pages">
+    <DashboardLayout title={t("landingPages.title")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="Are you sure you want to delete this landing page? This cannot be undone."
+        message={t("landingPages.confirmDelete")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -504,7 +506,7 @@ export default function LandingPagesPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search landing pages..."
+              placeholder={t("landingPages.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -515,7 +517,7 @@ export default function LandingPagesPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            {"Add New"}
+            {t("landingPages.addNew")}
           </button>
         </div>
 
@@ -529,10 +531,10 @@ export default function LandingPagesPage() {
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     {[
-                      "Title",
-                      "Slug",
-                      "Products",
-                      "Status",
+                      t("landingPages.thTitle"),
+                      t("landingPages.thSlug"),
+                      t("landingPages.thProducts"),
+                      t("landingPages.thStatus"),
                       "",
                     ].map((h, i) => (
                       <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
@@ -545,7 +547,7 @@ export default function LandingPagesPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-12 text-center text-gray-400">
-                        {"No landing pages found"}
+                        {t("landingPages.empty")}
                       </td>
                     </tr>
                   ) : (
@@ -565,7 +567,7 @@ export default function LandingPagesPage() {
                               item.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
                             }`}
                           >
-                            {item.is_active ? "Active" : "Inactive"}
+                            {item.is_active ? t("common.active") : t("common.inactive")}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -609,18 +611,18 @@ export default function LandingPagesPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editId ? "Edit Landing Page" : "New Landing Page"}
+        title={editId ? t("landingPages.editTitle") : t("landingPages.newTitle")}
         size="xl"
       >
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {/* ─── 1. Basic Info (always open) ─── */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              {"📋"} {"Basic Info"}
+              {"📋"} {t("landingPages.basicInfo")}
             </h3>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Title *</label>
+                <label className={labelCls}>{t("landingPages.labelTitle")}</label>
                 <input
                   required
                   value={form.title}
@@ -630,7 +632,7 @@ export default function LandingPagesPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>Slug</label>
+                <label className={labelCls}>{t("landingPages.labelSlug")}</label>
                 <input
                   value={form.slug}
                   onChange={(e) => setForm({ ...form, slug: e.target.value })}
@@ -641,7 +643,7 @@ export default function LandingPagesPage() {
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Primary Color</label>
+                <label className={labelCls}>{t("landingPages.labelPrimaryColor")}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -665,28 +667,28 @@ export default function LandingPagesPage() {
                     onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                     className="w-4 h-4 accent-[#0f5931]"
                   />
-                  Active
+                  {t("landingPages.labelActive")}
                 </label>
               </div>
             </div>
             <div>
-              <label className={labelCls}>WhatsApp Number</label>
+              <label className={labelCls}>{t("landingPages.labelWhatsapp")}</label>
               <input
                 value={form.whatsapp}
                 onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
                 className={inputCls}
                 placeholder="01XXXXXXXXX"
               />
-              <p className="text-[10px] text-gray-400 mt-1">Floating WhatsApp icon will appear on the landing page</p>
+              <p className="text-[10px] text-gray-400 mt-1">{t("landingPages.whatsappHint")}</p>
             </div>
           </div>
 
           {/* ─── 2. Hero Section ─── */}
-          <Section title="Hero Section" icon="🎯" open={isOpen("hero")} onToggle={() => toggle("hero")}
+          <Section title={t("landingPages.heroSection")} icon="🎯" open={isOpen("hero")} onToggle={() => toggle("hero")}
             visible={form.section_visibility.hero !== false} onVisibilityToggle={() => toggleVis("hero")}>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Headline</label>
+                <label className={labelCls}>{t("landingPages.labelHeadline")}</label>
                 <input
                   value={form.hero_headline}
                   onChange={(e) => setForm({ ...form, hero_headline: e.target.value })}
@@ -695,7 +697,7 @@ export default function LandingPagesPage() {
                 />
               </div>
               <div>
-                <label className={labelCls}>CTA Button Text</label>
+                <label className={labelCls}>{t("landingPages.labelCtaButton")}</label>
                 <input
                   value={form.hero_cta}
                   onChange={(e) => setForm({ ...form, hero_cta: e.target.value })}
@@ -705,7 +707,7 @@ export default function LandingPagesPage() {
               </div>
             </div>
             <div>
-              <label className={labelCls}>Subheadline</label>
+              <label className={labelCls}>{t("landingPages.labelSubheadline")}</label>
               <textarea
                 rows={2}
                 value={form.hero_subheadline}
@@ -714,7 +716,7 @@ export default function LandingPagesPage() {
               />
             </div>
             <div>
-              <label className={labelCls}>Trust Badges (one per line)</label>
+              <label className={labelCls}>{t("landingPages.labelTrustBadges")}</label>
               <textarea
                 rows={3}
                 value={form.hero_trust_text}
@@ -722,10 +724,10 @@ export default function LandingPagesPage() {
                 className={inputCls + " resize-none"}
                 placeholder={"১০০% ন্যাচারাল ও কেমিক্যাল ফ্রি\nসারা বাংলাদেশে ডেলিভারি\nক্যাশ অন ডেলিভারি"}
               />
-              <p className="text-[10px] text-gray-400 mt-1">Each line becomes a separate badge</p>
+              <p className="text-[10px] text-gray-400 mt-1">{t("landingPages.trustBadgesHint")}</p>
             </div>
             <div>
-              <label className={labelCls}>Hero Image / Video</label>
+              <label className={labelCls}>{t("landingPages.labelHeroImage")}</label>
               {form.hero_image ? (
                 <div className="relative rounded-xl overflow-hidden border border-gray-200 mb-2">
                   {form.hero_image.includes("youtube.com") || form.hero_image.includes("youtu.be") ? (
@@ -747,21 +749,21 @@ export default function LandingPagesPage() {
               <div className="flex gap-2">
                 <button type="button" onClick={() => { setGalleryTarget("hero"); setGalleryOpen(true); }}
                   className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-[#0f5931] transition-colors text-sm text-gray-500 flex-1">
-                  🖼️ Media Gallery
+                  {"🖼️"} {t("landingPages.mediaGallery")}
                 </button>
                 <label className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-[#0f5931] transition-colors text-sm text-gray-500">
                   <input type="file" accept="image/*,video/*" onChange={handleFileSelect} className="hidden" />
-                  {uploading ? "..." : "⬆️ Upload"}
+                  {uploading ? "..." : `⬆️ ${t("landingPages.upload")}`}
                 </label>
               </div>
             </div>
           </Section>
 
           {/* ─── 3. Problem Section ─── */}
-          <Section title="Problem Section" icon="⚠️" open={isOpen("problem")} onToggle={() => toggle("problem")}
+          <Section title={t("landingPages.problemSection")} icon="⚠️" open={isOpen("problem")} onToggle={() => toggle("problem")}
             visible={form.section_visibility.problem !== false} onVisibilityToggle={() => toggleVis("problem")}>
             <div>
-              <label className={labelCls}>Section Title</label>
+              <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
               <input
                 value={form.problem_title}
                 onChange={(e) => setForm({ ...form, problem_title: e.target.value })}
@@ -814,20 +816,20 @@ export default function LandingPagesPage() {
               onClick={() => updateField("problem_points", [...form.problem_points, { text: "", icon: "" }])}
               className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline"
             >
-              <FiPlus className="w-3.5 h-3.5" /> {"Add Point"}
+              <FiPlus className="w-3.5 h-3.5" /> {t("landingPages.addPoint")}
             </button>
           </Section>
 
           {/* ─── 4. Products ─── */}
-          <Section title="Products" icon="📦" open={isOpen("products")} onToggle={() => toggle("products")}
+          <Section title={t("landingPages.productsSection")} icon="📦" open={isOpen("products")} onToggle={() => toggle("products")}
             visible={form.section_visibility.products !== false} onVisibilityToggle={() => toggleVis("products")}>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className={labelCls}>Section Title</label>
+                <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
                 <input value={form.products_title} onChange={(e) => setForm({ ...form, products_title: e.target.value })} className={inputCls} placeholder="আমাদের প্রোডাক্ট" />
               </div>
               <div>
-                <label className={labelCls}>Subtitle</label>
+                <label className={labelCls}>{t("landingPages.labelSubtitle")}</label>
                 <input value={form.products_subtitle} onChange={(e) => setForm({ ...form, products_subtitle: e.target.value })} className={inputCls} placeholder="১০০% খাঁটি ও প্রিমিয়াম মানের" />
               </div>
             </div>
@@ -838,7 +840,7 @@ export default function LandingPagesPage() {
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:border-[#0f5931] focus:outline-none"
-                placeholder="Search products..."
+                placeholder={t("landingPages.searchProducts")}
               />
               {productSearch && filteredProducts.length > 0 && (
                 <div className="absolute z-[100] left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -866,7 +868,7 @@ export default function LandingPagesPage() {
                       {getProductName(entry.product_id)}
                     </span>
                     <div className="flex items-center gap-1">
-                      <label className="text-xs text-gray-500">Qty:</label>
+                      <label className="text-xs text-gray-500">{t("landingPages.qty")}</label>
                       <input
                         type="number"
                         min={1}
@@ -889,24 +891,24 @@ export default function LandingPagesPage() {
           </Section>
 
           {/* ─── 5. Features / Benefits ─── */}
-          <Section title="Features / Benefits" icon="✨" open={isOpen("features")} onToggle={() => toggle("features")}
+          <Section title={t("landingPages.featuresSection")} icon="✨" open={isOpen("features")} onToggle={() => toggle("features")}
             visible={form.section_visibility.features !== false} onVisibilityToggle={() => toggleVis("features")}>
             <div className="mb-3">
-              <label className={labelCls}>Section Title</label>
+              <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
               <input value={form.features_title} onChange={(e) => setForm({ ...form, features_title: e.target.value })} className={inputCls} placeholder="🔥 কেন এই প্রোডাক্ট ব্যবহার করবেন?" />
             </div>
             <div className="mb-3">
-              <label className={labelCls}>Image Badge Text</label>
+              <label className={labelCls}>{t("landingPages.labelImageBadge")}</label>
               <input
                 value={form.hero_badge}
                 onChange={(e) => setForm({ ...form, hero_badge: e.target.value })}
                 className={inputCls}
                 placeholder="100% Natural"
               />
-              <p className="text-[10px] text-gray-400 mt-1">Floating badge on the image. Use \n for line break (e.g. &quot;100%\nNatural&quot;)</p>
+              <p className="text-[10px] text-gray-400 mt-1">{t("landingPages.imageBadgeHint")}</p>
             </div>
             <div className="mb-3">
-              <label className={labelCls}>Features Image / Video</label>
+              <label className={labelCls}>{t("landingPages.labelFeaturesImage")}</label>
               {form.features_image ? (
                 <div className="relative rounded-xl overflow-hidden border border-gray-200 mb-2">
                   {form.features_image.match(/\.(mp4|webm|mov)$/i) ? (
@@ -927,11 +929,11 @@ export default function LandingPagesPage() {
                 <div className="flex gap-2">
                   <button type="button" onClick={() => { setGalleryTarget("features"); setGalleryOpen(true); }}
                     className="flex items-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-[#0f5931] transition-colors text-sm text-gray-500 flex-1">
-                    🖼️ গ্যালারি থেকে বাছুন
+                    {"🖼️"} {t("landingPages.gallerySelect")}
                   </button>
                 </div>
               )}
-              <p className="text-[10px] text-gray-400 mt-1">This image shows alongside the features list. If empty, hero image will be used.</p>
+              <p className="text-[10px] text-gray-400 mt-1">{t("landingPages.featuresImageHint")}</p>
             </div>
             {form.features.map((feat, idx) => (
               <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
@@ -982,21 +984,21 @@ export default function LandingPagesPage() {
               onClick={() => updateField("features", [...form.features, { icon: "", title: "", description: "" }])}
               className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline"
             >
-              <FiPlus className="w-3.5 h-3.5" /> {"Add Feature"}
+              <FiPlus className="w-3.5 h-3.5" /> {t("landingPages.addFeature")}
             </button>
           </Section>
 
           {/* ─── 6. Testimonials ─── */}
           {/* ─── 6. How It Works ─── */}
-          <Section title="How It Works" icon="🔢" open={isOpen("how_it_works")} onToggle={() => toggle("how_it_works")}
+          <Section title={t("landingPages.howItWorks")} icon="🔢" open={isOpen("how_it_works")} onToggle={() => toggle("how_it_works")}
             visible={form.section_visibility.how_it_works !== false} onVisibilityToggle={() => toggleVis("how_it_works")}>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className={labelCls}>Section Title</label>
+                <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
                 <input value={form.how_it_works_title} onChange={(e) => setForm({ ...form, how_it_works_title: e.target.value })} className={inputCls} placeholder="কিভাবে ব্যবহার করবেন?" />
               </div>
               <div>
-                <label className={labelCls}>Subtitle</label>
+                <label className={labelCls}>{t("landingPages.labelSubtitle")}</label>
                 <input value={form.how_it_works_subtitle} onChange={(e) => setForm({ ...form, how_it_works_subtitle: e.target.value })} className={inputCls} placeholder="অত্যন্ত সহজ ৪টি ধাপ" />
               </div>
             </div>
@@ -1043,30 +1045,30 @@ export default function LandingPagesPage() {
                 onClick={() => updateField("how_it_works", [...form.how_it_works, { title: "", description: "" }])}
                 className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline"
               >
-                <FiPlus className="w-3.5 h-3.5" /> {"Add Step"}
+                <FiPlus className="w-3.5 h-3.5" /> {t("landingPages.addStep")}
               </button>
             )}
             {form.how_it_works.length >= 5 && (
-              <p className="text-xs text-gray-400">Maximum 5 steps</p>
+              <p className="text-xs text-gray-400">{t("landingPages.maxSteps")}</p>
             )}
           </Section>
 
           {/* ─── 7. Testimonials ─── */}
-          <Section title="Testimonials" icon="💬" open={isOpen("testimonials")} onToggle={() => toggle("testimonials")}
+          <Section title={t("landingPages.testimonials")} icon="💬" open={isOpen("testimonials")} onToggle={() => toggle("testimonials")}
             visible={form.section_visibility.testimonials !== false} onVisibilityToggle={() => toggleVis("testimonials")}>
             <div className="mb-3">
-              <label className={labelCls}>Section Title</label>
+              <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
               <input value={form.testimonials_title} onChange={(e) => setForm({ ...form, testimonials_title: e.target.value })} className={inputCls} placeholder="গ্রাহকদের মন্তব্য" />
             </div>
 
             {/* Mode selector */}
             <div className="mb-4">
-              <label className={labelCls}>Source</label>
+              <label className={labelCls}>{t("landingPages.labelSource")}</label>
               <div className="flex gap-2">
                 {[
-                  { id: "all_site", label: "🌐 All Site Reviews", desc: "Show all approved reviews automatically" },
-                  { id: "select", label: "📋 Pick from Site", desc: "Browse & select specific reviews" },
-                  { id: "custom", label: "✍️ Custom", desc: "Write your own testimonials" },
+                  { id: "all_site", label: `🌐 ${t("landingPages.modeAllSite")}`, desc: t("landingPages.modeAllSiteDesc") },
+                  { id: "select", label: `📋 ${t("landingPages.modeSelect")}`, desc: t("landingPages.modeSelectDesc") },
+                  { id: "custom", label: `✍️ ${t("landingPages.modeCustom")}`, desc: t("landingPages.modeCustomDesc") },
                 ].map((mode) => (
                   <button key={mode.id} type="button"
                     onClick={() => {
@@ -1096,7 +1098,7 @@ export default function LandingPagesPage() {
             {/* ALL SITE mode — no form needed, renders dynamically */}
             {form.testimonials_mode === "all_site" && (
               <div className="bg-blue-50 rounded-xl p-4 text-center text-sm text-blue-700">
-                ✅ All approved site reviews will be shown automatically in a carousel on the landing page. No manual selection needed.
+                {"✅"} {t("landingPages.allSiteInfo")}
               </div>
             )}
 
@@ -1106,7 +1108,7 @@ export default function LandingPagesPage() {
                 {/* Selected reviews */}
                 {form.testimonials.length > 0 && (
                   <div>
-                    <p className="text-xs font-medium text-gray-500 mb-2">Selected ({form.testimonials.length}):</p>
+                    <p className="text-xs font-medium text-gray-500 mb-2">{t("landingPages.selected")} ({form.testimonials.length}):</p>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {form.testimonials.map((t, idx) => (
                         <div key={idx} className="flex items-center gap-2 p-2 bg-green-50 rounded-lg text-sm">
@@ -1121,10 +1123,10 @@ export default function LandingPagesPage() {
                   </div>
                 )}
                 {/* Browse site reviews */}
-                <p className="text-xs font-medium text-gray-500">Available reviews — click ➕ to add:</p>
+                <p className="text-xs font-medium text-gray-500">{t("landingPages.availableReviews")}</p>
                 <div className="max-h-64 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-2">
                   {siteReviews.length === 0 ? (
-                    <p className="text-center text-xs text-gray-400 py-4">No approved reviews found</p>
+                    <p className="text-center text-xs text-gray-400 py-4">{t("landingPages.noReviews")}</p>
                   ) : siteReviews.filter(sr => !form.testimonials.some(t => t.name === sr.name && t.review === sr.review)).map((sr, idx) => (
                     <div key={idx} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
                       {sr.image && <SafeImg src={sr.image} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />}
@@ -1187,17 +1189,17 @@ export default function LandingPagesPage() {
                 ))}
                 <button type="button" onClick={() => updateField("testimonials", [...form.testimonials, { name: "", review: "", rating: 5, image: "" }])}
                   className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline">
-                  <FiPlus className="w-3.5 h-3.5" /> Add Testimonial
+                  <FiPlus className="w-3.5 h-3.5" /> {t("landingPages.addTestimonial")}
                 </button>
               </div>
             )}
           </Section>
 
           {/* ─── 8. FAQ ─── */}
-          <Section title="FAQ" icon="❓" open={isOpen("faq")} onToggle={() => toggle("faq")}
+          <Section title={t("landingPages.faq")} icon="❓" open={isOpen("faq")} onToggle={() => toggle("faq")}
             visible={form.section_visibility.faq !== false} onVisibilityToggle={() => toggleVis("faq")}>
             <div className="mb-3">
-              <label className={labelCls}>Section Title</label>
+              <label className={labelCls}>{t("landingPages.labelSectionTitle")}</label>
               <input value={form.faq_title} onChange={(e) => setForm({ ...form, faq_title: e.target.value })} className={inputCls} placeholder="সাধারণ কিছু প্রশ্ন (FAQ)" />
             </div>
             {form.faq.map((item, idx) => (
@@ -1239,15 +1241,15 @@ export default function LandingPagesPage() {
               onClick={() => updateField("faq", [...form.faq, { question: "", answer: "" }])}
               className="flex items-center gap-1 text-xs font-medium text-[#0f5931] hover:underline"
             >
-              <FiPlus className="w-3.5 h-3.5" /> {"Add FAQ"}
+              <FiPlus className="w-3.5 h-3.5" /> {t("landingPages.addFaq")}
             </button>
           </Section>
 
           {/* ─── 9. Checkout & Thank You ─── */}
-          <Section title="Checkout & Thank You" icon="🎉" open={isOpen("checkout")} onToggle={() => toggle("checkout")}>
+          <Section title={t("landingPages.checkoutSection")} icon="🎉" open={isOpen("checkout")} onToggle={() => toggle("checkout")}>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Checkout Title</label>
+                <label className={labelCls}>{t("landingPages.labelCheckoutTitle")}</label>
                 <input value={form.checkout_title} onChange={(e) => setForm({ ...form, checkout_title: e.target.value })}
                   className={inputCls} placeholder="🛒 আপনার অর্ডার দিন এখনই" />
               </div>

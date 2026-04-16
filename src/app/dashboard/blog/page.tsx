@@ -52,7 +52,7 @@ function formatDate(dt: string | undefined, lang: string = "bn") {
 }
 
 export default function BlogPage() {
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const [items, setItems] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -73,7 +73,7 @@ export default function BlogPage() {
     if (!background) setLoading(true);
     api.admin.getBlogPosts()
       .then((res) => setItems(res.data || res || []))
-      .catch(() => { if (!background) showToast("ডেটা লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -115,16 +115,16 @@ export default function BlogPage() {
         const res = await api.admin.updateBlogPost(editId, form);
         const updated = res.data || res;
         setItems((prev) => prev.map((x) => (x.id === editId ? { ...x, ...updated } : x)));
-        showToast("ব্লগ পোস্ট আপডেট হয়েছে!");
+        showToast(t("blog.updated"));
       } else {
         const res = await api.admin.createBlogPost(form);
         const created = res.data || res;
         setItems((prev) => [created, ...prev]);
-        showToast("নতুন ব্লগ পোস্ট তৈরি হয়েছে!");
+        showToast(t("blog.created"));
       }
       setModalOpen(false);
     } catch {
-      showToast("সমস্যা হয়েছে, আবার চেষ্টা করুন", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -136,10 +136,10 @@ export default function BlogPage() {
     try {
       await api.admin.deleteBlogPost(deleteId);
       setItems((prev) => prev.filter((x) => x.id !== deleteId));
-      showToast("ব্লগ পোস্ট মুছে ফেলা হয়েছে!");
+      showToast(t("blog.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("মুছতে সমস্যা হয়েছে", "error");
+      showToast(t("common.deleteError"), "error");
     } finally {
       setDeleting(false);
     }
@@ -153,11 +153,11 @@ export default function BlogPage() {
   const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="ব্লগ">
+    <DashboardLayout title={t("blog.title")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="এই ব্লগ পোস্টটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।"
+        message={t("blog.confirmDelete")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -169,7 +169,7 @@ export default function BlogPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="ব্লগ পোস্ট খুঁজুন..."
+              placeholder={t("blog.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -180,7 +180,7 @@ export default function BlogPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            নতুন পোস্ট
+            {t("blog.addNew")}
           </button>
         </div>
 
@@ -192,7 +192,7 @@ export default function BlogPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {["শিরোনাম", "স্লাগ", "প্রকাশিত", "তারিখ", ""].map((h) => (
+                    {[t("blog.thTitle"), t("blog.thSlug"), t("blog.thPublished"), t("blog.thDate"), ""].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -200,7 +200,7 @@ export default function BlogPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-gray-400">কোনো ব্লগ পোস্ট পাওয়া যায়নি</td>
+                      <td colSpan={5} className="py-12 text-center text-gray-400">{t("blog.empty")}</td>
                     </tr>
                   ) : (
                     filtered.map((item) => (
@@ -214,7 +214,7 @@ export default function BlogPage() {
                         <td className="px-4 py-3 text-gray-500 font-mono text-xs max-w-36 truncate">{item.slug}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.is_published ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                            {item.is_published ? "প্রকাশিত" : "খসড়া"}
+                            {item.is_published ? t("blog.published") : t("blog.draft")}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(item.published_at, lang)}</td>
@@ -238,44 +238,44 @@ export default function BlogPage() {
         </div>
       </motion.div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? "পোস্ট সম্পাদনা" : "নতুন পোস্ট"} size="xl">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("blog.editTitle") : t("blog.newTitle")} size="xl">
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>শিরোনাম *</label>
+              <label className={labelCls}>{t("blog.labelTitle")}</label>
               <input required value={form.title} onChange={(e) => handleTitleChange(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>স্লাগ *</label>
+              <label className={labelCls}>{t("blog.labelSlug")}</label>
               <input required value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>ছবি URL</label>
+              <label className={labelCls}>{t("blog.labelImageUrl")}</label>
               <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className={inputCls} placeholder="https://..." />
             </div>
             <div>
-              <label className={labelCls}>প্রকাশের তারিখ</label>
+              <label className={labelCls}>{t("blog.labelPublishDate")}</label>
               <input type="datetime-local" value={form.published_at} onChange={(e) => setForm({ ...form, published_at: e.target.value })} className={inputCls} />
             </div>
           </div>
           <div>
-            <label className={labelCls}>সারসংক্ষেপ</label>
+            <label className={labelCls}>{t("blog.labelExcerpt")}</label>
             <textarea rows={2} value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} className={inputCls + " resize-none"} />
           </div>
           <div>
-            <label className={labelCls}>বিষয়বস্তু</label>
+            <label className={labelCls}>{t("blog.labelContent")}</label>
             <textarea rows={6} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className={inputCls + " resize-none"} />
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={form.is_published} onChange={(e) => setForm({ ...form, is_published: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
-            প্রকাশিত
+            {t("blog.published")}
           </label>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              বাতিল
+              {t("btn.cancel")}
             </button>
             <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-              {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
+              {saving ? t("btn.saving") : editId ? t("btn.update") : t("btn.create")}
             </button>
           </div>
         </form>

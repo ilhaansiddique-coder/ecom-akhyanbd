@@ -7,6 +7,9 @@ import { FiShoppingBag, FiCheck, FiPrinter, FiDownload, FiMinus, FiPlus, FiTrash
 import { useCart, CartItem } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
+import { trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
+import { useFingerprint } from "@/hooks/useFingerprint";
+import { useBehavioralTracker } from "@/hooks/useBehavioralTracker";
 import { toBn } from "@/utils/toBn";
 import { SafeNextImage } from "@/components/SafeImage";
 // Lazy-loaded: html2canvas-pro (~15KB) + jspdf (~60KB) only when user clicks download
@@ -38,6 +41,10 @@ export default function CheckoutPage() {
   const { items, hydrated, totalPrice, clearCart, updateQuantity, removeItem } = useCart();
   const { user } = useAuth();
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  const { getFpHash } = useFingerprint();
+  const { attachToForm, setHoneypotValue, getSignals } = useBehavioralTracker();
+  const [honeypot, setHoneypot] = useState("");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -105,6 +112,24 @@ export default function CheckoutPage() {
     }
   }, [hydrated, items, order, orderPlaced, router]);
 
+  // Track InitiateCheckout when cart is ready — delay so AddToCart fires first
+  const initCheckoutTracked = useRef(false);
+  useEffect(() => {
+    if (hydrated && items.length > 0 && !initCheckoutTracked.current) {
+      initCheckoutTracked.current = true;
+      const timer = setTimeout(() => {
+        trackInitiateCheckout({
+          content_ids: items.map((i) => i.id),
+          content_name: items.map((i) => i.name).join(", "),
+          contents: items.map((i) => ({ id: String(i.id), quantity: i.quantity, item_price: i.price })),
+          num_items: items.reduce((s, i) => s + i.quantity, 0),
+          value: totalPrice,
+        });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hydrated, items, totalPrice]);
+
   // Saved addresses
   const [savedAddresses, setSavedAddresses] = useState<{ id: number; label?: string; address: string; city: string; zip_code?: string }[]>([]);
 
@@ -115,7 +140,17 @@ export default function CheckoutPage() {
         headers: { Accept: "application/json" },
       })
         .then((r) => r.ok ? r.json() : [])
-        .then((data) => setSavedAddresses(Array.isArray(data) ? data : data.data || []))
+        .then((data) => {
+          const list: typeof savedAddresses = Array.isArray(data) ? data : data.data || [];
+          setSavedAddresses(list);
+          // Auto-fill the default address (first in list, sorted by isDefault desc)
+          if (list.length > 0) {
+            const def = list[0];
+            setAddress((prev) => prev || def.address);
+            setCity((prev) => prev || def.city);
+            if (def.zip_code) setZipCode((prev) => prev || def.zip_code!);
+          }
+        })
         .catch(() => {});
     }
   }, [user]);
@@ -166,12 +201,14 @@ export default function CheckoutPage() {
 
     try {
       setSavedItems([...items]);
+      const behavioralSignals = getSignals();
       const res = await api.createOrder({
         customer_name: name,
         customer_phone: phone,
         customer_email: email || undefined,
         customer_address: address,
         city: city || (selectedZone ? shippingZones.find(z => z.id === selectedZone)?.name || "" : ""),
+        fp_behavioral: { ...behavioralSignals, honeypotTriggered: honeypot.length > 0 },
         zip_code: zipCode || undefined,
         subtotal: totalPrice,
         shipping_cost: shippingCost,
@@ -192,6 +229,27 @@ export default function CheckoutPage() {
       });
 
       setOrderPlaced(true);
+
+      // Track Purchase before clearing cart / redirecting
+      trackPurchase({
+        content_ids: items.map((i) => i.id),
+        content_name: items.map((i) => i.name).join(", "),
+        contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+        num_items: items.reduce((s, i) => s + i.quantity, 0),
+        value: res.total || totalPrice,
+        order_id: String(res.id || ""),
+        shipping: shippingCost,
+      }, {
+        em: email || undefined,
+        ph: phone || undefined,
+        fn: name || undefined,
+        ct: city || undefined,
+        zp: zipCode || undefined,
+        country: "bd",
+        // Split name into first/last if space exists
+        ln: name?.includes(" ") ? name.split(" ").slice(1).join(" ") : undefined,
+      });
+
       clearCart();
       // Redirect to unique order page if token available
       if (res.order_token) {
@@ -508,7 +566,7 @@ export default function CheckoutPage() {
               <div className="p-4 mb-6 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-5" ref={(el) => { (formRef as any).current = el; attachToForm(el); }}>
               {/* Products with qty controls */}
               <div>
                 <label className="block font-bold text-sm mb-3 px-1">আপনার পণ্য</label>
@@ -587,6 +645,20 @@ export default function CheckoutPage() {
               <div>
                 <label className="block font-bold text-sm mb-2 px-1">সম্পূর্ণ ঠিকানা *</label>
                 <textarea required rows={3} value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls + " resize-none"} placeholder="গ্রাম, থানা, জেলা উল্লেখ করুন" />
+              </div>
+
+              {/* Honeypot — invisible to humans, bots fill it */}
+              <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: "-9999px", opacity: 0, height: 0, overflow: "hidden" }}>
+                <label htmlFor="website_url">Website</label>
+                <input
+                  id="website_url"
+                  name="website_url"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => { setHoneypot(e.target.value); setHoneypotValue(e.target.value); }}
+                />
               </div>
 
               {/* Shipping Zone Selector */}

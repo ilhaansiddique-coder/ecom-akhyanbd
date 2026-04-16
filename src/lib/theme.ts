@@ -34,6 +34,7 @@ const btn = {
   cancel: "flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors",
   danger: "px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors",
   ghost: "px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors",
+  outline: "px-4 py-2 border border-[#0f5931] text-[#0f5931] rounded-xl text-sm font-medium hover:bg-[#0f5931] hover:text-white transition-colors disabled:opacity-50",
   add: "flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors",
   icon: {
     edit: "p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors",

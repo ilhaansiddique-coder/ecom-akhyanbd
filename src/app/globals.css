@@ -209,21 +209,24 @@ html.lang-en h4 {
 
 /* ==================== SCROLLBAR ==================== */
 
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 3px;
+  background: transparent;
+  border-radius: 99px;
+  transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--primary-dark);
+  background: var(--primary);
 }
 
 /* ==================== FADE-IN ANIMATIONS ==================== */
@@ -338,6 +341,17 @@ html.lang-en h4 {
   background: var(--primary);
   border-radius: 2px;
 }
+
+/* ==================== SIDEBAR SCROLLBAR ==================== */
+
+.sidebar-nav { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.sidebar-nav:hover { scrollbar-color: rgba(255,255,255,0.25) transparent; }
+
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px; }
+.sidebar-nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); }
+.sidebar-nav:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.45); }
 
 /* ==================== HIDE SCROLLBAR ==================== */
 

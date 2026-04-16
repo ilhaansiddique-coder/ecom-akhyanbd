@@ -6,6 +6,7 @@ import { FiSearch, FiX } from "react-icons/fi";
 import Link from "next/link";
 import { SafeNextImage } from "@/components/SafeImage";
 import { toBn } from "@/utils/toBn";
+import { trackSearch } from "@/lib/analytics";
 
 const API_URL = "/api/v1";
 
@@ -58,7 +59,9 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        setResults(Array.isArray(data) ? data : data.data || []);
+        const items = Array.isArray(data) ? data : data.data || [];
+        setResults(items);
+        if (items.length > 0) trackSearch({ search_string: q });
       }
     } catch {}
     setLoading(false);

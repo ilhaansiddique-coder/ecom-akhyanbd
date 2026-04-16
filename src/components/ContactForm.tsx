@@ -2,6 +2,16 @@
 
 import { useState } from "react";
 import { FiSend } from "react-icons/fi";
+import { trackLead } from "@/lib/analytics";
+import InlineSelect from "@/components/InlineSelect";
+
+const subjectOptions = [
+  { value: "order",    label: "অর্ডার সংক্রান্ত" },
+  { value: "product",  label: "পণ্য সংক্রান্ত" },
+  { value: "delivery", label: "ডেলিভারি সংক্রান্ত" },
+  { value: "refund",   label: "রিফান্ড সংক্রান্ত" },
+  { value: "other",    label: "অন্যান্য" },
+];
 
 const API_URL = "/api/v1";
 
@@ -17,6 +27,7 @@ export default function ContactForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!formData.subject) { setError("বিষয় নির্বাচন করুন।"); return; }
     setSending(true);
     setError("");
     try {
@@ -27,6 +38,7 @@ export default function ContactForm() {
       });
       if (!res.ok) throw new Error("Failed");
       setSubmitted(true);
+      trackLead({ em: formData.email, ph: formData.phone, fn: formData.name });
     } catch {
       setError("বার্তা পাঠাতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     } finally {
@@ -67,18 +79,18 @@ export default function ContactForm() {
       <div className="grid md:grid-cols-2 gap-5">
         <div>
           <label className="block text-sm font-semibold text-foreground mb-1.5">ফোন</label>
-          <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+880 1731492117" className="w-full px-4 py-3 border border-border rounded-xl text-foreground placeholder:text-text-light focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" />
+          <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="017XXXXXXXX" className="w-full px-4 py-3 border border-border rounded-xl text-foreground placeholder:text-text-light focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" />
         </div>
         <div>
           <label className="block text-sm font-semibold text-foreground mb-1.5">বিষয় <span className="text-sale-red">*</span></label>
-          <select name="subject" value={formData.subject} onChange={handleChange} required className="w-full px-4 py-3 border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all bg-white">
-            <option value="">বিষয় নির্বাচন করুন</option>
-            <option value="order">অর্ডার সংক্রান্ত</option>
-            <option value="product">পণ্য সংক্রান্ত</option>
-            <option value="delivery">ডেলিভারি সংক্রান্ত</option>
-            <option value="refund">রিফান্ড সংক্রান্ত</option>
-            <option value="other">অন্যান্য</option>
-          </select>
+          <InlineSelect
+            fullWidth
+            absolute
+            value={formData.subject}
+            options={subjectOptions}
+            placeholder="বিষয় নির্বাচন করুন"
+            onChange={(val) => setFormData((prev) => ({ ...prev, subject: val }))}
+          />
         </div>
       </div>
       <div>

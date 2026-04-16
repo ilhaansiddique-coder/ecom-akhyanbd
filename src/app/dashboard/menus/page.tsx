@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
+import { useLang } from "@/lib/LanguageContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
@@ -30,6 +31,7 @@ const emptyForm = {
 type FormState = typeof emptyForm;
 
 export default function MenusPage() {
+  const { t } = useLang();
   const [items, setItems] = useState<Menu[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -50,7 +52,7 @@ export default function MenusPage() {
     if (!background) setLoading(true);
     api.admin.getMenus()
       .then((res) => setItems(res.data || res || []))
-      .catch(() => { if (!background) showToast("ডেটা লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -82,16 +84,16 @@ export default function MenusPage() {
         const res = await api.admin.updateMenu(editId, payload);
         const updated = res.data || res;
         setItems((prev) => prev.map((x) => (x.id === editId ? { ...x, ...updated } : x)));
-        showToast("মেনু আপডেট হয়েছে!");
+        showToast(t("menus.updated"));
       } else {
         const res = await api.admin.createMenu(payload);
         const created = res.data || res;
         setItems((prev) => [created, ...prev]);
-        showToast("নতুন মেনু তৈরি হয়েছে!");
+        showToast(t("menus.created"));
       }
       setModalOpen(false);
     } catch {
-      showToast("সমস্যা হয়েছে, আবার চেষ্টা করুন", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -103,10 +105,10 @@ export default function MenusPage() {
     try {
       await api.admin.deleteMenu(deleteId);
       setItems((prev) => prev.filter((x) => x.id !== deleteId));
-      showToast("মেনু মুছে ফেলা হয়েছে!");
+      showToast(t("menus.deleted"));
       setDeleteId(null);
     } catch {
-      showToast("মুছতে সমস্যা হয়েছে", "error");
+      showToast(t("common.deleteError"), "error");
     } finally {
       setDeleting(false);
     }
@@ -120,11 +122,11 @@ export default function MenusPage() {
   const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="মেনু">
+    <DashboardLayout title={t("menus.title")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message="এই মেনুটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।"
+        message={t("menus.confirmDelete")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -136,7 +138,7 @@ export default function MenusPage() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="মেনু খুঁজুন..."
+              placeholder={t("menus.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none"
@@ -147,7 +149,7 @@ export default function MenusPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
           >
             <FiPlus className="w-4 h-4" />
-            নতুন মেনু
+            {t("menus.addNew")}
           </button>
         </div>
 
@@ -159,7 +161,7 @@ export default function MenusPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {["লেবেল", "URL", "সর্ট", "স্ট্যাটাস", ""].map((h) => (
+                    {[t("menus.labelLabel").replace(" *", ""), "URL", t("th.sort"), t("th.status"), ""].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -167,7 +169,7 @@ export default function MenusPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-gray-400">কোনো মেনু পাওয়া যায়নি</td>
+                      <td colSpan={5} className="py-12 text-center text-gray-400">{t("menus.empty")}</td>
                     </tr>
                   ) : (
                     filtered.map((item) => (
@@ -182,7 +184,7 @@ export default function MenusPage() {
                         <td className="px-4 py-3 text-gray-600">{toBn(item.sort_order)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${item.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {item.is_active ? "সক্রিয়" : "নিষ্ক্রিয়"}
+                            {item.is_active ? t("common.active") : t("common.inactive")}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -205,30 +207,30 @@ export default function MenusPage() {
         </div>
       </motion.div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? "মেনু সম্পাদনা" : "নতুন মেনু"} size="md">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("menus.editTitle") : t("menus.newTitle")} size="md">
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className={labelCls}>লেবেল *</label>
+            <label className={labelCls}>{t("menus.labelLabel")}</label>
             <input required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>URL *</label>
+            <label className={labelCls}>{t("menus.labelUrl")}</label>
             <input required value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} className={inputCls} placeholder="/category/xyz" />
           </div>
           <div>
-            <label className={labelCls}>সর্ট ক্রম</label>
+            <label className={labelCls}>{t("menus.labelSortOrder")}</label>
             <input type="number" min="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className={inputCls} />
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-[#0f5931]" />
-            সক্রিয়
+            {t("common.active")}
           </label>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              বাতিল
+              {t("btn.cancel")}
             </button>
             <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50">
-              {saving ? "সংরক্ষণ হচ্ছে..." : editId ? "আপডেট করুন" : "তৈরি করুন"}
+              {saving ? t("btn.saving") : editId ? t("btn.update") : t("btn.create")}
             </button>
           </div>
         </form>

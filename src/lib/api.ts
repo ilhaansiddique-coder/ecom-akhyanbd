@@ -213,6 +213,15 @@ export const api = {
       });
     },
 
+    // Spam Detection
+    getSpamDevices: (params?: string) => fetchAPI(`/admin/spam/devices${params ? `?${params}` : ""}`),
+    getSpamDevice: (id: number) => fetchAPI(`/admin/spam/devices/${id}`),
+    updateSpamDevice: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/spam/devices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    getSpamFlaggedOrders: (params?: string) => fetchAPI(`/admin/spam/flagged-orders${params ? `?${params}` : ""}`),
+    getBlockedIps: () => fetchAPI("/admin/spam/blocked-ips"),
+    addBlockedIp: (data: Record<string, unknown>) => fetchAPI("/admin/spam/blocked-ips", { method: "POST", body: JSON.stringify(data) }),
+    deleteBlockedIp: (id: number) => fetchAPI(`/admin/spam/blocked-ips/${id}`, { method: "DELETE" }),
+
     // Courier (Steadfast)
     courierBalance: () => fetchAPI("/admin/courier?action=balance"),
     courierStatus: (consignmentId: string) => fetchAPI(`/admin/courier?action=status&consignment_id=${consignmentId}`),

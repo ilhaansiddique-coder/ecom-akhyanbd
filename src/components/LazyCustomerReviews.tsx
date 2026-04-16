@@ -29,6 +29,12 @@ interface Review {
   product_name?: string;
 }
 
-export default function LazyCustomerReviews({ reviews }: { reviews?: Review[] }) {
-  return <CustomerReviews reviews={reviews} />;
+interface ReviewsContent {
+  title?: string;
+  subtitle?: string;
+  testimonials?: { name: string; rating: number; text: string; avatar?: string; image?: string }[];
+}
+
+export default function LazyCustomerReviews({ reviews, content }: { reviews?: Review[]; content?: ReviewsContent }) {
+  return <CustomerReviews reviews={reviews} content={content} />;
 }

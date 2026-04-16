@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest) {
   const settings = await prisma.siteSetting.findMany();
 
   // Sensitive keys — mask in API response (write-only)
-  const SENSITIVE_KEYS = new Set(["smtp_pass", "steadfast_api_key", "steadfast_secret_key"]);
+  const SENSITIVE_KEYS = new Set(["smtp_pass", "steadfast_api_key", "steadfast_secret_key", "fb_capi_access_token"]);
 
   // Convert to key-value object, masking sensitive values
   const result: Record<string, string | null> = {};

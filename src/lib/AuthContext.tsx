@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { api } from "./api";
+import { setTrackingUserId } from "./analytics";
 
 interface User {
   id: number;
@@ -28,22 +29,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check session via cookie-based auth
     api.getUser()
-      .then((res) => setUser(res.data || res))
+      .then((res) => {
+        const u = res.data || res;
+        setUser(u);
+        if (u?.id) setTrackingUserId(u.id);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const res = await api.login({ email, password });
-    // Cookie is set by the server automatically
     setUser(res.user);
+    if (res.user?.id) setTrackingUserId(res.user.id);
     return res.user;
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string, passwordConfirmation: string, phone?: string): Promise<User> => {
     const res = await api.register({ name, email, password, password_confirmation: passwordConfirmation, phone });
-    // Cookie is set by the server automatically
     setUser(res.user);
+    if (res.user?.id) setTrackingUserId(res.user.id);
     return res.user;
   }, []);
 

@@ -126,6 +126,8 @@ export default function OrdersPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [hoverPreview, setHoverPreview] = useState<{ image: string; x: number; y: number } | null>(null);
   const [bulkSending, setBulkSending] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [editingCN, setEditingCN] = useState<{ orderId: number; value: string } | null>(null);
   const [courierLoading, setCourierLoading] = useState<number | null>(null);
   const [courierBalance, setCourierBalance] = useState<number | null>(null);
@@ -226,6 +228,17 @@ export default function OrdersPage() {
   }, [statusFilter]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Close bulk status dropdown on outside click
+  useEffect(() => {
+    if (!bulkStatusOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-bulk-status]")) setBulkStatusOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [bulkStatusOpen]);
 
   const openDetail = async (orderId: number) => {
     setDetailLoading(true);
@@ -379,6 +392,46 @@ export default function OrdersPage() {
       showToast(lang === "en" ? "Bulk send failed" : "বাল্ক সেন্ড ব্যর্থ", "error");
     } finally {
       setBulkSending(false);
+    }
+  };
+
+  const handleBulkStatusChange = async (status: string) => {
+    if (selectedOrders.size === 0) return;
+    setBulkStatusOpen(false);
+    setBulkStatusLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedOrders).map((id) =>
+          api.admin.updateOrderStatus(id, { status })
+        )
+      );
+      setOrders((prev) => prev.map((o) => selectedOrders.has(o.id) ? { ...o, status } : o));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? `${selectedOrders.size} orders updated to ${status}` : `${selectedOrders.size}টি অর্ডার আপডেট হয়েছে`);
+    } catch {
+      showToast(lang === "en" ? "Bulk update failed" : "আপডেট ব্যর্থ", "error");
+    } finally {
+      setBulkStatusLoading(false);
+    }
+  };
+
+  const handleBulkTrash = async () => {
+    if (selectedOrders.size === 0) return;
+    if (!confirm(lang === "en" ? `Move ${selectedOrders.size} orders to trash?` : `${selectedOrders.size}টি অর্ডার ট্র্যাশে পাঠাবেন?`)) return;
+    setBulkStatusLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedOrders).map((id) =>
+          api.admin.updateOrder(id, { status: "trashed" })
+        )
+      );
+      setOrders((prev) => prev.filter((o) => !selectedOrders.has(o.id)));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? `${selectedOrders.size} orders trashed` : `${selectedOrders.size}টি অর্ডার ট্র্যাশ হয়েছে`);
+    } catch {
+      showToast(lang === "en" ? "Bulk trash failed" : "ট্র্যাশ ব্যর্থ", "error");
+    } finally {
+      setBulkStatusLoading(false);
     }
   };
 
@@ -720,14 +773,52 @@ export default function OrdersPage() {
               <FiTruck className="w-4 h-4" />
               {balanceLoading ? "..." : courierBalance !== null ? `৳${courierBalance}` : lang === "en" ? "Balance" : "ব্যালেন্স"}
             </button>
-            {/* Bulk send to courier */}
+            {/* Bulk actions — shown when orders are selected */}
             {selectedOrders.size > 0 && (
-              <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending}
-                className="flex items-center gap-2 px-3.5 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50 whitespace-nowrap">
-                <FiTruck className="w-4 h-4" />
-                <span className="hidden sm:inline">{bulkSending ? "Sending..." : `Send ${selectedOrders.size} to Courier`}</span>
-                <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
-              </button>
+              <>
+                {/* Send to Courier */}
+                <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading}
+                  className="flex items-center gap-2 px-3.5 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50 whitespace-nowrap">
+                  <FiTruck className="w-4 h-4" />
+                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : `Send ${selectedOrders.size} to Courier`}</span>
+                  <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
+                </button>
+
+                {/* Bulk Status Change */}
+                <div className="relative" data-bulk-status>
+                  <button type="button" onClick={() => setBulkStatusOpen((o) => !o)} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiCheckCircle className="w-4 h-4 text-gray-500" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Set Status" : "স্ট্যাটাস"}</span>
+                    <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${bulkStatusOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {bulkStatusOpen && (
+                    <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl shadow-black/10 min-w-44 py-1">
+                      {[
+                        { value: "pending",    label: lang === "en" ? "Pending" : "পেন্ডিং",       dot: "bg-yellow-400" },
+                        { value: "confirmed",  label: lang === "en" ? "Confirmed" : "কনফার্মড",     dot: "bg-blue-400" },
+                        { value: "processing", label: lang === "en" ? "Processing" : "প্রসেসিং",   dot: "bg-indigo-400" },
+                        { value: "shipped",    label: lang === "en" ? "Shipped" : "শিপড",           dot: "bg-purple-400" },
+                        { value: "delivered",  label: lang === "en" ? "Delivered" : "ডেলিভারড",    dot: "bg-green-400" },
+                        { value: "cancelled",  label: lang === "en" ? "Cancelled" : "বাতিল",       dot: "bg-red-400" },
+                      ].map(({ value, label, dot }) => (
+                        <button key={value} type="button" onClick={() => handleBulkStatusChange(value)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bulk Trash */}
+                <button type="button" onClick={handleBulkTrash} disabled={bulkStatusLoading}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                  <FiTrash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">{lang === "en" ? "Trash" : "ট্র্যাশ"}</span>
+                </button>
+              </>
             )}
             {/* Search: visible only on desktop, inline */}
             <div className="relative flex-1 min-w-52 hidden md:block">
@@ -1095,7 +1186,7 @@ export default function OrdersPage() {
                           )}
                           {o.user && (
                             <div className="flex items-center gap-2 text-gray-500 text-xs">
-                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">রেজিস্টার্ড গ্রাহক</span>
+                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{t("common.registeredCustomer")}</span>
                             </div>
                           )}
                         </div>
@@ -1409,7 +1500,7 @@ export default function OrdersPage() {
 
                 {/* Payment & Shipping */}
                 <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
                       <InlineSelect fullWidth value={editForm.payment_method} options={[
@@ -1771,7 +1862,7 @@ export default function OrdersPage() {
           </div>
 
           {/* Payment, Shipping, Discount */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
               <InlineSelect fullWidth value={createForm.payment_method} options={[

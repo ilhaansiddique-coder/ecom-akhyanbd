@@ -1,42 +1,45 @@
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
 import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
 import ShopClient from "./ShopClient";
 
-export const dynamic = "force-dynamic";
-
-const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
+// ISR: regenerate every 60s
+export const revalidate = 60;
 
 async function getProducts(): Promise<Product[]> {
-  try {
-    const res = await fetch(`${API_URL}/products?per_page=100`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["products"] },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const data = json.data || json;
-    if (Array.isArray(data)) return data.map(mapApiProduct);
-    return [];
-  } catch {
-    return [];
-  }
+  const rows = await prisma.product.findMany({
+    where: { isActive: true },
+    include: {
+      category: { select: { id: true, name: true, slug: true } },
+      brand: { select: { id: true, name: true, slug: true } },
+      variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
+    },
+    orderBy: { sortOrder: "asc" },
+    take: 100,
+  });
+
+  return rows.map((p) => mapApiProduct(serialize(p)));
 }
 
 async function getCategories(): Promise<{ id: number; name: string; slug: string }[]> {
-  try {
-    const res = await fetch(`${API_URL}/categories`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["categories"] },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return Array.isArray(json) ? json : json.data || [];
-  } catch {
-    return [];
-  }
+  const cats = await prisma.category.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true, slug: true },
+  });
+  return cats;
 }
 
 export default async function ShopPage() {
-  const [products, categories] = await Promise.all([getProducts(), getCategories()]);
+  let products: Product[] = [];
+  let categories: { id: number; name: string; slug: string }[] = [];
+
+  try {
+    [products, categories] = await Promise.all([getProducts(), getCategories()]);
+  } catch {
+    // DB unavailable at build time — revalidated on first request
+  }
+
   return <ShopClient initialProducts={products} apiCategories={categories} />;
 }

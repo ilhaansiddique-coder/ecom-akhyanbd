@@ -8,6 +8,7 @@ import Toast from "@/components/Toast";
 import { FiSave } from "react-icons/fi";
 import { FormSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
+import { useLang } from "@/lib/LanguageContext";
 
 interface Settings {
   site_language?: string;
@@ -42,6 +43,14 @@ interface Settings {
   checkout_nagad_number?: string;
   checkout_nagad_instruction?: string;
   checkout_show_coupon?: string;
+  // Maps
+  map_embed?: string;
+  // Facebook Pixel / CAPI
+  fb_pixel_id?: string;
+  fb_capi_access_token?: string;
+  fb_test_event_code?: string;
+  fb_domain_verification?: string;
+  fb_deferred_purchase?: string;
   // Courier
   steadfast_api_key?: string;
   steadfast_secret_key?: string;
@@ -90,6 +99,7 @@ const emptySettings: Settings = {
 };
 
 export default function SettingsPage() {
+  const { t } = useLang();
   const [form, setForm] = useState<Settings>(emptySettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,7 +116,7 @@ export default function SettingsPage() {
         const data = res.data || res || {};
         setForm({ ...emptySettings, ...data });
       })
-      .catch(() => { if (!background) showToast("সেটিংস লোড করতে সমস্যা হয়েছে", "error"); })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -117,9 +127,9 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await api.admin.updateSettings(form as Record<string, unknown>);
-      showToast("সেটিংস সংরক্ষিত হয়েছে!");
+      showToast(t("toast.updated"));
     } catch {
-      showToast("সংরক্ষণ করতে সমস্যা হয়েছে", "error");
+      showToast(t("toast.error"), "error");
     } finally {
       setSaving(false);
     }
@@ -133,7 +143,7 @@ export default function SettingsPage() {
   const labelCls = theme.label;
 
   return (
-    <DashboardLayout title="সাইট সেটিংস">
+    <DashboardLayout title={t("dash.siteSettings")}>
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
 
       {loading ? (
@@ -142,71 +152,76 @@ export default function SettingsPage() {
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <form onSubmit={handleSubmit} className="space-y-6">
 
-            {/* সাধারণ তথ্য */}
+            {/* General Info */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">সাধারণ তথ্য</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-4">{t("settings.generalInfo")}</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>সাইটের নাম</label>
+                  <label className={labelCls}>{t("settings.siteName")}</label>
                   <input value={form.site_name || ""} onChange={set("site_name")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>ফোন</label>
+                  <label className={labelCls}>{t("form.phone")}</label>
                   <input value={form.phone || ""} onChange={set("phone")} className={inputCls} placeholder="+880..." />
                 </div>
                 <div>
-                  <label className={labelCls}>ইমেইল</label>
+                  <label className={labelCls}>{t("form.email")}</label>
                   <input type="email" value={form.email || ""} onChange={set("email")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>হোয়াটসঅ্যাপ</label>
+                  <label className={labelCls}>{t("settings.whatsapp")}</label>
                   <input value={form.whatsapp || ""} onChange={set("whatsapp")} className={inputCls} placeholder="+880..." />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className={labelCls}>ঠিকানা</label>
+                  <label className={labelCls}>{t("form.address")}</label>
                   <input value={form.address || ""} onChange={set("address")} className={inputCls} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>{t("settings.mapEmbed")}</label>
+                  <input value={form.map_embed || ""} onChange={set("map_embed")} className={inputCls} placeholder="https://www.google.com/maps/embed?pb=..." />
+                  <p className="text-xs text-gray-400 mt-1">{t("settings.mapEmbedHelp")}</p>
                 </div>
               </div>
             </div>
 
-            {/* সোশ্যাল মিডিয়া */}
+            {/* Social Media */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">সোশ্যাল মিডিয়া</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-4">{t("settings.socialMedia")}</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>ফেসবুক</label>
+                  <label className={labelCls}>{t("settings.facebook")}</label>
                   <input value={form.facebook || ""} onChange={set("facebook")} className={inputCls} placeholder="https://facebook.com/..." />
                 </div>
                 <div>
-                  <label className={labelCls}>ইনস্টাগ্রাম</label>
+                  <label className={labelCls}>{t("settings.instagram")}</label>
                   <input value={form.instagram || ""} onChange={set("instagram")} className={inputCls} placeholder="https://instagram.com/..." />
                 </div>
                 <div>
-                  <label className={labelCls}>ইউটিউব</label>
+                  <label className={labelCls}>{t("settings.youtube")}</label>
                   <input value={form.youtube || ""} onChange={set("youtube")} className={inputCls} placeholder="https://youtube.com/..." />
                 </div>
               </div>
             </div>
 
-            {/* হেডার ও ফুটার */}
+            {/* Header & Footer */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">হেডার ও ফুটার</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-4">{t("settings.headerFooter")}</h3>
               <div className="space-y-4">
                 <div>
-                  <label className={labelCls}>হেডার টেক্সট ১</label>
-                  <input value={form.header_text_1 || ""} onChange={set("header_text_1")} className={inputCls} placeholder="বিশেষ অফার..." />
+                  <label className={labelCls}>{t("settings.headerText1")}</label>
+                  <input value={form.header_text_1 || ""} onChange={set("header_text_1")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>হেডার টেক্সট ২</label>
+                  <label className={labelCls}>{t("settings.headerText2")}</label>
                   <input value={form.header_text_2 || ""} onChange={set("header_text_2")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>ফুটার বিবরণ</label>
+                  <label className={labelCls}>{t("settings.footerDesc")}</label>
                   <textarea rows={3} value={form.footer_description || ""} onChange={set("footer_description")} className={inputCls + " resize-none"} />
                 </div>
                 <div>
-                  <label className={labelCls}>কপিরাইট টেক্সট</label>
-                  <input value={form.copyright_text || ""} onChange={set("copyright_text")} className={inputCls} placeholder="© ২০২৫ সকল অধিকার সংরক্ষিত" />
+                  <label className={labelCls}>{t("settings.copyright")}</label>
+                  <input value={form.copyright_text || ""} onChange={set("copyright_text")} className={inputCls} />
                 </div>
               </div>
             </div>
@@ -216,16 +231,53 @@ export default function SettingsPage() {
               <h3 className="text-sm font-bold text-gray-700 mb-4">SEO</h3>
               <div className="space-y-4">
                 <div>
-                  <label className={labelCls}>মেটা টাইটেল</label>
+                  <label className={labelCls}>{t("settings.metaTitle")}</label>
                   <input value={form.meta_title || ""} onChange={set("meta_title")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>মেটা ডেসক্রিপশন</label>
+                  <label className={labelCls}>{t("settings.metaDesc")}</label>
                   <textarea rows={3} value={form.meta_description || ""} onChange={set("meta_description")} className={inputCls + " resize-none"} />
                 </div>
               </div>
             </div>
 
+
+            {/* Tracking (Facebook Pixel) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h3 className="text-sm font-bold text-gray-700 mb-4">{t("settings.tracking")}</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>{t("settings.fbPixelId")}</label>
+                  <input value={form.fb_pixel_id || ""} onChange={set("fb_pixel_id")} className={inputCls} placeholder="123456789012345" />
+                </div>
+                <div>
+                  <label className={labelCls}>{t("settings.fbCapiToken")}</label>
+                  <input type="password" value={form.fb_capi_access_token || ""} onChange={set("fb_capi_access_token")} className={inputCls} placeholder="EAABsbCS..." />
+                </div>
+                <div>
+                  <label className={labelCls}>{t("settings.fbTestCode")}</label>
+                  <input value={form.fb_test_event_code || ""} onChange={set("fb_test_event_code")} className={inputCls} placeholder="TEST12345" />
+                </div>
+                <div>
+                  <label className={labelCls}>{t("settings.fbDomainVerification")}</label>
+                  <input value={form.fb_domain_verification || ""} onChange={set("fb_domain_verification")} className={inputCls} placeholder="abcdef1234567890..." />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.fb_deferred_purchase === "true"}
+                      onChange={(e) => setForm((prev: any) => ({ ...prev, fb_deferred_purchase: e.target.checked ? "true" : "false" }))}
+                      className="w-5 h-5 rounded border-gray-300 text-[#0f5931] focus:ring-[#0f5931]"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-700">{t("settings.deferredPurchase")}</span>
+                      <p className="text-xs text-gray-400 mt-0.5">{t("settings.deferredPurchaseDesc")}</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
 
             <div className="flex justify-end">
               <button
@@ -234,7 +286,7 @@ export default function SettingsPage() {
                 className="flex items-center gap-2 px-6 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50"
               >
                 <FiSave className="w-4 h-4" />
-                {saving ? "সংরক্ষণ হচ্ছে..." : "সেটিংস সংরক্ষণ করুন"}
+                {saving ? t("btn.saving") : t("settings.saveBtn")}
               </button>
             </div>
           </form>

@@ -1,34 +1,51 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FiTruck, FiShield, FiStar } from "react-icons/fi";
-import { products as staticProducts } from "@/data/products";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
+import { mapApiProduct, type Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import ProductCard from "@/components/ProductCard";
 import { ProductGalleryWithVariants, ReviewsSection } from "@/components/ProductDetailClient";
 import type { Metadata } from "next";
 
-const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
-const API_BASE = "";
+// ISR: regenerate every 60s
+export const revalidate = 60;
+export const dynamicParams = true;
 
 function resolveImage(img: string): string {
-  if (img.startsWith("/storage/")) return `${API_BASE}${img}`;
+  if (img.startsWith("/storage/")) return img;
   return img;
-}
-
-function makeSlug(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 async function getProduct(slug: string) {
   try {
-    const res = await fetch(`${API_URL}/products/${slug}`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 60, tags: ["products"] },
+    const product = await prisma.product.findUnique({
+      where: { slug },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        brand: { select: { id: true, name: true, slug: true } },
+        variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
+      },
     });
-    if (res.ok) return await res.json();
-  } catch {}
-  // Fallback to static data
-  return staticProducts.find((p) => makeSlug(p.name) === slug) || null;
+    if (!product) return null;
+    return serialize(product);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateStaticParams() {
+  try {
+    const products = await prisma.product.findMany({
+      where: { isActive: true },
+      select: { slug: true },
+      take: 100,
+    });
+    return products.map((p) => ({ slug: p.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -36,9 +53,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const product = await getProduct(slug);
   if (!product) return { title: "পণ্য পাওয়া যায়নি" };
 
-  const name = product.nameBn || product.name_bn || product.name;
-  const desc = product.descriptionBn || product.description_bn || product.description || "";
-  const image = product.image || "/placeholder.svg";
+  const name = product.name_bn || product.name;
+  const desc = product.description_bn || product.description || "";
 
   return {
     title: `${name} — মা ভেষজ বাণিজ্যালয়`,
@@ -46,26 +62,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     openGraph: {
       title: name,
       description: desc.slice(0, 160) || `${name} — প্রাকৃতিক ভেষজ পণ্য`,
-      images: image.startsWith("http") ? [image] : undefined,
+      images: product.image?.startsWith("http") ? [product.image] : undefined,
     },
   };
-}
-
-// Pre-render product pages at build time for instant loading
-export const dynamicParams = true; // Allow pages not in generateStaticParams
-
-export async function generateStaticParams() {
-  try {
-    const res = await fetch(`${API_URL}/products?per_page=100`, {
-      headers: { Accept: "application/json" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const products = data.data || data || [];
-      return products.map((p: any) => ({ slug: p.slug }));
-    }
-  } catch {}
-  return [];
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -74,30 +73,29 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   if (!raw) notFound();
 
-  // Normalize API (snake_case) vs static (camelCase)
   const product = {
     id: raw.id as number,
     name: (raw.name as string) || "",
-    nameBn: (raw.name_bn as string) || (raw.nameBn as string) || (raw.name as string) || "",
+    nameBn: (raw.name_bn as string) || (raw.name as string) || "",
     price: Number(raw.price) || 0,
-    originalPrice: raw.original_price != null ? Number(raw.original_price) : (raw.originalPrice as number | undefined),
+    originalPrice: raw.original_price != null ? Number(raw.original_price) : undefined,
     image: resolveImage((raw.image as string) || "/placeholder.svg"),
     category: typeof raw.category === "string" ? raw.category : (raw.category as { name?: string })?.name || "",
-    categoryBn: (raw.categoryBn as string) || (typeof raw.category === "string" ? raw.category : (raw.category as { name?: string })?.name || ""),
-    badge: (raw.badge as string) || (raw.badgeColor as string) || undefined,
-    badgeColor: (raw.badge_color as string) || (raw.badgeColor as string) || undefined,
+    categoryBn: typeof raw.category === "string" ? raw.category : (raw.category as { name?: string })?.name || "",
+    badge: (raw.badge as string) || undefined,
+    badgeColor: (raw.badge_color as string) || undefined,
     description: (raw.description as string) || "",
-    descriptionBn: (raw.description_bn as string) || (raw.descriptionBn as string) || (raw.description as string) || "",
+    descriptionBn: (raw.description_bn as string) || (raw.description as string) || "",
     images: Array.isArray(raw.images) && raw.images.length > 0 ? (raw.images as string[]).map(resolveImage) : [],
-    hasVariations: raw.has_variations || raw.hasVariations || false,
-    variationType: (raw.variation_type as string) || (raw.variationType as string) || "",
+    hasVariations: raw.has_variations || false,
+    variationType: (raw.variation_type as string) || "",
     variants: Array.isArray(raw.variants) ? raw.variants.map((v: any) => ({
       id: v.id,
       label: v.label,
       price: Number(v.price),
       original_price: v.original_price != null ? Number(v.original_price) : undefined,
       stock: Number(v.stock) || 0,
-      unlimited_stock: v.unlimited_stock || v.unlimitedStock || false,
+      unlimited_stock: v.unlimited_stock || false,
       image: v.image ? resolveImage(v.image) : undefined,
     })) : [],
   };
@@ -105,9 +103,21 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const displayName = product.nameBn || product.name;
   const discount = product.originalPrice ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100) : 0;
 
-  // Related products (static, same category)
-  const cat = product.categoryBn || product.category;
-  const related = staticProducts.filter((p) => (p.categoryBn || p.category) === cat && p.id !== product.id).slice(0, 4);
+  // Related products — direct Prisma query, same category, exclude current
+  let related: Product[] = [];
+  try {
+    const relatedRows = await prisma.product.findMany({
+      where: { isActive: true, categoryId: raw.category_id as number, id: { not: product.id } },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        brand: { select: { id: true, name: true, slug: true } },
+        variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
+      },
+      orderBy: { sortOrder: "asc" },
+      take: 4,
+    });
+    related = relatedRows.map((p) => mapApiProduct(serialize(p)));
+  } catch {}
 
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mavesoj.com";
   const productJsonLd = {
@@ -131,10 +141,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <section className="py-8 md:py-12 bg-background-alt min-h-[70vh]">
-      {/* Product JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
       <div className="container mx-auto px-4">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-text-muted mb-6">
           <Link href="/" className="hover:text-primary transition-colors">হোম</Link>
           <span>/</span>
@@ -198,7 +206,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           />
         </div>
 
-        {/* Product Description */}
         {product.descriptionBn && (
           <div className="mt-10 bg-white rounded-2xl border border-border p-6 md:p-8">
             <h2 className="text-xl font-bold text-foreground mb-4">পণ্যের বিবরণ</h2>
@@ -206,14 +213,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
         )}
 
-        {/* Client island: Reviews (fetches client-side) */}
         <ReviewsSection productId={product.id} />
 
-        {/* Related Products — server rendered */}
         {related.length > 0 && (
           <div className="mt-12">
             <h2 className="text-xl font-bold text-foreground mb-6">সম্পর্কিত পণ্য</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
               {related.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}

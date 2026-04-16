@@ -8,6 +8,8 @@ import { getSessionUser } from "@/lib/auth-helpers";
 import { sendOrderConfirmation, sendAdminOrderNotification } from "@/lib/email";
 import { bumpVersion } from "@/lib/sync";
 import { randomBytes } from "crypto";
+import { calculateRiskScore, isValidBDPhone } from "@/lib/spamDetection";
+import { getClientIp } from "@/lib/fbcapi";
 
 // GET - List user's orders (auth required)
 export async function GET(request: NextRequest) {
@@ -190,8 +192,29 @@ export async function POST(request: NextRequest) {
     return errorResponse("সার্ভার ব্যস্ত। আবার চেষ্টা করুন।", 503);
   }
 
-  // Save guest customer info (non-blocking) — uses random password, not phone number
   const customerPhone = data.customer_phone || data.phone || "";
+  const customerAddress = data.customer_address || data.address || "";
+  const customerCity = data.city || "";
+  const customerZip = data.zip_code || null;
+  const customerName = data.customer_name;
+
+  // Save / update address for logged-in users (non-blocking)
+  if (user && customerAddress) {
+    prisma.address.findFirst({ where: { userId: user.id, isDefault: true } }).then(async (existing) => {
+      if (existing) {
+        await prisma.address.update({
+          where: { id: existing.id },
+          data: { name: customerName, phone: customerPhone, address: customerAddress, city: customerCity, zipCode: customerZip },
+        });
+      } else {
+        await prisma.address.create({
+          data: { userId: user.id, label: "Default", name: customerName, phone: customerPhone, address: customerAddress, city: customerCity, zipCode: customerZip, isDefault: true },
+        });
+      }
+    }).catch(() => {});
+  }
+
+  // Save guest customer info (non-blocking) — uses random password, not phone number
   if (customerPhone && !user) {
     prisma.user.findFirst({ where: { phone: customerPhone } }).then(async (existing) => {
       if (!existing) {
@@ -200,14 +223,23 @@ export async function POST(request: NextRequest) {
         const randomPass = randomBytes(16).toString("hex");
         await prisma.user.create({
           data: {
-            name: data.customer_name,
+            name: customerName,
             email: (data.customer_email || data.email || `${customerPhone}@guest.local`),
             password: await bcrypt.hash(randomPass, 10),
             phone: customerPhone,
-            address: data.customer_address || data.address || null,
+            address: customerAddress || null,
             role: "customer",
           },
         }).catch(() => {}); // Silently fail if email exists
+      } else {
+        // Update existing guest's address + name if they placed another order
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            name: customerName,
+            address: customerAddress || existing.address,
+          },
+        }).catch(() => {});
       }
     }).catch(() => {});
   }
@@ -245,5 +277,90 @@ export async function POST(request: NextRequest) {
   });
 
   bumpVersion("orders");
+
+  // ── Spam detection: attach fingerprint + risk score (non-blocking) ──
+  const fpHash = request.cookies.get("fpHash")?.value;
+  const fpBehavioral = body.fp_behavioral;
+  const clientIp = getClientIp(request);
+
+  (async () => {
+    try {
+      // Calculate risk score
+      const behavioral = fpBehavioral || {};
+      const { score, flags } = calculateRiskScore(behavioral, {}, {
+        phoneValid: isValidBDPhone(customerPhone),
+        addressLength: customerAddress.trim().length,
+        nameLength: customerName.trim().length,
+        recentOrdersFromFp: 0,
+      });
+
+      // Check order velocity from this fingerprint
+      let finalScore = score;
+      let finalFlags = flags;
+      let deviceId: number | null = null;
+
+      if (fpHash) {
+        const device = await prisma.deviceFingerprint.findUnique({
+          where: { fpHash },
+          select: { id: true },
+        });
+        deviceId = device?.id || null;
+
+        if (deviceId) {
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+          const recentCount = await prisma.orderFingerprint.count({
+            where: { deviceFingerprintId: deviceId, createdAt: { gte: oneHourAgo } },
+          });
+          const rescored = calculateRiskScore(behavioral, {}, {
+            phoneValid: isValidBDPhone(customerPhone),
+            addressLength: customerAddress.trim().length,
+            nameLength: customerName.trim().length,
+            recentOrdersFromFp: recentCount,
+          });
+          finalScore = rescored.score;
+          finalFlags = rescored.flags;
+        }
+      }
+
+      // Update order with risk score + fpHash
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { riskScore: finalScore, fpHash: fpHash || null },
+      });
+
+      // Create OrderFingerprint record
+      await prisma.orderFingerprint.create({
+        data: {
+          orderId: order.id,
+          fpHash: fpHash || null,
+          ipAddress: clientIp,
+          deviceFingerprintId: deviceId,
+          fillDurationMs: behavioral.fillDurationMs || null,
+          mouseMovements: behavioral.mouseMovements || null,
+          pasteDetected: behavioral.pasteDetected || false,
+          honeypotTriggered: behavioral.honeypotTriggered || false,
+          tabSwitches: behavioral.tabSwitches || null,
+          riskScore: finalScore,
+          riskFlags: finalFlags.join(","),
+        },
+      });
+
+      // Update device fingerprint risk score if exists
+      if (fpHash && deviceId) {
+        await prisma.deviceFingerprint.update({
+          where: { fpHash },
+          data: {
+            riskScore: finalScore,
+            seenCount: { increment: 1 },
+            lastSeenAt: new Date(),
+            lastIp: clientIp,
+          },
+        });
+      }
+    } catch (e) {
+      console.error("[Spam] Fingerprint attach error:", e);
+    }
+  })();
+
   return jsonResponse(serialize(order), 201);
 }

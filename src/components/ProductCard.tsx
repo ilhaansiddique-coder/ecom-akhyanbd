@@ -10,6 +10,7 @@ import type { Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import { useCart } from "@/lib/CartContext";
 import { useLang } from "@/lib/LanguageContext";
+import { trackAddToCart } from "@/lib/analytics";
 
 interface ProductCardProps {
   product: Product;
@@ -37,12 +38,14 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   const handleAddToCart = () => {
     if (hasVar) { router.push(`/products/${slug}`); return; }
     addItem({ id: product.id, name: displayName, price, image });
+    trackAddToCart({ content_ids: [product.id], content_name: displayName, value: price });
     setShowAdded(true);
   };
 
   const handleOrderNow = () => {
     if (hasVar) { router.push(`/products/${slug}`); return; }
     addItem({ id: product.id, name: displayName, price, image });
+    trackAddToCart({ content_ids: [product.id], content_name: displayName, value: price });
     router.push("/checkout");
   };
 
@@ -134,7 +137,10 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
                   {lang === "en" ? "Continue Shopping" : "আরো কিনুন"}
                 </button>
                 <button
-                  onClick={() => { setShowAdded(false); router.push("/checkout"); }}
+                  onClick={() => {
+                    setShowAdded(false);
+                    router.push("/checkout");
+                  }}
                   className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors cursor-pointer"
                 >
                   {lang === "en" ? "Checkout" : "চেকআউট"}

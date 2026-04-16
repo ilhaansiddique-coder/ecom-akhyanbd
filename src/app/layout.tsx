@@ -3,6 +3,7 @@ import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "n
 import Script from "next/script";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
+import { prisma } from "@/lib/prisma";
 
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
@@ -67,13 +68,25 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Domain verification meta tag — read from DB
+  let fbDomainVerification: string | null = null;
+  try {
+    const setting = await prisma.siteSetting.findUnique({ where: { key: "fb_domain_verification" } });
+    fbDomainVerification = setting?.value || null;
+  } catch {}
+
   return (
     <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
+      {fbDomainVerification && (
+        <head>
+          <meta name="facebook-domain-verification" content={fbDomainVerification} />
+        </head>
+      )}
       <body className="min-h-screen bg-background" suppressHydrationWarning>
         {/* Mark JS as active so fade-in animations only apply after hydration */}
         <Script id="js-ready" strategy="beforeInteractive">{`document.documentElement.classList.add("js-ready")`}</Script>

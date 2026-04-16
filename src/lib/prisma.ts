@@ -18,6 +18,9 @@ if (!walInitialized.__walInit) {
   prisma.$executeRawUnsafe("PRAGMA journal_mode = WAL").catch(() => {});
   prisma.$executeRawUnsafe("PRAGMA busy_timeout = 5000").catch(() => {});  // Wait 5s instead of failing immediately
   prisma.$executeRawUnsafe("PRAGMA synchronous = NORMAL").catch(() => {}); // Faster writes, still safe with WAL
-  prisma.$executeRawUnsafe("PRAGMA cache_size = -20000").catch(() => {});   // 20MB cache (default is 2MB)
+  prisma.$executeRawUnsafe("PRAGMA cache_size = -40000").catch(() => {});   // 40MB cache
   prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON").catch(() => {});
+  prisma.$executeRawUnsafe("PRAGMA mmap_size = 268435456").catch(() => {}); // 256MB memory-mapped I/O
+  prisma.$executeRawUnsafe("PRAGMA temp_store = MEMORY").catch(() => {});   // Temp tables in RAM
+  prisma.$executeRawUnsafe("PRAGMA optimize").catch(() => {});              // Reanalyze query plans
 }

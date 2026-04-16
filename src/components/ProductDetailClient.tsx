@@ -7,6 +7,7 @@ import { useCart } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
+import { trackAddToCart, trackViewContent } from "@/lib/analytics";
 import { toBn } from "@/utils/toBn";
 import ProductGallery from "@/components/ProductGallery";
 
@@ -67,6 +68,12 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       price: activePrice,
       image: activeImage,
     }, quantity);
+    trackAddToCart({
+      content_ids: [productId],
+      content_name: productName,
+      value: activePrice * quantity,
+      quantity,
+    });
     setShowAdded(true);
   };
 
@@ -79,6 +86,12 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       price: activePrice,
       image: activeImage,
     }, quantity);
+    trackAddToCart({
+      content_ids: [productId],
+      content_name: productName,
+      value: activePrice * quantity,
+      quantity,
+    });
     router.push("/checkout");
   };
 
@@ -226,6 +239,20 @@ export function ProductGalleryWithVariants({
   const handleVariantImageChange = useCallback((img: string | undefined) => {
     setVariantImage(img);
   }, []);
+
+  // Track ViewContent on mount — defer so URL reflects current page after navigation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      trackViewContent({
+        content_ids: [productId],
+        content_name: productName,
+        value: price,
+        content_type: "product",
+        sourceUrl: window.location.href,
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [productId, productName, price]);
 
   return (
     <>

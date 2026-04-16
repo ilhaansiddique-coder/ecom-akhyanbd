@@ -1,9 +1,12 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
 import { FiMapPin, FiPhone, FiMail } from "react-icons/fi";
 import MotionFadeIn from "./MotionFadeIn";
 import T from "./T";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 const quickLinkKeys = [
   { key: "nav.home", href: "/" },
@@ -19,13 +22,23 @@ const legalLinkKeys = [
   { key: "footer.refund", href: "/refund" },
 ];
 
-const socialLinks = [
-  { icon: FaFacebookF, href: "https://www.facebook.com/mavesoj", label: "Facebook", color: "hover:bg-facebook" },
-  { icon: FaInstagram, href: "https://www.instagram.com/mavesoj", label: "Instagram", color: "hover:bg-instagram" },
-  { icon: FaYoutube, href: "https://www.youtube.com/@mavesoj", label: "YouTube", color: "hover:bg-youtube" },
-];
-
 export default function Footer() {
+  const settings = useSiteSettings();
+
+  // Fall back through DB keys: general form fields → contact fields → hardcoded defaults
+  const phone = settings.phone || "";
+  const email = settings.email || "";
+  const address = settings.address || "";
+  const facebook = settings.facebook || "";
+  const instagram = settings.instagram || "";
+  const youtube = settings.youtube || "";
+
+  const socialLinks = [
+    ...(facebook ? [{ icon: FaFacebookF, href: facebook, label: "Facebook", color: "hover:bg-facebook" }] : []),
+    ...(instagram ? [{ icon: FaInstagram, href: instagram, label: "Instagram", color: "hover:bg-instagram" }] : []),
+    ...(youtube ? [{ icon: FaYoutube, href: youtube, label: "YouTube", color: "hover:bg-youtube" }] : []),
+  ];
+
   return (
     <footer className="bg-primary-dark text-white">
       <div className="container mx-auto px-4 py-12 md:py-16">
@@ -42,18 +55,35 @@ export default function Footer() {
               <T k="footer.description" />
             </p>
             <div className="space-y-2.5 text-sm text-white/70">
-              <div className="flex items-start gap-2">
-                <FiMapPin className="w-4 h-4 mt-0.5 shrink-0 text-white/50" />
-                <span>ইব্রাহিমপুর, লক্ষ্মীপুর, সদর, নাটোর-৬৪০০</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FiPhone className="w-4 h-4 text-white/50" />
-                <span>+880 1731492117</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FiMail className="w-4 h-4 text-white/50" />
-                <span>info@mavesoj.com</span>
-              </div>
+              {address && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2 hover:text-white transition-colors"
+                >
+                  <FiMapPin className="w-4 h-4 mt-0.5 shrink-0 text-white/50" />
+                  <span>{address}</span>
+                </a>
+              )}
+              {phone && (
+                <a
+                  href={`tel:${phone.replace(/\s/g, "")}`}
+                  className="flex items-center gap-2 hover:text-white transition-colors"
+                >
+                  <FiPhone className="w-4 h-4 text-white/50" />
+                  <span>{phone}</span>
+                </a>
+              )}
+              {email && (
+                <a
+                  href={`mailto:${email}`}
+                  className="flex items-center gap-2 hover:text-white transition-colors"
+                >
+                  <FiMail className="w-4 h-4 text-white/50" />
+                  <span>{email}</span>
+                </a>
+              )}
             </div>
           </MotionFadeIn>
 
@@ -99,13 +129,15 @@ export default function Footer() {
               <input type="email" placeholder="Email" className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 transition-colors" />
               <button className="px-4 py-2.5 bg-white text-primary font-bold text-sm rounded-lg hover:bg-white/90 transition-colors shrink-0"><T k="footer.subscribe" /></button>
             </div>
-            <div className="flex items-center gap-3">
-              {socialLinks.map((social) => (
-                <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-10 h-10 rounded-lg bg-white/10 ${social.color} flex items-center justify-center text-white transition-colors`} aria-label={social.label}>
-                  <social.icon className="w-4 h-4" />
-                </a>
-              ))}
-            </div>
+            {socialLinks.length > 0 && (
+              <div className="flex items-center gap-3">
+                {socialLinks.map((social) => (
+                  <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-10 h-10 rounded-lg bg-white/10 ${social.color} flex items-center justify-center text-white transition-colors`} aria-label={social.label}>
+                    <social.icon className="w-4 h-4" />
+                  </a>
+                ))}
+              </div>
+            )}
           </MotionFadeIn>
         </div>
       </div>

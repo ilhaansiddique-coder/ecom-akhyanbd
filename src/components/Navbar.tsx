@@ -7,6 +7,7 @@ import { FiSearch, FiShoppingCart, FiMenu, FiX, FiPhone, FiUser, FiLogOut } from
 import { useAuth } from "@/lib/AuthContext";
 import { useCart } from "@/lib/CartContext";
 import { useLang } from "@/lib/LanguageContext";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { toBn } from "@/utils/toBn";
 
 interface NavbarProps {
@@ -62,6 +63,8 @@ function AuthButton({ onAuthOpen, mobile = false }: { onAuthOpen: () => void; mo
 export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarProps) {
   const { totalItems } = useCart();
   const { t, lang } = useLang();
+  const settings = useSiteSettings();
+  const headerPhone = settings.phone || "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -85,10 +88,12 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
       {/* Top Bar */}
       <div className="bg-primary text-white text-sm py-2 hidden md:block">
         <div className="container mx-auto px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FiPhone className="w-3.5 h-3.5" />
-            <span>+880 1731492117</span>
-          </div>
+          {headerPhone && (
+            <a href={`tel:${headerPhone}`} className="flex items-center gap-2 hover:text-white/80 transition-colors">
+              <FiPhone className="w-3.5 h-3.5" />
+              <span>{headerPhone}</span>
+            </a>
+          )}
           <p className="text-white/90 text-xs">
             {t("nav.topbar.delivery")}
           </p>
@@ -174,14 +179,14 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
               </Link>
             ))}
 
-            <div className="pt-3 mt-3 border-t border-border">
-              <div className="flex items-center justify-between px-4 py-2">
-                <div className="flex items-center gap-2 text-sm text-text-muted">
+            {headerPhone && (
+              <div className="pt-3 mt-3 border-t border-border">
+                <a href={`tel:${headerPhone}`} className="flex items-center gap-2 text-sm text-text-muted px-4 py-2 hover:text-primary transition-colors">
                   <FiPhone className="w-4 h-4" />
-                  <span>+880 1731492117</span>
-                </div>
+                  <span>{headerPhone}</span>
+                </a>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </nav>

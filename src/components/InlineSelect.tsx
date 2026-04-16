@@ -15,9 +15,10 @@ interface InlineSelectProps {
   onChange: (value: string) => void;
   fullWidth?: boolean;
   placeholder?: string;
+  absolute?: boolean; // use relative/absolute positioning instead of fixed (for non-dashboard pages)
 }
 
-export default function InlineSelect({ value, options, onChange, fullWidth, placeholder }: InlineSelectProps) {
+export default function InlineSelect({ value, options, onChange, fullWidth, placeholder, absolute }: InlineSelectProps) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -74,19 +75,67 @@ export default function InlineSelect({ value, options, onChange, fullWidth, plac
 
   const selected = options.find((o) => o.value === value);
 
+  const trigger = (
+    <button
+      type="button"
+      ref={btnRef}
+      onClick={handleToggle}
+      className={`flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white hover:border-gray-300 focus:border-[#0f5931] focus:outline-none transition-colors ${fullWidth ? "w-full" : "min-w-32"}`}
+    >
+      {selected?.color && <span className={`w-2 h-2 rounded-full shrink-0 ${selected.color}`} />}
+      <span className="flex-1 text-left text-gray-700">{selected?.label || placeholder || "—"}</span>
+      <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+    </button>
+  );
+
+  const dropdown = (
+    <div
+      ref={dropRef}
+      className="bg-white border border-gray-100 rounded-xl shadow-xl shadow-black/10"
+      style={{ animation: "fadeSlideIn 0.12s ease-out", minWidth: 160 }}
+    >
+      <div className="p-1 max-h-56 overflow-y-auto inline-select-scroll">
+        {options.map((opt) => {
+          const isSelected = opt.value === value;
+          return (
+            <button
+              type="button"
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); setPos(null); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                isSelected
+                  ? "bg-[#0f5931]/8 text-[#0f5931] font-medium"
+                  : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {opt.color && <span className={`w-2 h-2 rounded-full shrink-0 ${opt.color}`} />}
+              <span className="flex-1 text-left">{opt.label}</span>
+              {isSelected && <FiCheck className="w-3.5 h-3.5 text-[#0f5931] shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // Absolute mode: stays inside normal document flow (for public pages)
+  if (absolute) {
+    return (
+      <div className="relative">
+        {trigger}
+        {open && (
+          <div className="absolute z-50 top-full left-0 mt-1 w-full">
+            {dropdown}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fixed mode: escapes overflow containers (for dashboard modals/tables)
   return (
     <>
-      <button
-        type="button"
-        ref={btnRef}
-        onClick={handleToggle}
-        className={`flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white hover:border-gray-300 transition-colors ${fullWidth ? "w-full" : "min-w-32"}`}
-      >
-        {selected?.color && <span className={`w-2 h-2 rounded-full shrink-0 ${selected.color}`} />}
-        <span className="flex-1 text-left text-gray-700">{selected?.label || placeholder || "—"}</span>
-        <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-      </button>
-
+      {trigger}
       {open && pos && (
         <div
           ref={dropRef}

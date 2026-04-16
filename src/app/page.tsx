@@ -4,57 +4,13 @@ import FlashSale from "@/components/FlashSale";
 import AllProducts from "@/components/AllProducts";
 import LazyCustomerReviews from "@/components/LazyCustomerReviews";
 import Features from "@/components/Features";
-import { mapApiProduct, latestProducts as staticLatest } from "@/data/products";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
+import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
 
-export const dynamic = "force-dynamic";
-
-const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
-
-const emojiMap: Record<string, string> = {
-  "ভেষজ গুঁড়ো": "🌿", "ভেষজ চা": "🍵", "হার্ট কেয়ার": "❤️",
-  "চুলের যত্ন": "💇", "কম্বো প্যাক": "📦", "ভেষজ মিশ্রণ": "🧪",
-};
-
-const colorMap: Record<string, string> = {
-  "ভেষজ গুঁড়ো": "from-green-50 to-green-100", "ভেষজ চা": "from-amber-50 to-amber-100",
-  "হার্ট কেয়ার": "from-red-50 to-red-100", "চুলের যত্ন": "from-purple-50 to-purple-100",
-  "কম্বো প্যাক": "from-orange-50 to-orange-100", "ভেষজ মিশ্রণ": "from-teal-50 to-teal-100",
-};
-
-const fallbackCategories = [
-  { name: "ভেষজ গুঁড়ো", emoji: "🌿", slug: "herbal-powder", color: "from-green-50 to-green-100" },
-  { name: "ভেষজ চা", emoji: "🍵", slug: "herbal-tea", color: "from-amber-50 to-amber-100" },
-  { name: "হার্ট কেয়ার", emoji: "❤️", slug: "heart-care", color: "from-red-50 to-red-100" },
-  { name: "চুলের যত্ন", emoji: "💇", slug: "hair-care", color: "from-purple-50 to-purple-100" },
-  { name: "কম্বো প্যাক", emoji: "📦", slug: "combo-pack", color: "from-orange-50 to-orange-100" },
-  { name: "সকল পণ্য", emoji: "🛒", slug: "all", color: "from-lime-50 to-lime-100" },
-];
-
-async function fetchCategories() {
-  try {
-    const res = await fetch(`${API_URL}/categories`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["categories"] },
-    });
-    if (!res.ok) return fallbackCategories;
-    const data = await res.json();
-    const cats = Array.isArray(data) ? data : data.data || [];
-    if (cats.length === 0) return fallbackCategories;
-    const mapped = cats.map((c: { id?: number; name: string; slug: string; image?: string; products_count?: number }) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      image: c.image || null,
-      products_count: c.products_count || 0,
-      emoji: emojiMap[c.name] || "📦",
-      color: colorMap[c.name] || "from-gray-50 to-gray-100",
-    }));
-    return mapped;
-  } catch {
-    return fallbackCategories;
-  }
-}
+// ISR: regenerate every 60s instead of force-dynamic
+export const revalidate = 60;
 
 interface FlashSaleData {
   title: string;
@@ -62,158 +18,109 @@ interface FlashSaleData {
   products: Product[];
 }
 
-async function fetchFlashSale(): Promise<FlashSaleData | null> {
+async function getFlashSale(): Promise<FlashSaleData | null> {
+  const now = new Date();
+  const flashSale = await prisma.flashSale.findFirst({
+    where: { isActive: true, startsAt: { lte: now }, endsAt: { gte: now } },
+    include: {
+      products: {
+        include: {
+          product: {
+            include: {
+              category: { select: { id: true, name: true, slug: true } },
+              brand: { select: { id: true, name: true, slug: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!flashSale || !flashSale.products.length) return null;
+
+  return {
+    title: flashSale.title || "ফ্ল্যাশ সেল অফার",
+    ends_at: flashSale.endsAt.toISOString(),
+    products: flashSale.products.map((fp) => {
+      const p = serialize(fp.product);
+      const mapped = mapApiProduct(p);
+      mapped.originalPrice = Number(fp.product.price) || 0;
+      mapped.price = Number(fp.salePrice);
+      return mapped;
+    }),
+  };
+}
+
+async function getProducts(): Promise<{ products: Product[]; total: number }> {
+  const [rows, total] = await Promise.all([
+    prisma.product.findMany({
+      where: { isActive: true },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        brand: { select: { id: true, name: true, slug: true } },
+        variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
+      },
+      orderBy: { sortOrder: "asc" },
+      take: 20,
+    }),
+    prisma.product.count({ where: { isActive: true } }),
+  ]);
+
+  return {
+    products: rows.map((p) => mapApiProduct(serialize(p))),
+    total,
+  };
+}
+
+async function getApprovedReviews() {
+  const reviews = await prisma.review.findMany({
+    where: { isApproved: true },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    include: { product: { select: { name: true } } },
+  });
+
+  return reviews.map((r) => ({
+    ...serialize(r),
+    product_name: r.product?.name || "",
+  }));
+}
+
+async function getHomepageContent() {
   try {
-    const res = await fetch(`${API_URL}/flash-sales/active`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 60, tags: ["flash-sales"] },
-    });
-    if (!res.ok) return null;
-    const sale = await res.json();
-    if (!sale || !sale.products || sale.products.length === 0) return null;
-    return {
-      title: sale.title || "ফ্ল্যাশ সেল অফার",
-      ends_at: sale.ends_at,
-      products: sale.products.map((p: Record<string, unknown>) => {
-        const mapped = mapApiProduct(p);
-        const salePrice = (p.pivot as { sale_price?: number })?.sale_price;
-        if (salePrice) {
-          mapped.originalPrice = Number(p.price) || 0;
-          mapped.price = Number(salePrice);
-        }
-        return mapped;
-      }),
-    };
-  } catch {
-    return null;
-  }
+    const setting = await prisma.siteSetting.findUnique({ where: { key: "homepage_content" } });
+    if (setting?.value) return JSON.parse(setting.value);
+  } catch { /* */ }
+  return null;
 }
 
-async function fetchAllProducts(): Promise<{ products: Product[]; total: number }> {
+export default async function Home() {
+  let flashSale: FlashSaleData | null = null;
+  let products: Product[] = [];
+  let total = 0;
+  let reviews: any[] = [];
+  let homepageContent: any = null;
+
   try {
-    const res = await fetch(`${API_URL}/products?per_page=20&page=1`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["products"] },
-    });
-    if (!res.ok) return { products: staticLatest, total: staticLatest.length };
-    const json = await res.json();
-    const data = json.data || json;
-    const total = json.total || json.meta?.total || (Array.isArray(data) ? data.length : 0);
-    if (Array.isArray(data) && data.length > 0) return { products: data.map(mapApiProduct), total };
-    return { products: staticLatest, total: staticLatest.length };
+    [flashSale, { products, total }, reviews, homepageContent] = await Promise.all([
+      getFlashSale(),
+      getProducts(),
+      getApprovedReviews(),
+      getHomepageContent(),
+    ]);
   } catch {
-    return { products: staticLatest, total: staticLatest.length };
+    // DB unavailable at build time — page will be empty shell, revalidated on first request
   }
-}
 
-async function fetchBanners() {
-  try {
-    const res = await fetch(`${API_URL}/banners`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 600, tags: ["banners"] },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : data.data || [];
-  } catch {
-    return [];
-  }
-}
-
-async function fetchApprovedReviews() {
-  try {
-    // Fetch all products, then get reviews for each — or use a simpler approach:
-    // Get all approved reviews from the admin endpoint (public-facing)
-    const res = await fetch(`${API_URL}/reviews/approved`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: ["reviews"] },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : data.data || [];
-  } catch {
-    return [];
-  }
-}
-
-/* ---------- Independent async section components ---------- */
-
-async function FlashSaleSection() {
-  const flashSale = await fetchFlashSale();
-  return <FlashSale data={flashSale} />;
-}
-
-async function AllProductsSection() {
-  const { products, total } = await fetchAllProducts();
-  return <AllProducts initialProducts={products} total={total} />;
-}
-
-async function ReviewsSection() {
-  const reviews = await fetchApprovedReviews();
-  return <LazyCustomerReviews reviews={reviews} />;
-}
-
-/* ---------- Lightweight skeleton placeholders ---------- */
-
-function _unused_CategorySkeleton() {
-  return (
-    <section className="py-12 md:py-16 bg-white">
-      <div className="container mx-auto px-4">
-        <div className="text-center mb-10">
-          <div className="h-8 bg-gray-100 rounded-lg w-32 mx-auto animate-pulse" />
-          <div className="h-4 bg-gray-50 rounded w-48 mx-auto mt-4 animate-pulse" />
-        </div>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4 md:gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gray-100 animate-pulse" />
-              <div className="h-4 bg-gray-100 rounded w-16 mt-3 animate-pulse" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ProductsSkeleton() {
-  return (
-    <section className="py-12 md:py-16 bg-white">
-      <div className="container mx-auto px-4">
-        <div className="h-8 bg-gray-100 rounded-lg w-40 mb-10 animate-pulse" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-gray-50 rounded-2xl overflow-hidden animate-pulse">
-              <div className="aspect-square bg-gray-100" />
-              <div className="p-4 space-y-2">
-                <div className="h-4 bg-gray-100 rounded w-3/4" />
-                <div className="h-5 bg-gray-100 rounded w-1/3" />
-                <div className="h-10 bg-gray-100 rounded" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Page: Hero streams instantly, sections stream as data arrives ---------- */
-
-export default function Home() {
   return (
     <>
-      <Hero />
+      <Hero content={homepageContent?.hero} />
+      <FlashSale data={flashSale} />
+      <AllProducts initialProducts={products} total={total} />
       <Suspense fallback={null}>
-        <FlashSaleSection />
+        <LazyCustomerReviews reviews={reviews} content={homepageContent?.reviews} />
       </Suspense>
-      <Suspense fallback={<ProductsSkeleton />}>
-        <AllProductsSection />
-      </Suspense>
-      <Suspense fallback={null}>
-        <ReviewsSection />
-      </Suspense>
-      <Features />
+      <Features content={homepageContent?.features} />
     </>
   );
 }

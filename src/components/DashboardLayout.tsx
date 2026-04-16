@@ -33,6 +33,7 @@ import {
   FiShoppingCart,
   FiMail,
   FiGlobe,
+  FiShield,
 } from "react-icons/fi";
 
 interface NavItem {
@@ -69,6 +70,7 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       icon: FiShoppingBag,
       items: [
         { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
+        { label: t("dash.spamDetection") || "Spam Detection", href: "/dashboard/spam", icon: FiShield },
       ],
     },
     {
@@ -92,6 +94,7 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       label: t("dash.content"),
       icon: FiLayout,
       items: [
+        { label: t("dash.homepageContent") || "Homepage", href: "/dashboard/homepage", icon: FiLayout },
         { label: t("dash.banners"), href: "/dashboard/banners", icon: FiImage },
         { label: t("dash.menus"), href: "/dashboard/menus", icon: FiMenuIcon },
         { label: t("dash.blog"), href: "/dashboard/blog", icon: FiFileText },
@@ -183,7 +186,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto sidebar-nav px-3 py-4 space-y-0.5">
         {navGroups.map((group) => {
           if (!group.items) {
             const isActive = pathname === group.href;
@@ -456,7 +459,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto inline-select-scroll p-4 md:p-6">
           {children}
         </main>
       </div>
