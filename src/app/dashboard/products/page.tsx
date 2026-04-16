@@ -62,6 +62,8 @@ const emptyForm = {
   unlimited_stock: false,
   is_active: true,
   is_featured: false,
+  custom_shipping: false,
+  shipping_cost: "",
   has_variations: false,
   variation_type: "",
   variants: [] as { label: string; price: string; original_price: string; sku: string; stock: string; unlimited_stock: boolean; image: string; is_active: boolean }[],
@@ -173,6 +175,8 @@ export default function ProductsPage() {
       unlimited_stock: (p as any).unlimited_stock ?? false,
       is_active: p.is_active,
       is_featured: p.is_featured,
+      custom_shipping: (p as any).custom_shipping || (p as any).customShipping || false,
+      shipping_cost: (p as any).shipping_cost != null ? String((p as any).shipping_cost) : ((p as any).shippingCost != null ? String((p as any).shippingCost) : ""),
       has_variations: (p as any).has_variations || (p as any).hasVariations || false,
       variation_type: (p as any).variation_type || (p as any).variationType || "",
       variants: ((p as any).variants || []).map((v: any) => ({
@@ -238,7 +242,7 @@ export default function ProductsPage() {
       description: f.description || undefined,
       price: parseNum(f.price),
       original_price: f.original_price ? parseNum(f.original_price) : null,
-      stock: parseNum(f.stock),
+      stock: f.has_variations ? f.variants.reduce((s, v) => s + (Number(v.stock) || 0), 0) : parseNum(f.stock),
       unlimited_stock: f.unlimited_stock,
       category_id: f.category_id ? Number(f.category_id) : null,
       brand_id: f.brand_id ? Number(f.brand_id) : null,
@@ -247,6 +251,8 @@ export default function ProductsPage() {
       weight: f.weight || undefined,
       is_active: f.is_active,
       is_featured: f.is_featured,
+      custom_shipping: f.custom_shipping,
+      shipping_cost: f.custom_shipping && f.shipping_cost ? parseNum(f.shipping_cost) : null,
       has_variations: f.has_variations,
       variation_type: f.variation_type || undefined,
       variants: f.has_variations ? f.variants.map((v, i) => ({
@@ -354,8 +360,8 @@ export default function ProductsPage() {
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-52">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -367,15 +373,69 @@ export default function ProductsPage() {
           </div>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors shrink-0"
           >
             <FiPlus className="w-4 h-4" />
-            {t("btn.addProduct")}
+            <span className="hidden sm:inline">{t("btn.addProduct")}</span>
           </button>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Mobile Card View */}
+        <div className="lg:hidden space-y-3">
+          {loading ? (
+            <TableSkeleton />
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-12 text-center text-gray-400">{t("empty.products")}</div>
+          ) : filtered.map((p) => (
+            <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 pt-4 pb-3">
+                <div className="flex items-start gap-3">
+                  {p.image ? (
+                    <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-14 h-14 rounded-xl object-cover border border-gray-100 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                      <FiImage className="w-5 h-5 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-800 text-sm truncate">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.category?.name || "—"}{p.badge ? ` · ${p.badge}` : ""}</p>
+                      </div>
+                      <p className="text-base font-bold text-[#0f5931] shrink-0">৳{toBn(p.price)}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        {p.is_active ? t("form.active") : t("form.inactive")}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {(p as any).unlimited_stock ? (lang === "en" ? "∞ Stock" : "∞ স্টক") : `${toBn(p.stock)} ${lang === "en" ? "stock" : "স্টক"}`}
+                      </span>
+                      {!((p as any).unlimited_stock) && ((p as any).has_variations || (p as any).hasVariations) && (p as any).variants?.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {(p as any).variants.map((v: any) => (
+                            <span key={v.id || v.label} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{v.label}: {toBn(v.stock)}</span>
+                          ))}
+                        </div>
+                      )}
+                      <span className="text-xs text-gray-400">{toBn((p as any).sold_count ?? p.sold ?? 0)} {lang === "en" ? "sold" : "বিক্রি"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-1">
+                <a href={`/products/${p.slug}`} target="_blank" rel="noopener noreferrer" className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"><FiEye className="w-4 h-4" /></a>
+                <button onClick={() => openEdit(p)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><FiEdit2 className="w-4 h-4" /></button>
+                <button onClick={() => duplicateProduct(p)} className="p-2 text-violet-600 hover:bg-violet-100 rounded-lg transition-colors"><FiCopy className="w-4 h-4" /></button>
+                <button onClick={() => setDeleteId(p.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden lg:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {loading ? (
             <TableSkeleton />
           ) : (
@@ -416,7 +476,20 @@ export default function ProductsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-500">{p.category?.name || "—"}</td>
                         <td className="px-4 py-3 font-semibold text-[#0f5931] whitespace-nowrap">৳{toBn(p.price)}</td>
-                        <td className="px-4 py-3 text-gray-600">{(p as any).unlimited_stock ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span> : toBn(p.stock)}</td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {(p as any).unlimited_stock ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
+                          ) : ((p as any).has_variations || (p as any).hasVariations) && (p as any).variants?.length > 0 ? (
+                            <div>
+                              <span className="font-semibold text-sm">{toBn(p.stock)}</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {(p as any).variants.map((v: any) => (
+                                  <span key={v.id || v.label} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{v.label}: {toBn(v.stock)}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : toBn(p.stock)}
+                        </td>
                         <td className="px-4 py-3 text-gray-600">{toBn((p as any).sold_count ?? p.sold ?? 0)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -481,21 +554,25 @@ export default function ProductsPage() {
                     </div>
                     <div>
                       <label className={labelCls}>{t("form.stock")}</label>
-                      <input name="stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }}
-                        className={inputCls + (form.unlimited_stock ? " opacity-50" : "")} placeholder="0"
-                        disabled={form.unlimited_stock} />
+                      <input name="stock" type="number" min="0" step="1"
+                        value={form.has_variations ? form.variants.reduce((s, v) => s + (Number(v.stock) || 0), 0) : form.stock}
+                        onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, stock: v })); }}
+                        className={inputCls + ((form.unlimited_stock || form.has_variations) ? " opacity-50" : "")} placeholder="0"
+                        disabled={form.unlimited_stock || form.has_variations} />
+                      {form.has_variations && <p className="text-[10px] text-gray-400 mt-0.5">{lang === "en" ? "Auto from variants" : "ভ্যারিয়েশন থেকে"}</p>}
                     </div>
                   </div>
-                  {/* Row: Unlimited toggle | Badge | Weight — 33% each */}
-                  <div className="grid grid-cols-3 gap-3 col-span-2">
+                  {/* Row: Unlimited toggle | Badge — 2 cols on mobile, 3 on desktop */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 col-span-2">
                     <div>
                       <label className={labelCls}>&nbsp;</label>
-                      <button type="button" onClick={() => setForm(prev => ({ ...prev, unlimited_stock: !prev.unlimited_stock }))}
-                        className={`w-full h-[42px] flex items-center justify-between gap-2 px-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                          form.unlimited_stock ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                      <button type="button" onClick={() => { if (!form.has_variations) setForm(prev => ({ ...prev, unlimited_stock: !prev.unlimited_stock })); }}
+                        className={`w-full h-[42px] flex items-center justify-between gap-1 px-2.5 rounded-xl border text-xs md:text-sm font-medium transition-all ${
+                          form.has_variations ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed" :
+                          form.unlimited_stock ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931] cursor-pointer" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 cursor-pointer"
                         }`}>
                         <span>{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
-                        <div className={`relative w-8 h-[18px] rounded-full transition-colors ${form.unlimited_stock ? "bg-[#0f5931]" : "bg-gray-300"}`}>
+                        <div className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${form.unlimited_stock ? "bg-[#0f5931]" : "bg-gray-300"}`}>
                           <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${form.unlimited_stock ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
                         </div>
                       </button>
@@ -527,20 +604,43 @@ export default function ProductsPage() {
                         );
                       })()}
                     </div>
-                    <div>
+                    <div className="col-span-2 md:col-span-1">
                       <label className={labelCls}>{t("form.weight")}</label>
                       <input name="weight" value={form.weight} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, weight: v })); }} className={inputCls} placeholder="যেমন: ১০০গ্রাম" />
                     </div>
                   </div>
+                  {/* Custom Shipping */}
+                  <div className="grid grid-cols-2 gap-3 col-span-2">
+                    <div>
+                      <label className={labelCls}>&nbsp;</label>
+                      <button type="button" onClick={() => setForm(prev => ({ ...prev, custom_shipping: !prev.custom_shipping }))}
+                        className={`w-full h-[42px] flex items-center justify-between gap-1 px-2.5 rounded-xl border text-xs md:text-sm font-medium transition-all cursor-pointer ${
+                          form.custom_shipping ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+                        }`}>
+                        <span>{lang === "en" ? "Custom Shipping" : "কাস্টম শিপিং"}</span>
+                        <div className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${form.custom_shipping ? "bg-[#0f5931]" : "bg-gray-300"}`}>
+                          <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${form.custom_shipping ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+                        </div>
+                      </button>
+                    </div>
+                    {form.custom_shipping && (
+                      <div>
+                        <label className={labelCls}>{lang === "en" ? "Shipping Cost" : "শিপিং খরচ"}</label>
+                        <input name="shipping_cost" type="number" min="0" step="1" value={form.shipping_cost}
+                          onChange={(e) => setForm(prev => ({ ...prev, shipping_cost: e.target.value }))}
+                          className={inputCls} placeholder="৳ 120" />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Description (80%) + Image (20%) in one row */}
-                <div className="flex gap-4 col-span-2">
-                  <div className="flex-[4] flex flex-col">
+                {/* Description + Image — stacked on mobile, side by side on desktop */}
+                <div className="flex flex-col md:flex-row gap-4 col-span-2">
+                  <div className="md:flex-[4] flex flex-col">
                     <label className={labelCls}>{t("form.description")}</label>
                     <textarea name="description" value={form.description} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, description: v })); }} className={inputCls + " resize-none flex-1 min-h-[120px]"} />
                   </div>
-                  <div className="flex-[1]"
+                  <div className="md:flex-[1]"
                     onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleDrop}>

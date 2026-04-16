@@ -40,7 +40,7 @@ interface ProductDetailClientProps {
   onVariantImageChange?: (image: string | undefined) => void;
 }
 
-export function AddToCartSection({ productId, productName, price, image, hasVariations, variationType, variants, onVariantImageChange }: ProductDetailClientProps) {
+export function AddToCartSection({ productId, productName, price, image, hasVariations, variationType, variants, onVariantImageChange, productStock, productUnlimitedStock }: ProductDetailClientProps & { productStock?: number; productUnlimitedStock?: boolean }) {
   const { addItem } = useCart();
   const { lang } = useLang();
   const router = useRouter();
@@ -50,16 +50,25 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
   const needsVariantSelection = hasVariations && variants && variants.length > 0;
   const isDisabled = !!needsVariantSelection && !selectedVariant;
 
-  // Notify parent when variant image changes
+  // Notify parent when variant image changes + reset quantity to 1
   useEffect(() => {
     onVariantImageChange?.(selectedVariant?.image);
+    setQuantity(1);
   }, [selectedVariant, onVariantImageChange]);
 
   const activePrice = selectedVariant ? selectedVariant.price : price;
   const activeImage = selectedVariant?.image || image;
   const activeOriginalPrice = selectedVariant?.original_price;
 
+  // Stock logic
+  const activeStock = selectedVariant ? selectedVariant.stock : (needsVariantSelection ? 0 : (productStock ?? 0));
+  const activeUnlimited = selectedVariant ? selectedVariant.unlimited_stock : (needsVariantSelection ? false : productUnlimitedStock);
+  const isOutOfStock = !activeUnlimited && activeStock <= 0 && !needsVariantSelection;
+  const isVariantOutOfStock = selectedVariant && !selectedVariant.unlimited_stock && selectedVariant.stock <= 0;
+  const maxQty = activeUnlimited ? 999 : Math.max(activeStock, 1);
+
   const handleAddToBag = () => {
+    if (isOutOfStock || isVariantOutOfStock) return;
     addItem({
       id: productId,
       variantId: selectedVariant?.id,
@@ -67,6 +76,8 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       variantLabel: selectedVariant?.label,
       price: activePrice,
       image: activeImage,
+      stock: activeUnlimited ? undefined : activeStock,
+      unlimitedStock: activeUnlimited,
     }, quantity);
     trackAddToCart({
       content_ids: [productId],
@@ -78,6 +89,7 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
   };
 
   const handleOrderNow = () => {
+    if (isOutOfStock || isVariantOutOfStock) return;
     addItem({
       id: productId,
       variantId: selectedVariant?.id,
@@ -85,6 +97,8 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       variantLabel: selectedVariant?.label,
       price: activePrice,
       image: activeImage,
+      stock: activeUnlimited ? undefined : activeStock,
+      unlimitedStock: activeUnlimited,
     }, quantity);
     trackAddToCart({
       content_ids: [productId],
@@ -133,16 +147,23 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {variants!.map((v) => (
-                <button key={v.id} type="button" onClick={() => setSelectedVariant(v)}
-                  className={`px-4 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
-                    selectedVariant?.id === v.id
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-foreground hover:border-primary/50"
-                  }`}>
-                  {v.label}
-                </button>
-              ))}
+              {variants!.map((v) => {
+                const vOutOfStock = !v.unlimited_stock && v.stock <= 0;
+                return (
+                  <button key={v.id} type="button" onClick={() => setSelectedVariant(v)}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-medium border-2 transition-all relative ${
+                      vOutOfStock ? "border-gray-200 text-gray-300 line-through cursor-not-allowed" :
+                      selectedVariant?.id === v.id
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-foreground hover:border-primary/50"
+                    }`}>
+                    {v.label}
+                    {!v.unlimited_stock && v.stock > 0 && v.stock <= 5 && (
+                      <span className="ml-1 text-[10px] text-amber-600">({toBn(v.stock)})</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
             {isDisabled && (
               <p className="mt-2 text-xs text-sale-red">{lang === "en" ? "Please select an option" : "অনুগ্রহ করে একটি অপশন বাছুন"}</p>
@@ -150,13 +171,37 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
           </div>
         )}
 
+        {/* Stock indicator */}
+        {!needsVariantSelection && !activeUnlimited && (
+          <div className="text-sm">
+            {isOutOfStock ? (
+              <span className="font-semibold text-red-500">{lang === "en" ? "Out of Stock" : "স্টক শেষ"}</span>
+            ) : activeStock <= 5 ? (
+              <span className="font-medium text-amber-600">{lang === "en" ? `Only ${activeStock} left!` : `মাত্র ${toBn(activeStock)}টি বাকি!`}</span>
+            ) : (
+              <span className="text-gray-500">{lang === "en" ? `${activeStock} in stock` : `${toBn(activeStock)}টি স্টকে আছে`}</span>
+            )}
+          </div>
+        )}
+        {selectedVariant && !selectedVariant.unlimited_stock && (
+          <div className="text-sm">
+            {isVariantOutOfStock ? (
+              <span className="font-semibold text-red-500">{lang === "en" ? "Out of Stock" : "স্টক শেষ"}</span>
+            ) : selectedVariant.stock <= 5 ? (
+              <span className="font-medium text-amber-600">{lang === "en" ? `Only ${selectedVariant.stock} left!` : `মাত্র ${toBn(selectedVariant.stock)}টি বাকি!`}</span>
+            ) : (
+              <span className="text-gray-500">{lang === "en" ? `${selectedVariant.stock} in stock` : `${toBn(selectedVariant.stock)}টি স্টকে আছে`}</span>
+            )}
+          </div>
+        )}
+
         {/* Row 1: Quantity */}
         <div className="flex items-center gap-1 bg-white rounded-xl border border-border w-fit">
-          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:text-primary transition-colors">
+          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={quantity <= 1} className="p-3 hover:text-primary transition-colors disabled:opacity-30">
             <FiMinus className="w-4 h-4" />
           </button>
           <span className="text-lg font-semibold w-10 text-center" suppressHydrationWarning>{toBn(quantity)}</span>
-          <button onClick={() => setQuantity(quantity + 1)} className="p-3 hover:text-primary transition-colors">
+          <button onClick={() => setQuantity(Math.min(quantity + 1, maxQty))} disabled={!activeUnlimited && quantity >= maxQty} className="p-3 hover:text-primary transition-colors disabled:opacity-30">
             <FiPlus className="w-4 h-4" />
           </button>
         </div>
@@ -164,17 +209,17 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
         {/* Row 2: Add to Bag */}
         <button
           onClick={handleAddToBag}
-          disabled={isDisabled}
-          className={`w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border-2 ${isDisabled ? "border-gray-200 text-gray-300 cursor-not-allowed" : "border-primary text-primary hover:bg-primary/5"}`}
+          disabled={isDisabled || isOutOfStock || !!isVariantOutOfStock}
+          className={`w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 border-2 ${(isDisabled || isOutOfStock || isVariantOutOfStock) ? "border-gray-200 text-gray-300 cursor-not-allowed" : "border-primary text-primary hover:bg-primary/5"}`}
         >
           <FiShoppingCart className="w-5 h-5" />
-          {lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন"}
+          {(isOutOfStock || isVariantOutOfStock) ? (lang === "en" ? "Out of Stock" : "স্টক শেষ") : (lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন")}
         </button>
 
         {/* Row 3: Order Now */}
         <button
           onClick={handleOrderNow}
-          disabled={isDisabled}
+          disabled={isDisabled || isOutOfStock || !!isVariantOutOfStock}
           className={`w-full py-3.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm ${isDisabled ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-primary text-white hover:bg-primary-light"}`}
         >
           <FiShoppingBag className="w-5 h-5" />
@@ -223,6 +268,8 @@ interface ProductGalleryWithVariantsProps {
   productId: number;
   productName: string;
   price: number;
+  productStock?: number;
+  productUnlimitedStock?: boolean;
   hasVariations?: boolean;
   variationType?: string;
   variants?: Variant[];
@@ -232,7 +279,7 @@ interface ProductGalleryWithVariantsProps {
 }
 
 export function ProductGalleryWithVariants({
-  mainImage, images, alt, productId, productName, price, hasVariations, variationType, variants,
+  mainImage, images, alt, productId, productName, price, productStock, productUnlimitedStock, hasVariations, variationType, variants,
   galleryOverlay, detailsTop, detailsBottom,
 }: ProductGalleryWithVariantsProps) {
   const [variantImage, setVariantImage] = useState<string | undefined>(undefined);
@@ -268,6 +315,8 @@ export function ProductGalleryWithVariants({
             productName={productName}
             price={price}
             image={mainImage}
+            productStock={productStock}
+            productUnlimitedStock={productUnlimitedStock}
             hasVariations={hasVariations}
             variationType={variationType}
             variants={variants}

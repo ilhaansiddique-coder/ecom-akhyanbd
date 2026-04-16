@@ -78,7 +78,7 @@ export default function UsersPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
-    const payload: Record<string, unknown> = { name: form.name, email: form.email, phone: form.phone, role: form.role };
+    const payload: Record<string, unknown> = { name: form.name, email: form.email, phone: form.phone, address: form.address, role: form.role };
     if (form.password) payload.password = form.password;
     try {
       if (editId) {
@@ -94,8 +94,9 @@ export default function UsersPage() {
         showToast(t("toast.created"));
       }
       setModalOpen(false);
-    } catch {
-      showToast(t("toast.error"), "error");
+    } catch (err: any) {
+      const msg = err?.errors ? Object.values(err.errors).flat().join(", ") : err?.message || t("toast.error");
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -219,7 +220,7 @@ export default function UsersPage() {
           </div>
           <div>
             <label className={labelCls}>{t("form.password")} {editId ? "" : "*"}</label>
-            <input type="password" required={!editId} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputCls} />
+            <input type="password" required={!editId} minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder={lang === "en" ? "Min 8 characters" : "সর্বনিম্ন ৮ অক্ষর"} />
           </div>
           <div>
             <label className={labelCls}>{t("form.phone")}</label>

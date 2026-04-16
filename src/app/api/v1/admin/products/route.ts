@@ -87,6 +87,8 @@ export async function POST(request: NextRequest) {
         isFeatured: data.is_featured ?? false,
         hasVariations: data.has_variations ?? false,
         variationType: data.variation_type ?? null,
+        customShipping: data.custom_shipping ?? false,
+        shippingCost: data.shipping_cost != null ? Number(data.shipping_cost) : null,
         sortOrder: data.sort_order ?? 0,
         ...(data.variants && Array.isArray(data.variants) && data.variants.length > 0 ? {
           variants: {

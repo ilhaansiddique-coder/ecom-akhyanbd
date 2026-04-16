@@ -84,26 +84,47 @@ export default function CheckoutPage() {
   }, [user]);
 
   // Fetch shipping zones + checkout settings on mount
+  // Product-level custom shipping data
+  const [productShipping, setProductShipping] = useState<Record<number, number | null>>({});
+
   useEffect(() => {
-    fetch("/api/v1/shipping/zones", { headers: { Accept: "application/json" } })
-      .then(r => r.json())
-      .then(data => {
-        const zones = (Array.isArray(data) ? data : data.data || []).map((z: any) => ({
-          ...z,
-          cities: typeof z.cities === "string" ? JSON.parse(z.cities) : (z.cities || []),
-        }));
-        setShippingZones(zones);
-        if (zones.length > 0) {
-          setSelectedZone(zones[0].id);
-          setShippingCost(zones[0].rate);
+    // Fetch shipping zones + checkout settings + product custom shipping in parallel
+    Promise.all([
+      fetch("/api/v1/shipping/zones", { headers: { Accept: "application/json" } }).then(r => r.json()).catch(() => []),
+      fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } }).then(r => r.json()).catch(() => ({})),
+    ]).then(([zonesData, csData]) => {
+      const zones = (Array.isArray(zonesData) ? zonesData : zonesData.data || []).map((z: any) => ({
+        ...z,
+        cities: typeof z.cities === "string" ? JSON.parse(z.cities) : (z.cities || []),
+      }));
+      setShippingZones(zones);
+      if (zones.length > 0) {
+        setSelectedZone(zones[0].id);
+        setShippingCost(zones[0].rate);
+      }
+      setCheckoutSettings(csData || {});
+    });
+
+    // Check if any cart items have custom shipping
+    if (items.length > 0) {
+      const productIds = [...new Set(items.map(i => i.id))];
+      Promise.all(
+        productIds.map(id =>
+          fetch(`/api/v1/products/${id}`, { headers: { Accept: "application/json" } })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        )
+      ).then(products => {
+        const shipMap: Record<number, number | null> = {};
+        for (const p of products) {
+          if (p && (p.custom_shipping || p.customShipping) && (p.shipping_cost != null || p.shippingCost != null)) {
+            shipMap[p.id] = Number(p.shipping_cost ?? p.shippingCost);
+          }
         }
-      })
-      .catch(() => {});
-    fetch("/api/v1/checkout-settings", { headers: { Accept: "application/json" } })
-      .then(r => r.json())
-      .then(data => setCheckoutSettings(data || {}))
-      .catch(() => {});
-  }, []);
+        setProductShipping(shipMap);
+      });
+    }
+  }, [items.length]);
 
   useEffect(() => {
     // Wait for cart to load from localStorage before deciding to redirect
@@ -161,7 +182,10 @@ export default function CheckoutPage() {
     if (addr.zip_code) setZipCode(addr.zip_code);
   };
 
-  const total = totalPrice - couponDiscount + shippingCost;
+  // Custom shipping: if any product has custom shipping, use max of those
+  const customShippingValues = Object.values(productShipping).filter((v): v is number => v != null);
+  const effectiveShipping = customShippingValues.length > 0 ? Math.max(...customShippingValues) : shippingCost;
+  const total = totalPrice - couponDiscount + effectiveShipping;
 
   // Apply coupon
   const handleApplyCoupon = async () => {
@@ -211,7 +235,7 @@ export default function CheckoutPage() {
         fp_behavioral: { ...behavioralSignals, honeypotTriggered: honeypot.length > 0 },
         zip_code: zipCode || undefined,
         subtotal: totalPrice,
-        shipping_cost: shippingCost,
+        shipping_cost: effectiveShipping,
         coupon_code: couponCode || undefined,
         discount: couponDiscount || undefined,
         total,
@@ -238,7 +262,7 @@ export default function CheckoutPage() {
         num_items: items.reduce((s, i) => s + i.quantity, 0),
         value: res.total || totalPrice,
         order_id: String(res.id || ""),
-        shipping: shippingCost,
+        shipping: effectiveShipping,
       }, {
         em: email || undefined,
         ph: phone || undefined,
@@ -587,10 +611,14 @@ export default function CheckoutPage() {
                             </button>
                             <span className="w-8 text-center font-bold text-sm">{toBn(item.quantity)}</span>
                             <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1, item.variantId)}
-                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0">
+                              disabled={!item.unlimitedStock && item.stock != null && item.quantity >= item.stock}
+                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
+                          {!item.unlimitedStock && item.stock != null && (
+                            <div className="text-[10px] text-gray-400">{item.quantity >= item.stock ? "সর্বোচ্চ পরিমাণ" : `${toBn(item.stock)}টি আছে`}</div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-2 shrink-0">
                           <div className="font-bold text-lg text-primary">৳{toBn(item.price * item.quantity)}</div>
@@ -625,21 +653,7 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Saved addresses */}
-              {savedAddresses.length > 0 && (
-                <div>
-                  <label className="block font-bold text-sm mb-2 px-1">সংরক্ষিত ঠিকানা</label>
-                  <div className="flex flex-wrap gap-2">
-                    {savedAddresses.map((addr) => (
-                      <button key={addr.id} type="button" onClick={() => applySavedAddress(addr)}
-                        className="px-3 py-2 text-xs border-2 border-gray-100 rounded-xl hover:border-primary hover:text-primary transition-colors text-left">
-                        <span className="font-medium">{addr.label || addr.city}</span>
-                        <span className="text-gray-400 block truncate max-w-48">{addr.address}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Saved addresses — auto-filled silently, no UI shown */}
 
               {/* Address */}
               <div>
@@ -661,8 +675,8 @@ export default function CheckoutPage() {
                 />
               </div>
 
-              {/* Shipping Zone Selector */}
-              {shippingZones.length > 0 && (
+              {/* Shipping Zone Selector — hidden when product has custom shipping */}
+              {customShippingValues.length === 0 && shippingZones.length > 0 && (
                 <div>
                   <label className="block font-bold text-sm mb-3 px-1">ডেলিভারি এরিয়া সিলেক্ট করুন *</label>
                   <div className="space-y-2">
@@ -811,7 +825,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">শিপিং চার্জ</span>
-                  <span className="font-semibold">৳{toBn(shippingCost)}</span>
+                  <span className="font-semibold">৳{toBn(effectiveShipping)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-extrabold pt-3 border-t-2 border-primary/20">
                   <span>সর্বমোট</span>

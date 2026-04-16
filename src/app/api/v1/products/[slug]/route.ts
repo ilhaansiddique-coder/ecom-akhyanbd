@@ -8,9 +8,14 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const decoded = decodeURIComponent(slug);
 
+  // Support lookup by slug OR numeric ID
+  const isNumericId = /^\d+$/.test(slug);
   const product = await prisma.product.findFirst({
-    where: { slug, isActive: true },
+    where: isNumericId
+      ? { id: Number(slug), isActive: true }
+      : { OR: [{ slug }, { slug: decoded }], isActive: true },
     include: { category: true, brand: true, variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
   });
 

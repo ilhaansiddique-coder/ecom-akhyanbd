@@ -68,6 +68,8 @@ export async function PUT(
         isFeatured: data.is_featured ?? false,
         hasVariations: data.has_variations ?? false,
         variationType: data.variation_type ?? null,
+        customShipping: data.custom_shipping ?? false,
+        shippingCost: data.shipping_cost != null ? Number(data.shipping_cost) : null,
         sortOrder: data.sort_order ?? 0,
       },
       include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },

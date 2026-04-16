@@ -102,6 +102,7 @@ export async function DELETE(
 
   try {
     await prisma.$transaction([
+      prisma.orderFingerprint.deleteMany({ where: { orderId: Number(id) } }),
       prisma.orderItem.deleteMany({ where: { orderId: Number(id) } }),
       prisma.order.delete({ where: { id: Number(id) } }),
     ]);

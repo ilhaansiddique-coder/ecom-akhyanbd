@@ -10,12 +10,14 @@ export interface CartItem {
   price: number;
   image: string;
   quantity: number;
+  stock?: number;        // available stock (undefined = unlimited)
+  unlimitedStock?: boolean;
 }
 
 interface CartContextType {
   items: CartItem[];
   hydrated: boolean;
-  addItem: (product: { id: number; variantId?: number; name: string; variantLabel?: string; price: number; image: string }, quantity?: number) => void;
+  addItem: (product: { id: number; variantId?: number; name: string; variantLabel?: string; price: number; image: string; stock?: number; unlimitedStock?: boolean }, quantity?: number) => void;
   removeItem: (id: number, variantId?: number) => void;
   updateQuantity: (id: number, quantity: number, variantId?: number) => void;
   clearCart: () => void;
@@ -62,13 +64,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Cart key: same product + same variant = same cart item
   const cartKey = (id: number, variantId?: number) => `${id}-${variantId != null ? variantId : "x"}`;
 
-  const addItem = useCallback((product: { id: number; variantId?: number; name: string; variantLabel?: string; price: number; image: string }, quantity = 1) => {
+  const addItem = useCallback((product: { id: number; variantId?: number; name: string; variantLabel?: string; price: number; image: string; stock?: number; unlimitedStock?: boolean }, quantity = 1) => {
     setItems((prev) => {
       const key = cartKey(product.id, product.variantId);
       const idx = prev.findIndex((i) => cartKey(i.id, i.variantId) === key);
       if (idx !== -1) {
         const updated = [...prev];
-        updated[idx] = { ...updated[idx], ...product, quantity: updated[idx].quantity + quantity };
+        let newQty = updated[idx].quantity + quantity;
+        // Enforce stock limit
+        const maxStock = product.stock ?? updated[idx].stock;
+        if (maxStock != null && !product.unlimitedStock) newQty = Math.min(newQty, maxStock);
+        updated[idx] = { ...updated[idx], ...product, quantity: newQty };
         return updated;
       }
       return [...prev, { ...product, quantity }];
@@ -83,7 +89,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const updateQuantity = useCallback((id: number, quantity: number, variantId?: number) => {
     if (quantity < 1) return;
     const key = cartKey(id, variantId);
-    setItems((prev) => prev.map((i) => cartKey(i.id, i.variantId) === key ? { ...i, quantity } : i));
+    setItems((prev) => prev.map((i) => {
+      if (cartKey(i.id, i.variantId) !== key) return i;
+      // Enforce stock limit
+      let q = quantity;
+      if (i.stock != null && !i.unlimitedStock) q = Math.min(q, i.stock);
+      return { ...i, quantity: q };
+    }));
   }, []);
 
   const clearCart = useCallback(() => setItems([]), []);

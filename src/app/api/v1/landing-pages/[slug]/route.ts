@@ -23,7 +23,10 @@ export async function GET(
       const productIds = productEntries.map((p) => p.product_id);
       const products = await prisma.product.findMany({
         where: { id: { in: productIds } },
-        include: { category: true },
+        include: {
+          category: true,
+          variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
+        },
       });
 
       resolvedProducts = productEntries.map((entry) => {

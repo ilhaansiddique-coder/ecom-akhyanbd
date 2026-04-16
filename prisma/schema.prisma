@@ -93,6 +93,8 @@ model Product {
   isFeatured    Boolean   @default(false) @map("is_featured")
   hasVariations Boolean?  @default(false) @map("has_variations")
   variationType String?   @map("variation_type") // "ওজন", "সাইজ", "রং", etc.
+  customShipping Boolean?  @default(false) @map("custom_shipping")
+  shippingCost   Float?    @map("shipping_cost")
   sortOrder     Int       @default(0) @map("sort_order")
   createdAt     DateTime? @default(now()) @map("created_at")
   updatedAt     DateTime? @updatedAt @map("updated_at")
@@ -170,7 +172,7 @@ model Order {
   courierScore       String?   @map("courier_score")
   trackingData       String?   @map("tracking_data")
   fpHash             String?   @map("fp_hash")
-  riskScore          Int?      @default(0) @map("risk_score")
+  riskScore          Int?      @map("risk_score")
   createdAt          DateTime? @default(now()) @map("created_at")
   updatedAt          DateTime? @updatedAt @map("updated_at")
 

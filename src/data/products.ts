@@ -15,6 +15,8 @@ export interface Product {
   badgeColor?: string;
   description?: string;
   descriptionBn?: string;
+  stock?: number;
+  unlimitedStock?: boolean;
   hasVariations?: boolean;
   variationType?: string;
   variants?: { id: number; label: string; price: number; original_price?: number; stock: number; unlimited_stock?: boolean; image?: string }[];
@@ -49,6 +51,8 @@ export function mapApiProduct(p: Record<string, unknown>): Product {
     brand_id: (p.brand_id as number) || undefined,
     badge: (p.badge as string) || undefined,
     badgeColor: (p.badge_color as string) || undefined,
+    stock: Number(p.stock) || 0,
+    unlimitedStock: Boolean(p.unlimited_stock || p.unlimitedStock),
     description: (p.description as string) || undefined,
     descriptionBn: (p.description_bn as string) || (p.descriptionBn as string) || (p.description as string) || undefined,
     hasVariations: Boolean(p.has_variations || p.hasVariations),

@@ -32,19 +32,30 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
   const slug = product.slug || product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+  // Stock checks
+  const isUnlimited = product.unlimitedStock;
+  const stock = product.stock ?? 0;
+  const isOutOfStock = !isUnlimited && !hasVar && stock <= 0;
+  const isLowStock = !isUnlimited && !hasVar && stock > 0 && stock <= 5;
+  // For variable products: check if all variants are out of stock
+  const allVariantsOut = hasVar && product.variants?.every(v => !v.unlimited_stock && v.stock <= 0);
+  const productOutOfStock = isOutOfStock || allVariantsOut;
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
   const handleAddToCart = () => {
+    if (productOutOfStock) return;
     if (hasVar) { router.push(`/products/${slug}`); return; }
-    addItem({ id: product.id, name: displayName, price, image });
+    addItem({ id: product.id, name: displayName, price, image, stock: isUnlimited ? undefined : stock, unlimitedStock: isUnlimited });
     trackAddToCart({ content_ids: [product.id], content_name: displayName, value: price });
     setShowAdded(true);
   };
 
   const handleOrderNow = () => {
+    if (productOutOfStock) return;
     if (hasVar) { router.push(`/products/${slug}`); return; }
-    addItem({ id: product.id, name: displayName, price, image });
+    addItem({ id: product.id, name: displayName, price, image, stock: isUnlimited ? undefined : stock, unlimitedStock: isUnlimited });
     trackAddToCart({ content_ids: [product.id], content_name: displayName, value: price });
     router.push("/checkout");
   };
@@ -98,21 +109,44 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
             )}
           </div>
 
+          {/* Stock indicator */}
+          {!isUnlimited && !hasVar && (
+            <div className="mt-1.5">
+              {productOutOfStock ? (
+                <span className="text-xs font-semibold text-red-500">{lang === "en" ? "Out of Stock" : "স্টক শেষ"}</span>
+              ) : isLowStock ? (
+                <span className="text-xs font-medium text-amber-600">{lang === "en" ? `Only ${stock} left` : `মাত্র ${toBn(stock)}টি বাকি`}</span>
+              ) : (
+                <span className="text-xs text-gray-400">{lang === "en" ? `${stock} in stock` : `${toBn(stock)}টি স্টকে আছে`}</span>
+              )}
+            </div>
+          )}
+          {hasVar && allVariantsOut && (
+            <div className="mt-1.5">
+              <span className="text-xs font-semibold text-red-500">{lang === "en" ? "Out of Stock" : "স্টক শেষ"}</span>
+            </div>
+          )}
+
           <div className="mt-3 flex gap-2">
             <button
               onClick={handleOrderNow}
-              className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              disabled={productOutOfStock}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer transition-colors ${
+                productOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-primary text-white hover:bg-primary-light"
+              }`}
             >
               <FiShoppingBag className="w-4 h-4" />
-              <span>{t("product.order")}</span>
+              <span>{productOutOfStock ? (lang === "en" ? "Out of Stock" : "স্টক শেষ") : t("product.order")}</span>
             </button>
-            <button
-              onClick={handleAddToCart}
-              className="py-2.5 px-3 border-2 border-primary text-primary rounded-xl text-sm font-semibold hover:bg-primary/5 transition-colors flex items-center justify-center cursor-pointer"
-              title={lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন"}
-            >
-              <FiShoppingCart className="w-4 h-4" />
-            </button>
+            {!productOutOfStock && (
+              <button
+                onClick={handleAddToCart}
+                className="py-2.5 px-3 border-2 border-primary text-primary rounded-xl text-sm font-semibold hover:bg-primary/5 transition-colors flex items-center justify-center cursor-pointer"
+                title={lang === "en" ? "Add to Cart" : "কার্টে যোগ করুন"}
+              >
+                <FiShoppingCart className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

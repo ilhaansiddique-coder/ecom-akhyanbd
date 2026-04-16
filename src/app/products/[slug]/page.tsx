@@ -20,8 +20,17 @@ function resolveImage(img: string): string {
 
 async function getProduct(slug: string) {
   try {
-    const product = await prisma.product.findUnique({
-      where: { slug },
+    // Decode URL-encoded slugs (handles Bangla characters like %E0%A6%AC%E0%A6%BF...)
+    const decoded = decodeURIComponent(slug);
+
+    // Try exact match first, then decoded version
+    const product = await prisma.product.findFirst({
+      where: {
+        OR: [
+          { slug: slug },
+          { slug: decoded },
+        ],
+      },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         brand: { select: { id: true, name: true, slug: true } },
@@ -87,6 +96,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     description: (raw.description as string) || "",
     descriptionBn: (raw.description_bn as string) || (raw.description as string) || "",
     images: Array.isArray(raw.images) && raw.images.length > 0 ? (raw.images as string[]).map(resolveImage) : [],
+    stock: Number(raw.stock) || 0,
+    unlimitedStock: Boolean(raw.unlimited_stock),
     hasVariations: raw.has_variations || false,
     variationType: (raw.variation_type as string) || "",
     variants: Array.isArray(raw.variants) ? raw.variants.map((v: any) => ({
@@ -159,6 +170,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             productId={product.id}
             productName={displayName}
             price={product.price}
+            productStock={product.stock}
+            productUnlimitedStock={product.unlimitedStock}
             hasVariations={product.hasVariations}
             variationType={product.variationType}
             variants={product.variants}

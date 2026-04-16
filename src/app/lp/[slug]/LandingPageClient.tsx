@@ -10,9 +10,18 @@ import "swiper/css";
 import "swiper/css/pagination";
 import { api } from "@/lib/api";
 
+interface ProductVariant {
+  id: number; label: string; price: number; original_price?: number; stock: number; image?: string;
+}
+
 interface Product {
   id: number; name: string; slug: string; price: number; original_price?: number;
   image: string; description?: string; stock: number; selected_quantity: number;
+  has_variations?: boolean; hasVariations?: boolean;
+  variation_type?: string; variationType?: string;
+  variants?: ProductVariant[];
+  custom_shipping?: boolean; customShipping?: boolean;
+  shipping_cost?: number; shippingCost?: number;
 }
 
 interface PageData {
@@ -52,6 +61,16 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     Object.fromEntries(products.map((p) => [p.id, p.selected_quantity || 1]))
   );
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", city: "" });
+  // Variant selection: productId → selected variantId
+  const [selectedVariants, setSelectedVariants] = useState<Record<number, number>>(() => {
+    const initial: Record<number, number> = {};
+    for (const p of products) {
+      const hasVars = p.has_variations || p.hasVariations;
+      const vars = p.variants || [];
+      if (hasVars && vars.length > 0) initial[p.id] = vars[0].id;
+    }
+    return initial;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -95,13 +114,43 @@ export default function LandingPageClient({ page }: { page: PageData }) {
   const howItWorks = parseJSON<{ title: string; description: string }>(page.how_it_works);
   const faqItems = parseJSON<{ question: string; answer: string }>(page.faq);
 
-  const subtotal = products.reduce((sum, p) => sum + p.price * (quantities[p.id] || 1), 0);
+  // Get effective price for a product (variant price if selected)
+  const getProductPrice = (p: Product) => {
+    const variantId = selectedVariants[p.id];
+    if (variantId && p.variants) {
+      const variant = p.variants.find(v => v.id === variantId);
+      if (variant) return variant.price;
+    }
+    return p.price;
+  };
+
+  const subtotal = products.reduce((sum, p) => sum + getProductPrice(p) * (quantities[p.id] || 1), 0);
   const activeZone = shippingZones.find((z) => z.id === selectedZone);
-  const shipping = page.custom_shipping ? (page.shipping_cost ?? 60) : (activeZone?.rate ?? page.shipping_cost ?? 60);
+
+  // Custom shipping: if any product has custom shipping, use max of those
+  const customShippingValues = products
+    .filter(p => p.custom_shipping || p.customShipping)
+    .map(p => Number(p.shipping_cost ?? p.shippingCost ?? 0))
+    .filter(v => v > 0);
+  const zoneShipping = page.custom_shipping ? (page.shipping_cost ?? 60) : (activeZone?.rate ?? page.shipping_cost ?? 60);
+  const shipping = customShippingValues.length > 0 ? Math.max(...customShippingValues) : zoneShipping;
   const total = subtotal + shipping;
 
-  const updateQty = (id: number, qty: number, stock: number) => {
-    const maxQty = Math.max(stock, 99); // Allow up to 99 or stock, whichever is higher
+  const getMaxStock = (p: Product) => {
+    const hasVars = p.has_variations || p.hasVariations;
+    const variantId = selectedVariants[p.id];
+    if (hasVars && variantId && p.variants) {
+      const v = p.variants.find(v => v.id === variantId);
+      if (v && !(v as any).unlimited_stock) return v.stock;
+    }
+    const unlimited = (p as any).unlimited_stock || (p as any).unlimitedStock;
+    if (unlimited) return 999;
+    return p.stock > 0 ? p.stock : 999;
+  };
+
+  const updateQty = (id: number, qty: number) => {
+    const product = products.find(p => p.id === id);
+    const maxQty = product ? getMaxStock(product) : 999;
     setQuantities((prev) => ({ ...prev, [id]: Math.min(Math.max(1, qty), maxQty) }));
   };
 
@@ -110,10 +159,16 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     setSubmitting(true);
     setError("");
     try {
-      const items = products.map((p) => ({
-        product_id: p.id, product_name: p.name,
-        quantity: quantities[p.id] || 1, price: p.price,
-      }));
+      const items = products.map((p) => {
+        const variantId = selectedVariants[p.id];
+        const variant = variantId && p.variants ? p.variants.find(v => v.id === variantId) : null;
+        return {
+          product_id: p.id, product_name: p.name,
+          quantity: quantities[p.id] || 1, price: variant ? variant.price : p.price,
+          variant_id: variant?.id || undefined,
+          variant_label: variant?.label || undefined,
+        };
+      });
       const res = await api.createOrder({
         customer_name: form.name, customer_phone: form.phone,
         customer_email: form.email || undefined,
@@ -500,61 +555,98 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                 <div>
                   <label className="block font-bold text-sm mb-4 px-1">পরিমাণ সিলেক্ট করুন</label>
                   <div className="space-y-3">
-                    {products.map((p) => (
+                    {products.map((p) => {
+                      const hasVars = p.has_variations || p.hasVariations;
+                      const vars = p.variants || [];
+                      const selectedVar = hasVars && vars.length > 0 ? vars.find(v => v.id === selectedVariants[p.id]) || vars[0] : null;
+                      const effectivePrice = selectedVar ? selectedVar.price : p.price;
+                      const effectiveOrigPrice = selectedVar ? selectedVar.original_price : p.original_price;
+                      const effectiveImage = (selectedVar?.image) || p.image;
+
+                      return (
                       <div key={p.id} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
+                        {/* Variant selector */}
+                        {hasVars && vars.length > 0 && (
+                          <div className="mb-3 pb-3 border-b border-gray-100">
+                            <div className="text-xs font-semibold text-gray-500 mb-2">{p.variation_type || p.variationType || "ভ্যারিয়েশন"} সিলেক্ট করুন</div>
+                            <div className="flex flex-wrap gap-2">
+                              {vars.map(v => (
+                                <button key={v.id} type="button"
+                                  onClick={() => setSelectedVariants(prev => ({ ...prev, [p.id]: v.id }))}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
+                                    selectedVariants[p.id] === v.id
+                                      ? "text-white border-transparent"
+                                      : "border-gray-200 text-gray-600 hover:border-gray-300"
+                                  }`}
+                                  style={selectedVariants[p.id] === v.id ? { background: color, borderColor: color } : {}}>
+                                  {v.label} — ৳{toBn(v.price)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {/* Desktop: grid layout for aligned columns */}
+                        {(() => { const mxS = getMaxStock(p); const curQ = quantities[p.id] || 1; const atMax = curQ >= mxS && mxS < 999; return (
                         <div className="hidden md:grid md:grid-cols-[48px_1fr_130px_80px] items-center gap-3">
-                          <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={p.image} alt={p.name} fill sizes="48px" className="object-cover" /></div>
+                          <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={effectiveImage} alt={p.name} fill sizes="48px" className="object-cover" /></div>
                           <div className="min-w-0">
-                            <div className="font-bold text-sm truncate">{p.name}</div>
-                            <div className="text-xs text-gray-400">৳{toBn(p.price)} / পিস</div>
+                            <div className="font-bold text-sm truncate">{p.name}{selectedVar ? ` (${selectedVar.label})` : ""}</div>
+                            <div className="text-xs text-gray-400">৳{toBn(effectivePrice)} / পিস{mxS < 999 && <span className="ml-1 text-gray-300">· {toBn(mxS)}টি আছে</span>}</div>
                           </div>
                           <div className="flex items-center justify-center gap-2">
-                            <button type="button" onClick={() => updateQty(p.id, (quantities[p.id] || 1) - 1, p.stock)}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600">
+                            <button type="button" onClick={() => updateQty(p.id, curQ - 1)}
+                              disabled={curQ <= 1}
+                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
-                            <span className="w-10 text-center font-bold">{toBn(quantities[p.id] || 1)}</span>
-                            <button type="button" onClick={() => updateQty(p.id, (quantities[p.id] || 1) + 1, p.stock)}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600">
+                            <span className="w-10 text-center font-bold">{toBn(curQ)}</span>
+                            <button type="button" onClick={() => updateQty(p.id, curQ + 1)}
+                              disabled={atMax}
+                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <div className="font-bold text-lg text-right" style={{ color }}>
-                            ৳{toBn(p.price * (quantities[p.id] || 1))}
+                            ৳{toBn(effectivePrice * curQ)}
                           </div>
                         </div>
+                        ); })()}
                         {/* Mobile: stacked layout */}
+                        {(() => { const mxS = getMaxStock(p); const curQ = quantities[p.id] || 1; const atMax = curQ >= mxS && mxS < 999; return (
                         <div className="md:hidden">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={p.image} alt={p.name} fill sizes="40px" className="object-cover" /></div>
+                            <div className="w-10 h-10 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={effectiveImage} alt={p.name} fill sizes="40px" className="object-cover" /></div>
                             <div className="flex-1 min-w-0">
-                              <div className="font-bold text-sm truncate">{p.name}</div>
-                              <div className="text-xs text-gray-400">৳{toBn(p.price)} / পিস</div>
+                              <div className="font-bold text-sm truncate">{p.name}{selectedVar ? ` (${selectedVar.label})` : ""}</div>
+                              <div className="text-xs text-gray-400">৳{toBn(effectivePrice)} / পিস{mxS < 999 && <span className="ml-1 text-gray-300">· {toBn(mxS)}টি</span>}</div>
                             </div>
                             <div className="font-bold text-base shrink-0" style={{ color }}>
-                              ৳{toBn(p.price * (quantities[p.id] || 1))}
+                              ৳{toBn(effectivePrice * curQ)}
                             </div>
                           </div>
                           <div className="flex items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-100">
-                            <button type="button" onClick={() => updateQty(p.id, (quantities[p.id] || 1) - 1, p.stock)}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600">
+                            <button type="button" onClick={() => updateQty(p.id, curQ - 1)}
+                              disabled={curQ <= 1}
+                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
-                            <span className="w-10 text-center font-bold text-lg">{toBn(quantities[p.id] || 1)}</span>
-                            <button type="button" onClick={() => updateQty(p.id, (quantities[p.id] || 1) + 1, p.stock)}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600">
+                            <span className="w-10 text-center font-bold text-lg">{toBn(curQ)}</span>
+                            <button type="button" onClick={() => updateQty(p.id, curQ + 1)}
+                              disabled={atMax}
+                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
+                        ); })()}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Shipping Zone Selector (only when custom shipping is OFF) */}
-                {!page.custom_shipping && shippingZones.length > 0 && (
+                {/* Shipping Zone Selector (only when custom shipping is OFF and no product custom shipping) */}
+                {!page.custom_shipping && customShippingValues.length === 0 && shippingZones.length > 0 && (
                   <div>
                     <label className="block font-bold text-sm mb-3 px-1">ডেলিভারি এরিয়া সিলেক্ট করুন *</label>
                     <div className="space-y-2">

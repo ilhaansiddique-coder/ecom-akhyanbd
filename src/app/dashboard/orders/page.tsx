@@ -346,6 +346,30 @@ export default function OrdersPage() {
     }
   };
 
+  const handlePermanentDelete = async (orderId: number) => {
+    if (!confirm(lang === "en" ? "Permanently delete this order? This cannot be undone." : "এই অর্ডারটি স্থায়ীভাবে মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।")) return;
+    try {
+      await api.admin.deleteOrder(orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      showToast(lang === "en" ? "Permanently deleted" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Failed to delete" : "মুছতে সমস্যা হয়েছে", "error");
+    }
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (selectedOrders.size === 0) return;
+    if (!confirm(lang === "en" ? `Permanently delete ${selectedOrders.size} orders?` : `${selectedOrders.size}টি অর্ডার স্থায়ীভাবে মুছবেন?`)) return;
+    try {
+      await Promise.all(Array.from(selectedOrders).map((id) => api.admin.deleteOrder(id)));
+      setOrders((prev) => prev.filter((o) => !selectedOrders.has(o.id)));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? "Deleted permanently" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Bulk delete failed" : "মুছতে সমস্যা", "error");
+    }
+  };
+
   const toggleSelectOrder = (id: number) => {
     setSelectedOrders(prev => {
       const next = new Set(prev);
@@ -812,12 +836,20 @@ export default function OrdersPage() {
                   )}
                 </div>
 
-                {/* Bulk Trash */}
-                <button type="button" onClick={handleBulkTrash} disabled={bulkStatusLoading}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 whitespace-nowrap">
-                  <FiTrash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">{lang === "en" ? "Trash" : "ট্র্যাশ"}</span>
-                </button>
+                {/* Bulk Trash or Bulk Permanent Delete */}
+                {statusFilter === "trashed" ? (
+                  <button type="button" onClick={handleBulkPermanentDelete} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-red-500 rounded-xl text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiXCircle className="w-4 h-4" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Delete Forever" : "স্থায়ীভাবে মুছুন"}</span>
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleBulkTrash} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiTrash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Trash" : "ট্র্যাশ"}</span>
+                  </button>
+                )}
               </>
             )}
             {/* Search: visible only on desktop, inline */}
@@ -934,7 +966,11 @@ export default function OrdersPage() {
                 <div className="flex items-center gap-1">
                   <button onClick={() => openDetail(o.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"><FiEye className="w-4 h-4" /></button>
                   <button onClick={() => openEdit(o.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FiEdit2 className="w-4 h-4" /></button>
-                  <button onClick={() => handleTrashOrder(o.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
+                  {o.status === "trashed" ? (
+                    <button onClick={() => handlePermanentDelete(o.id)} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Permanently delete"><FiXCircle className="w-4 h-4" /></button>
+                  ) : (
+                    <button onClick={() => handleTrashOrder(o.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1069,9 +1105,15 @@ export default function OrdersPage() {
                               <button onClick={() => openEdit(o.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
                                 <FiEdit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => handleTrashOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Trash">
-                                <FiTrash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {o.status === "trashed" ? (
+                                <button onClick={() => handlePermanentDelete(o.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors" title="Permanently delete">
+                                  <FiXCircle className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button onClick={() => handleTrashOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Trash">
+                                  <FiTrash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button onClick={() => setExpandedId(isExpanded ? null : o.id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" title="Toggle items">
                                 {isExpanded ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
                               </button>

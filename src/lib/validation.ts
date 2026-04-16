@@ -152,6 +152,8 @@ export const productSchema = z.object({
   is_featured: boolDef(false),
   has_variations: z.boolean().optional(),
   variation_type: strOpt,
+  custom_shipping: z.boolean().optional(),
+  shipping_cost: numOpt,
   variants: z.array(z.object({
     label: z.string().min(1),
     price: z.coerce.number(),
