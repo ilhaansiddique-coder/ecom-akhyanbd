@@ -19,7 +19,10 @@ export default function CDLoginPage() {
 
   // Redirect if already logged in (effect — never call router.push during render)
   useEffect(() => {
-    if (user) router.push("/dashboard");
+    if (user) {
+      // Staff have no /dashboard home — send them straight to their workspace.
+      router.push(user.role === "staff" ? "/dashboard/products" : "/dashboard");
+    }
   }, [user, router]);
   if (user) return null;
 
@@ -29,10 +32,13 @@ export default function CDLoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      // Show success briefly then redirect
+      const loggedIn = await login(email, password);
+      // Show success briefly then redirect.
+      // Staff have no /dashboard home, so send them to their first allowed page.
+      const role = (loggedIn as { role?: string } | undefined)?.role;
+      const target = role === "staff" ? "/dashboard/products" : "/dashboard";
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push(target);
       }, 500);
     } catch (err: unknown) {
       const error = err as { message?: string; errors?: Record<string, string[]> };

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
-import { isStaffOrAdmin } from "@/lib/auth-helpers";
+import { redirect } from "next/navigation";
 import DashboardPage from "./DashboardHomeClient";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +8,12 @@ export const dynamic = "force-dynamic";
 export default async function DashboardServerPage() {
   const user = await getSessionUser();
 
+  // Staff have no dashboard home — bounce them to their first allowed page.
+  if (user?.role === "staff") redirect("/dashboard/products");
+
   // Customers + unauthenticated users get the customer-view fallback (the
-  // client decides what to render). Staff and admin get the full data block.
-  if (!user || !isStaffOrAdmin(user.role)) {
+  // client decides what to render). Only admin sees the full analytics block.
+  if (!user || user.role !== "admin") {
     return <DashboardPage />;
   }
 

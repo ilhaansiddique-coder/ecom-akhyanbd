@@ -63,9 +63,9 @@ interface NavGroup {
 // from the sidebar AND blocked by the per-page server guards. Keep in sync
 // with the page-level `isStaffOrAdmin` checks in the dashboard route segments.
 const STAFF_ALLOWED_PREFIXES = [
-  "/dashboard",            // dashboard home
-  "/dashboard/products",   // products list + new + [id]/edit
-  "/dashboard/orders",     // orders list + [id]/details
+  "/dashboard/products",        // products list + new + [id]/edit
+  "/dashboard/orders",          // orders list + [id]/details
+  "/dashboard/landing-pages",   // landing pages list + create + edit
 ];
 
 export function isStaffAllowedPath(pathname: string): boolean {
@@ -83,7 +83,6 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
   // taxonomy; staff only manages individual products.
   if (isStaffOnly) {
     return [
-      { label: t("dash.dashboard"), icon: FiHome, href: "/dashboard" },
       {
         label: t("dash.productMgmt"),
         icon: FiBox,
@@ -96,6 +95,13 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         icon: FiShoppingBag,
         items: [
           { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
+        ],
+      },
+      {
+        label: t("dash.content"),
+        icon: FiLayout,
+        items: [
+          { label: t("dash.landingPages"), href: "/dashboard/landing-pages", icon: FiLayout },
         ],
       },
     ];
@@ -254,7 +260,8 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
 
   useEffect(() => {
     if (shouldRedirectHome) router.push("/");
-    else if (shouldRedirectStaff) router.push("/dashboard");
+    // Staff have no /dashboard home anymore — send them to their first allowed page.
+    else if (shouldRedirectStaff) router.push("/dashboard/products");
   }, [shouldRedirectHome, shouldRedirectStaff, router]);
 
   // Expanded sidebar content (used for desktop expanded + mobile)

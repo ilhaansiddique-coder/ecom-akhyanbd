@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { isStaffOrAdmin } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import LandingPagesClient from "./LandingPagesClient";
 
@@ -18,7 +19,7 @@ function parseSectionVisibility(raw: string | null | undefined): Record<string, 
 
 export default async function LandingPagesPage() {
   const user = await getSessionUser();
-  if (!user || user.role !== "admin") redirect("/cdlogin");
+  if (!user || !isStaffOrAdmin(user.role)) redirect("/cdlogin");
 
   try {
     const data = await prisma.landingPage.findMany({
