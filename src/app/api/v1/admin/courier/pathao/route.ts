@@ -1,0 +1,278 @@
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
+import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
+import { requireAdmin } from "@/lib/auth-helpers";
+import {
+  sendToPathao,
+  sendBulkToPathao,
+  checkPathaoStatus,
+  checkPathaoBalance,
+  isPathaoConfigured,
+  hasPathaoAuth,
+  clearPathaoCache,
+  generatePathaoMerchantOrderId,
+  listPathaoCities,
+  listPathaoZones,
+  listPathaoAreas,
+  listPathaoStores,
+  type PathaoOrder,
+} from "@/lib/pathao";
+import { formatPhone, isValidBDPhone } from "@/lib/steadfast";
+
+/**
+ * GET /api/v1/admin/courier/pathao?action=test
+ * GET ?action=balance
+ * GET ?action=status&consignment_id=XXX
+ * GET ?action=cities | zones&city_id=XX | areas&zone_id=XX | stores
+ */
+export async function GET(request: NextRequest) {
+  try { await requireAdmin(); } catch (e) { return e as Response; }
+
+  const action = request.nextUrl.searchParams.get("action");
+
+  if (action === "test") {
+    clearPathaoCache();
+    try {
+      // Test only needs auth creds — store can be picked after.
+      const hasAuth = await hasPathaoAuth();
+      if (!hasAuth) return jsonResponse({ success: false, message: "Pathao auth credentials missing (client_id, secret, email, password)." });
+      const result = await checkPathaoBalance();
+      if (result.code === 200 && result.data) return jsonResponse({ success: true, info: result.data });
+      // Surface real reason from upstream
+      return jsonResponse({
+        success: false,
+        message: result.message || `Pathao API responded ${result.code ?? "?"}`,
+        upstream_status: result.code,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Connection failed";
+      console.error("Pathao test error:", err);
+      return jsonResponse({ success: false, message: msg });
+    }
+  }
+
+  // For lookup/balance actions we only need auth (store not required yet).
+  const lookupActions = new Set(["balance", "cities", "zones", "areas", "stores"]);
+  if (lookupActions.has(action || "")) {
+    if (!(await hasPathaoAuth())) {
+      return errorResponse("Pathao auth credentials missing", 400);
+    }
+  } else if (!(await isPathaoConfigured())) {
+    return errorResponse("Pathao not configured. Go to Settings → Courier.", 400);
+  }
+
+  if (action === "balance") {
+    clearPathaoCache();
+    try {
+      const result = await checkPathaoBalance();
+      return jsonResponse({ info: result.data, message: result.message });
+    } catch { return errorResponse("Failed to fetch Pathao info", 500); }
+  }
+
+  if (action === "status") {
+    const cid = request.nextUrl.searchParams.get("consignment_id");
+    if (!cid) return errorResponse("consignment_id required", 400);
+    try {
+      const result = await checkPathaoStatus(cid);
+      return jsonResponse({ delivery_status: result.data?.order_status, consignment: result.data });
+    } catch { return errorResponse("Failed to check status", 500); }
+  }
+
+  if (action === "cities") {
+    try { return jsonResponse({ items: await listPathaoCities() }); }
+    catch { return errorResponse("Failed to load cities", 500); }
+  }
+  if (action === "zones") {
+    const cityId = Number(request.nextUrl.searchParams.get("city_id"));
+    if (!cityId) return errorResponse("city_id required", 400);
+    try { return jsonResponse({ items: await listPathaoZones(cityId) }); }
+    catch { return errorResponse("Failed to load zones", 500); }
+  }
+  if (action === "areas") {
+    const zoneId = Number(request.nextUrl.searchParams.get("zone_id"));
+    if (!zoneId) return errorResponse("zone_id required", 400);
+    try { return jsonResponse({ items: await listPathaoAreas(zoneId) }); }
+    catch { return errorResponse("Failed to load areas", 500); }
+  }
+  if (action === "stores") {
+    try { return jsonResponse({ items: await listPathaoStores() }); }
+    catch { return errorResponse("Failed to load stores", 500); }
+  }
+
+  return errorResponse("Invalid action. Use: test, balance, status, cities, zones, areas, stores", 400);
+}
+
+// Build Pathao payload from order
+function buildPathaoPayload(order: any): PathaoOrder {
+  const skipCityWords = ["সারা দেশ", "সারাদেশ", "all over", "nationwide"];
+  const cityClean = order.city && !skipCityWords.some((w: string) => order.city.toLowerCase().includes(w.toLowerCase())) ? order.city : "";
+  const address = [order.customerAddress, cityClean, order.zipCode].filter(Boolean).join(", ");
+
+  const items = (order.items || []).map((i: any) => {
+    const name = i.productName || i.product_name;
+    const variant = i.variantLabel || i.variant_label;
+    const label = variant ? `${name} (${variant})` : name;
+    return `${label} x${i.quantity}`;
+  });
+  const itemsDesc = items.join(" / ");
+  const totalQty = (order.items || []).reduce((s: number, i: any) => s + Number(i.quantity || 1), 0) || 1;
+
+  return {
+    merchant_order_id: generatePathaoMerchantOrderId(order.id),
+    recipient_name: order.customerName,
+    recipient_phone: formatPhone(order.customerPhone),
+    recipient_address: address || order.customerAddress || "N/A",
+    item_quantity: totalQty,
+    item_weight: 0.5,
+    amount_to_collect: Math.round(Number(order.total)),
+    item_description: itemsDesc,
+    special_instruction: order.notes || "",
+  };
+}
+
+/**
+ * POST /api/v1/admin/courier/pathao
+ * { order_id } | { order_ids } | { action: "bulk_send", order_ids } | { action: "check_status", order_id }
+ */
+export async function POST(request: NextRequest) {
+  try { await requireAdmin(); } catch (e) { return e as Response; }
+
+  if (!(await isPathaoConfigured())) return errorResponse("Pathao not configured", 400);
+
+  const body = await request.json();
+
+  // Check & update delivery status
+  if (body.action === "check_status" && body.order_id) {
+    const order = await prisma.order.findUnique({ where: { id: Number(body.order_id) } });
+    if (!order) return notFound("Order not found");
+    if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
+    try {
+      const result = await checkPathaoStatus(order.consignmentId);
+      if (result.data?.order_status) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { courierStatus: result.data.order_status },
+        });
+        return jsonResponse({ delivery_status: result.data.order_status, consignment: result.data });
+      }
+      return errorResponse("Failed to get status", 400);
+    } catch { return errorResponse("Failed to check status", 500); }
+  }
+
+  // Bulk send via Pathao bulk API
+  if (body.action === "bulk_send" && Array.isArray(body.order_ids)) {
+    const orders = await prisma.order.findMany({
+      where: { id: { in: body.order_ids.map(Number) }, courierSent: false },
+      include: { items: true },
+    });
+    const validOrders = orders.filter(o => isValidBDPhone(o.customerPhone));
+    if (validOrders.length === 0) return errorResponse("No valid orders to send", 400);
+
+    const payloads = validOrders.map(buildPathaoPayload);
+    const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+
+    try {
+      const res = await sendBulkToPathao(payloads);
+      const dataItems = res.data || [];
+      // Pathao may not return in same order — match by merchant_order_id
+      for (const order of validOrders) {
+        const mid = generatePathaoMerchantOrderId(order.id);
+        const item = dataItems.find(d => d.merchant_order_id === mid);
+        if (item?.consignment_id) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { courierSent: true, courierType: "pathao", consignmentId: String(item.consignment_id), courierStatus: item.order_status || "pending" },
+          });
+          results.push({ order_id: order.id, status: "success", consignment_id: String(item.consignment_id) });
+        } else {
+          const err = item?.errors ? Object.values(item.errors).flat().join(", ") : "Failed";
+          results.push({ order_id: order.id, status: "error", error: err });
+        }
+      }
+    } catch (err) {
+      // Bulk endpoint failed — fall back to per-order send
+      for (const order of validOrders) {
+        try {
+          const r = await sendToPathao(buildPathaoPayload(order));
+          if (r.data?.consignment_id) {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+            });
+            results.push({ order_id: order.id, status: "success", consignment_id: String(r.data.consignment_id) });
+          } else {
+            const errMsg = r.errors ? Object.values(r.errors).flat().join(", ") : r.message || "Failed";
+            results.push({ order_id: order.id, status: "error", error: errMsg });
+          }
+        } catch {
+          results.push({ order_id: order.id, status: "error", error: "Request failed" });
+        }
+      }
+    }
+
+    return jsonResponse({ results, total: validOrders.length, sent: results.filter(r => r.status === "success").length });
+  }
+
+  // Multiple order_ids — sequential send
+  if (Array.isArray(body.order_ids)) {
+    const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+    for (const orderId of body.order_ids) {
+      const order = await prisma.order.findUnique({ where: { id: Number(orderId) }, include: { items: true } });
+      if (!order) { results.push({ order_id: orderId, status: "not_found" }); continue; }
+      if (order.courierSent) { results.push({ order_id: orderId, status: "already_sent", consignment_id: order.consignmentId || undefined }); continue; }
+      if (!isValidBDPhone(order.customerPhone)) { results.push({ order_id: orderId, status: "error", error: `Invalid phone: ${order.customerPhone}` }); continue; }
+      try {
+        const r = await sendToPathao(buildPathaoPayload(order));
+        if (r.data?.consignment_id) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+          });
+          results.push({ order_id: orderId, status: "success", consignment_id: String(r.data.consignment_id) });
+        } else {
+          const errMsg = r.errors ? Object.values(r.errors).flat().join(", ") : r.message || "Failed";
+          results.push({ order_id: orderId, status: "error", error: errMsg });
+        }
+      } catch { results.push({ order_id: orderId, status: "error", error: "Request failed" }); }
+    }
+    return jsonResponse({ results });
+  }
+
+  // Single send
+  if (body.order_id) {
+    const order = await prisma.order.findUnique({ where: { id: Number(body.order_id) }, include: { items: true } });
+    if (!order) return notFound("Order not found");
+    if (order.courierSent) {
+      return jsonResponse({ message: "Already sent to courier", consignment_id: order.consignmentId });
+    }
+    if (!isValidBDPhone(order.customerPhone)) {
+      return errorResponse(`Invalid phone: ${order.customerPhone}. Must be valid BD number (01XXXXXXXXX)`, 422);
+    }
+    try {
+      // Allow caller to override the auto-built payload (e.g. user picked city/zone/area in prefill modal).
+      const basePayload = buildPathaoPayload(order);
+      const finalPayload = body.payload ? { ...basePayload, ...body.payload, merchant_order_id: basePayload.merchant_order_id } : basePayload;
+      const r = await sendToPathao(finalPayload);
+      if (r.data?.consignment_id) {
+        const updated = await prisma.order.update({
+          where: { id: order.id },
+          data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+          include: { items: true },
+        });
+        return jsonResponse({
+          message: "Order sent to Pathao courier",
+          consignment_id: r.data.consignment_id,
+          order: serialize(updated),
+        });
+      }
+      const errMsg = r.errors ? Object.values(r.errors).flat().join(", ") : r.message || "Failed to send";
+      return errorResponse(errMsg, 400);
+    } catch (err) {
+      console.error("Pathao send error:", err);
+      return errorResponse("Failed to send order to Pathao: " + (err instanceof Error ? err.message : "Unknown"), 500);
+    }
+  }
+
+  return errorResponse("Provide order_id or order_ids", 400);
+}

@@ -18,11 +18,14 @@ export async function GET(request: NextRequest) {
   const perPage = Math.min(50, Math.max(1, Number(searchParams.get("per_page")) || 20));
   const search     = searchParams.get("search");
   const categoryId = searchParams.get("category_id");
+  const trash      = searchParams.get("trash") === "1";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
   if (search)     where.name = { contains: search, mode: "insensitive" };
   if (categoryId) where.categoryId = Number(categoryId);
+  // Trash view shows only soft-deleted; default view excludes them.
+  where.deletedAt = trash ? { not: null } : null;
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({

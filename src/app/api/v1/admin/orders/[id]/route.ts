@@ -90,7 +90,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   let admin;
@@ -100,15 +100,28 @@ export async function DELETE(
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Order not found");
 
-  try {
-    await prisma.$transaction([
-      prisma.orderFingerprint.deleteMany({ where: { orderId: Number(id) } }),
-      prisma.orderItem.deleteMany({ where: { orderId: Number(id) } }),
-      prisma.order.delete({ where: { id: Number(id) } }),
-    ]);
+  // Hard delete only when explicitly forced OR already trashed.
+  const force = request.nextUrl.searchParams.get("force") === "1";
+  const alreadyTrashed = existing.status === "trashed";
 
+  try {
+    if (force || alreadyTrashed) {
+      await prisma.$transaction([
+        prisma.orderFingerprint.deleteMany({ where: { orderId: Number(id) } }),
+        prisma.orderItem.deleteMany({ where: { orderId: Number(id) } }),
+        prisma.order.delete({ where: { id: Number(id) } }),
+      ]);
+      bumpVersion("orders");
+      return jsonResponse({ message: "Order permanently deleted" });
+    }
+
+    // Soft delete — flip status to "trashed"
+    await prisma.order.update({
+      where: { id: Number(id) },
+      data: { status: "trashed" },
+    });
     bumpVersion("orders");
-    return jsonResponse({ message: "Order deleted" });
+    return jsonResponse({ message: "Order moved to trash" });
   } catch (error) {
     return errorResponse("Failed to delete order", 500);
   }

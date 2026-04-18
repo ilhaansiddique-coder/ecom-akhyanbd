@@ -9,6 +9,7 @@ import Toast from "@/components/Toast";
 import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus, FiTrash2 } from "react-icons/fi";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import Modal from "@/components/Modal";
+import PathaoSendModal from "@/components/PathaoSendModal";
 import DateRangePicker from "@/components/DateRangePicker";
 import StatusFilter from "@/components/StatusFilter";
 import InlineSelect from "@/components/InlineSelect";
@@ -44,6 +45,7 @@ interface Order {
   transaction_id?: string;
   notes?: string;
   courier_sent?: boolean;
+  courier_type?: string;
   consignment_id?: string;
   courier_status?: string;
   courier_score?: string;
@@ -135,6 +137,30 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const [editingCN, setEditingCN] = useState<{ orderId: number; value: string } | null>(null);
   const [courierLoading, setCourierLoading] = useState<number | null>(null);
   const [courierBalance, setCourierBalance] = useState<number | null>(null);
+  // Active courier provider for send actions ("steadfast" | "pathao")
+  // Used as default for balance/status; sending uses dynamic chooser based on configured couriers.
+  const [activeCourier, setActiveCourier] = useState<"steadfast" | "pathao">(
+    () => (typeof window !== "undefined" && (localStorage.getItem("active_courier") as "steadfast" | "pathao")) || "steadfast"
+  );
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("active_courier", activeCourier);
+  }, [activeCourier]);
+
+  // Couriers that are both enabled (admin toggle) AND configured (creds present).
+  // Drives the chooser modal — if multiple active, ask user; if one, auto-pick.
+  const [availableCouriers, setAvailableCouriers] = useState<{ id: "steadfast" | "pathao"; label: string }[]>([]);
+  useEffect(() => {
+    api.admin.listActiveCouriers()
+      .then((r) => setAvailableCouriers(r.couriers || []))
+      .catch(() => setAvailableCouriers([]));
+  }, []);
+
+  // Chooser modal state — pending send action waiting for courier selection.
+  const [chooserPending, setChooserPending] = useState<
+    | { kind: "single"; orderId: number }
+    | { kind: "bulk"; orderIds: number[] }
+    | null
+  >(null);
   const [scoreLoading, setScoreLoading] = useState<number | null>(null);
   const [scorePopup, setScorePopup] = useState<{
     orderId: number;
@@ -351,7 +377,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const handlePermanentDelete = async (orderId: number) => {
     if (!confirm(lang === "en" ? "Permanently delete this order? This cannot be undone." : "এই অর্ডারটি স্থায়ীভাবে মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।")) return;
     try {
-      await api.admin.deleteOrder(orderId);
+      await api.admin.deleteOrder(orderId, true);
       setOrders((prev) => prev.filter((o) => o.id !== orderId));
       showToast(lang === "en" ? "Permanently deleted" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
     } catch {
@@ -363,7 +389,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     if (selectedOrders.size === 0) return;
     if (!confirm(lang === "en" ? `Permanently delete ${selectedOrders.size} orders?` : `${selectedOrders.size}টি অর্ডার স্থায়ীভাবে মুছবেন?`)) return;
     try {
-      await Promise.all(Array.from(selectedOrders).map((id) => api.admin.deleteOrder(id)));
+      await Promise.all(Array.from(selectedOrders).map((id) => api.admin.deleteOrder(id, true)));
       setOrders((prev) => prev.filter((o) => !selectedOrders.has(o.id)));
       setSelectedOrders(new Set());
       showToast(lang === "en" ? "Deleted permanently" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
@@ -389,35 +415,52 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }
   };
 
-  const handleBulkSendToCourier = async () => {
-    if (selectedOrders.size === 0) return;
-    if (!confirm(lang === "en" ? `Send ${selectedOrders.size} orders to Steadfast?` : `${selectedOrders.size}টি অর্ডার Steadfast-এ পাঠাবেন?`)) return;
+  // Execute bulk send to a specific provider. Each provider's API builds its own payload format.
+  const executeBulkSend = async (provider: "steadfast" | "pathao", orderIds: number[]) => {
+    const courierLabel = provider === "pathao" ? "Pathao" : "Steadfast";
+    if (!confirm(lang === "en" ? `Send ${orderIds.length} orders to ${courierLabel}?` : `${orderIds.length}টি অর্ডার ${courierLabel}-এ পাঠাবেন?`)) return;
     setBulkSending(true);
     try {
-      const res = await fetch("/api/v1/admin/courier", {
+      const url = provider === "pathao" ? "/api/v1/admin/courier/pathao" : "/api/v1/admin/courier";
+      const res = await fetch(url, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "bulk_send", order_ids: Array.from(selectedOrders) }),
+        body: JSON.stringify({ action: "bulk_send", order_ids: orderIds }),
       }).then(r => r.json());
 
       const sent = res.results?.filter((r: any) => r.status === "success").length || 0;
       const failed = res.results?.filter((r: any) => r.status === "error").length || 0;
 
-      // Update local state for sent orders
       if (res.results) {
         for (const r of res.results) {
           if (r.status === "success" && r.consignment_id) {
-            setOrders(prev => prev.map(o => o.id === r.order_id ? { ...o, courier_sent: true, consignment_id: r.consignment_id, courier_status: "pending" } : o));
+            setOrders(prev => prev.map(o => o.id === r.order_id ? { ...o, courier_sent: true, courier_type: provider, consignment_id: r.consignment_id, courier_status: "pending" } : o));
           }
         }
       }
 
       setSelectedOrders(new Set());
-      showToast(`${sent} sent${failed > 0 ? `, ${failed} failed` : ""}`);
+      setActiveCourier(provider); // remember last-used for balance/UI
+      showToast(`${sent} sent to ${courierLabel}${failed > 0 ? `, ${failed} failed` : ""}`);
     } catch {
       showToast(lang === "en" ? "Bulk send failed" : "বাল্ক সেন্ড ব্যর্থ", "error");
     } finally {
       setBulkSending(false);
+    }
+  };
+
+  // Wrapper: pick courier dynamically. 0 → toast, 1 → auto, 2+ → modal.
+  const handleBulkSendToCourier = () => {
+    if (selectedOrders.size === 0) return;
+    if (availableCouriers.length === 0) {
+      showToast(lang === "en" ? "No courier configured. Go to Settings → Courier." : "কোনো কুরিয়ার কনফিগার করা নেই", "error");
+      return;
+    }
+    const ids = Array.from(selectedOrders);
+    if (availableCouriers.length === 1) {
+      executeBulkSend(availableCouriers[0].id, ids);
+    } else {
+      setChooserPending({ kind: "bulk", orderIds: ids });
     }
   };
 
@@ -461,15 +504,25 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }
   };
 
-  const handleSendToCourier = async (orderId: number) => {
+  // Pathao prefill modal state — opened for single Pathao sends so user can pick city/zone/area.
+  const [pathaoModalOrder, setPathaoModalOrder] = useState<Order | null>(null);
+
+  // Execute single send to specific provider. Each provider's route uses its own payload format.
+  // Pathao single sends route through the prefill modal first (city/zone/area required by Pathao API).
+  const executeSendToCourier = async (provider: "steadfast" | "pathao", orderId: number) => {
+    if (provider === "pathao") {
+      const o = orders.find((x) => x.id === orderId);
+      if (o) { setPathaoModalOrder(o); return; }
+    }
     setCourierLoading(orderId);
     try {
-      const res = await api.admin.sendToCourier(orderId);
+      const res = await api.admin.sendToCourier(orderId, provider);
       if (res.consignment_id || res.order?.consignment_id) {
         const cid = String(res.consignment_id || res.order?.consignment_id);
-        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_sent: true, consignment_id: cid, courier_status: "pending" } : o));
-        if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_sent: true, consignment_id: cid, courier_status: "pending" } : prev);
-        showToast("কুরিয়ারে পাঠানো হয়েছে!");
+        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_sent: true, courier_type: provider, consignment_id: cid, courier_status: "pending" } : o));
+        if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_sent: true, courier_type: provider, consignment_id: cid, courier_status: "pending" } : prev);
+        setActiveCourier(provider);
+        showToast(`${provider === "pathao" ? "Pathao" : "Steadfast"}-এ পাঠানো হয়েছে!`);
       } else if (res.message?.includes("Already sent")) {
         showToast("ইতিমধ্যে কুরিয়ারে পাঠানো হয়েছে");
         setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_sent: true } : o));
@@ -484,10 +537,35 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }
   };
 
+  // Wrapper: pick courier dynamically. 0 → toast, 1 → auto, 2+ → modal.
+  const handleSendToCourier = (orderId: number) => {
+    if (availableCouriers.length === 0) {
+      showToast(lang === "en" ? "No courier configured. Go to Settings → Courier." : "কোনো কুরিয়ার কনফিগার করা নেই", "error");
+      return;
+    }
+    if (availableCouriers.length === 1) {
+      executeSendToCourier(availableCouriers[0].id, orderId);
+    } else {
+      setChooserPending({ kind: "single", orderId });
+    }
+  };
+
+  // Resolve chooser selection → execute pending send.
+  const handleChooserPick = (provider: "steadfast" | "pathao") => {
+    const pending = chooserPending;
+    setChooserPending(null);
+    if (!pending) return;
+    if (pending.kind === "single") executeSendToCourier(provider, pending.orderId);
+    else executeBulkSend(provider, pending.orderIds);
+  };
+
   const handleCheckCourierStatus = async (orderId: number) => {
     setCourierLoading(orderId);
     try {
-      const res = await api.admin.checkCourierStatus(orderId);
+      // Pick provider from the order's courier_type, fallback to active selection
+      const o = orders.find((x) => x.id === orderId);
+      const provider = (o?.courier_type as "steadfast" | "pathao" | undefined) || activeCourier;
+      const res = await api.admin.checkCourierStatus(orderId, provider);
       if (res.delivery_status) {
         setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_status: res.delivery_status } : o));
         if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_status: res.delivery_status } : prev);
@@ -514,7 +592,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     let deliveredCount = 0;
     for (const order of eligible) {
       try {
-        const res = await api.admin.checkCourierStatus(order.id);
+        const provider = (order.courier_type as "steadfast" | "pathao" | undefined) || activeCourier;
+        const res = await api.admin.checkCourierStatus(order.id, provider);
         if (res.delivery_status) {
           setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_status: res.delivery_status } : o));
           // Auto-mark as delivered if courier says delivered
@@ -566,8 +645,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const handleCheckBalance = async () => {
     setBalanceLoading(true);
     try {
-      const res = await api.admin.courierBalance();
+      const res = await api.admin.courierBalance(activeCourier);
+      // Steadfast returns { balance }, Pathao returns { info }
       setCourierBalance(res.balance ?? null);
+      if (activeCourier === "pathao" && !res.balance) {
+        showToast(lang === "en" ? "Pathao connected" : "Pathao সংযুক্ত");
+      }
     } catch {
       showToast("ব্যালেন্স চেক করতে সমস্যা হয়েছে — কুরিয়ার API কী চেক করুন", "error");
     } finally {
@@ -793,6 +876,20 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
               onChange={setStatusFilter}
               placeholder={t("filter.allStatus")}
             />
+            {/* Courier provider picker — controls balance display only.
+                Send actions auto-detect from configured couriers (chooser modal if 2+). */}
+            {availableCouriers.length > 1 && (
+              <select
+                value={activeCourier}
+                onChange={(e) => { setActiveCourier(e.target.value as "steadfast" | "pathao"); setCourierBalance(null); }}
+                className="hidden sm:block px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:border-[var(--primary)]"
+                title="Courier for balance check"
+              >
+                {availableCouriers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            )}
             {/* Courier balance — fetch on click only */}
             <button type="button" onClick={handleCheckBalance} disabled={balanceLoading}
               className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:shadow-sm transition-all whitespace-nowrap disabled:opacity-50" title="Check Courier Balance">
@@ -806,7 +903,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading}
                   className="flex items-center gap-2 px-3.5 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 whitespace-nowrap">
                   <FiTruck className="w-4 h-4" />
-                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : `Send ${selectedOrders.size} to Courier`}</span>
+                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : (availableCouriers.length === 1 ? `Send ${selectedOrders.size} to ${availableCouriers[0].label}` : `Send ${selectedOrders.size} to Courier`)}</span>
                   <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
                 </button>
 
@@ -1315,7 +1412,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       {/* Courier Section */}
                       <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                          <FiTruck className="w-3.5 h-3.5" /> Courier (Steadfast)
+                          <FiTruck className="w-3.5 h-3.5" /> Courier ({o.courier_type === "pathao" ? "Pathao" : o.courier_type === "steadfast" ? "Steadfast" : (activeCourier === "pathao" ? "Pathao" : "Steadfast")})
                         </h3>
                         {o.courier_sent ? (
                           <div className="space-y-2">
@@ -1663,6 +1760,55 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Pathao prefill modal — review/edit before send (city/zone/area required) */}
+      <PathaoSendModal
+        open={!!pathaoModalOrder}
+        order={pathaoModalOrder as any}
+        onClose={() => setPathaoModalOrder(null)}
+        onSent={(cid) => {
+          if (!pathaoModalOrder) return;
+          const oid = pathaoModalOrder.id;
+          setOrders((prev) => prev.map((o) => o.id === oid ? { ...o, courier_sent: true, courier_type: "pathao", consignment_id: cid, courier_status: "pending" } : o));
+          if (detailOrder?.id === oid) setDetailOrder((prev) => prev ? { ...prev, courier_sent: true, courier_type: "pathao", consignment_id: cid, courier_status: "pending" } : prev);
+          setActiveCourier("pathao");
+          showToast("Pathao-এ পাঠানো হয়েছে!");
+        }}
+      />
+
+      {/* Courier Chooser Popup — shown when 2+ couriers configured */}
+      <Modal
+        open={!!chooserPending}
+        onClose={() => setChooserPending(null)}
+        title={lang === "en" ? "Choose Courier" : "কুরিয়ার নির্বাচন করুন"}
+        size="sm"
+      >
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-gray-600">
+            {chooserPending?.kind === "bulk"
+              ? (lang === "en"
+                  ? `Send ${chooserPending.orderIds.length} orders via:`
+                  : `${chooserPending.orderIds.length}টি অর্ডার পাঠাবেন:`)
+              : (lang === "en" ? "Send this order via:" : "এই অর্ডার পাঠাবেন:")}
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {availableCouriers.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleChooserPick(c.id)}
+                className="flex items-center justify-between px-4 py-3 border border-gray-200 rounded-xl hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all"
+              >
+                <span className="flex items-center gap-2 font-medium text-gray-800">
+                  <FiTruck className="w-4 h-4 text-[var(--primary)]" />
+                  {c.label}
+                </span>
+                <span className="text-xs text-gray-400">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </Modal>
 
       {/* Bulk Courier Refresh Popup */}

@@ -366,12 +366,12 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
       {/* User info at bottom */}
       <div className="px-4 py-4 border-t border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold" suppressHydrationWarning>
             {user?.name?.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-xs font-semibold truncate">{user?.name}</div>
-            <div className="text-white/50 text-xs truncate">{user?.email}</div>
+            <div className="text-white text-xs font-semibold truncate" suppressHydrationWarning>{user?.name}</div>
+            <div className="text-white/50 text-xs truncate" suppressHydrationWarning>{user?.email}</div>
           </div>
         </div>
       </div>
@@ -457,10 +457,10 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
       {/* User avatar at bottom */}
       <div className="py-4 border-t border-white/10 w-full flex justify-center">
         <div className="relative group">
-          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold cursor-pointer">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold cursor-pointer" suppressHydrationWarning>
             {user?.name?.charAt(0).toUpperCase()}
           </div>
-          <div className="absolute left-full ml-3 px-3 py-2 bg-[var(--primary)] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
+          <div className="absolute left-full ml-3 px-3 py-2 bg-[var(--primary)] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10" suppressHydrationWarning>
             {user?.name}
             <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
           </div>

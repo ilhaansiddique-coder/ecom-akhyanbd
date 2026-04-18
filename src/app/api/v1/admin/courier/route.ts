@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
         if (res.status === 200 && res.consignment) {
           await prisma.order.update({
             where: { id: order.id },
-            data: { courierSent: true, consignmentId: String(res.consignment.consignment_id), courierStatus: "pending" },
+            data: { courierSent: true, courierType: "steadfast", consignmentId: String(res.consignment.consignment_id), courierStatus: "pending" },
           });
           results.push({ order_id: order.id, status: "success", consignment_id: String(res.consignment.consignment_id) });
         } else {

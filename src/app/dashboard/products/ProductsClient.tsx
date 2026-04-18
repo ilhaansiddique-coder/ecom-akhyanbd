@@ -125,6 +125,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Trash view — when on, list shows soft-deleted products and Delete becomes permanent
+  const [trashView, setTrashView] = useState(false);
+  const [trashLoading, setTrashLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -137,13 +140,32 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
 
   // Background sync — silently refresh the full product list after remote changes
   const refreshAllProducts = useCallback(() => {
-    api.admin.getProducts(new URLSearchParams({ page: "1", per_page: "500" }).toString())
+    const params = new URLSearchParams({ page: "1", per_page: "500" });
+    if (trashView) params.set("trash", "1");
+    api.admin.getProducts(params.toString())
       .then((res: any) => {
         const list = res.data || res || [];
-        if (Array.isArray(list) && list.length > 0) setAllProducts(list);
+        // Allow empty list when in trash view (means trash is empty)
+        if (Array.isArray(list)) setAllProducts(list);
       })
       .catch(() => {/* silent */});
-  }, []);
+  }, [trashView]);
+
+  // Reload when toggling trash view
+  useEffect(() => {
+    setTrashLoading(true);
+    const params = new URLSearchParams({ page: "1", per_page: "500" });
+    if (trashView) params.set("trash", "1");
+    api.admin.getProducts(params.toString())
+      .then((res: any) => {
+        const list = res.data || res || [];
+        if (Array.isArray(list)) setAllProducts(list);
+      })
+      .catch(() => {})
+      .finally(() => setTrashLoading(false));
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trashView]);
 
   // Real-time: background sync when any product is created/updated/deleted remotely
   useChannel("products", ".product.changed", refreshAllProducts);
@@ -363,14 +385,28 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
     if (!deleteId) return;
     setDeleting(true);
     try {
-      await api.admin.deleteProduct(deleteId);
+      // In trash view → permanent delete; otherwise soft (move to trash).
+      await api.admin.deleteProduct(deleteId, trashView);
       setAllProducts((prev) => prev.filter((p) => p.id !== deleteId));
-      showToast(t("toast.deleted"));
+      showToast(trashView
+        ? (lang === "en" ? "Permanently deleted" : "স্থায়ীভাবে মুছে ফেলা হয়েছে")
+        : (lang === "en" ? "Moved to trash" : "ট্র্যাশে পাঠানো হয়েছে"));
       setDeleteId(null);
-    } catch {
-      showToast(t("common.deleteError"), "error");
+    } catch (err) {
+      const msg = (err as { message?: string })?.message;
+      showToast(msg || t("common.deleteError"), "error");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.admin.restoreProduct(id);
+      setAllProducts((prev) => prev.filter((p) => p.id !== id));
+      showToast(lang === "en" ? "Restored" : "পুনরুদ্ধার হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Restore failed" : "পুনরুদ্ধার ব্যর্থ", "error");
     }
   };
 
@@ -384,7 +420,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
       <ConfirmDialog
         open={!!deleteId}
-        message={t("confirm.deleteProduct")}
+        message={trashView
+          ? (lang === "en" ? "Permanently delete this product? This cannot be undone." : "এই পণ্যটি স্থায়ীভাবে মুছবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।")
+          : t("confirm.deleteProduct")}
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
         loading={deleting}
@@ -443,6 +481,15 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
             />
           </div>
           <button
+            type="button"
+            onClick={() => setTrashView(v => !v)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-colors shrink-0 ${trashView ? "bg-red-50 border-red-200 text-red-600" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+            title={trashView ? "Exit trash view" : "Show trash"}
+          >
+            <FiTrash2 className="w-4 h-4" />
+            <span className="hidden sm:inline">{trashView ? (lang === "en" ? "Exit Trash" : "ট্র্যাশ ছাড়ুন") : (lang === "en" ? "Trash" : "ট্র্যাশ")}</span>
+          </button>
+          <button
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors shrink-0"
           >
@@ -450,6 +497,14 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
             <span className="hidden sm:inline">{t("btn.addProduct")}</span>
           </button>
         </div>
+        {trashView && (
+          <div className="px-4 py-2 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl">
+            {lang === "en"
+              ? "Viewing trash. Delete here is permanent. Restore to bring a product back."
+              : "ট্র্যাশ ভিউ। এখান থেকে মুছলে স্থায়ী। পুনরুদ্ধার করে ফেরত আনুন।"}
+            {trashLoading && " — loading…"}
+          </div>
+        )}
 
         {/* Mobile Card View */}
         <div className="lg:hidden space-y-3">
@@ -497,7 +552,10 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                 <a href={`/products/${p.slug}`} target="_blank" rel="noopener noreferrer" className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"><FiEye className="w-4 h-4" /></a>
                 <button onClick={() => openEdit(p)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><FiEdit2 className="w-4 h-4" /></button>
                 <button onClick={() => duplicateProduct(p)} className="p-2 text-violet-600 hover:bg-violet-100 rounded-lg transition-colors"><FiCopy className="w-4 h-4" /></button>
-                <button onClick={() => setDeleteId(p.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
+                {trashView && (
+                  <button onClick={() => handleRestore(p.id)} className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors" title={lang === "en" ? "Restore" : "পুনরুদ্ধার"}>↩</button>
+                )}
+                <button onClick={() => setDeleteId(p.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors" title={trashView ? (lang === "en" ? "Delete permanently" : "স্থায়ী মুছুন") : (lang === "en" ? "Move to trash" : "ট্র্যাশে পাঠান")}><FiTrash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}
@@ -579,7 +637,12 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                             <button onClick={() => duplicateProduct(p)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="ডুপ্লিকেট">
                               <FiCopy className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="মুছুন">
+                            {trashView && (
+                              <button onClick={() => handleRestore(p.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title={lang === "en" ? "Restore" : "পুনরুদ্ধার"}>
+                                <span className="text-sm">↩</span>
+                              </button>
+                            )}
+                            <button onClick={() => setDeleteId(p.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={trashView ? (lang === "en" ? "Delete permanently" : "স্থায়ী মুছুন") : (lang === "en" ? "Move to trash" : "ট্র্যাশে পাঠান")}>
                               <FiTrash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>

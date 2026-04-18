@@ -113,6 +113,49 @@ export async function PUT(
 }
 
 export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let admin;
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
+
+  const { id } = await params;
+  const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
+  if (!existing) return notFound("Product not found");
+
+  // Hard delete only when explicitly forced OR already in trash.
+  const force = request.nextUrl.searchParams.get("force") === "1";
+  const alreadyTrashed = !!existing.deletedAt;
+
+  if (force || alreadyTrashed) {
+    await prisma.product.delete({ where: { id: Number(id) } });
+    revalidateAll("products");
+    bumpVersion("products");
+    return jsonResponse({ message: "Product permanently deleted" });
+  }
+
+  // Soft delete — also deactivate so it disappears from storefront immediately.
+  try {
+    await prisma.product.update({
+      where: { id: Number(id) },
+      data: { deletedAt: new Date(), isActive: false },
+    });
+  } catch (e) {
+    // Most likely cause: `deleted_at` column missing in DB. Run `npx prisma db push`.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[products] soft-delete failed:", msg);
+    if (/deleted_at|deletedAt|column.*does not exist/i.test(msg)) {
+      return errorResponse("Trash column missing. Run `npx prisma db push` to enable soft-delete.", 500);
+    }
+    return errorResponse("Failed to trash product: " + msg, 500);
+  }
+  revalidateAll("products");
+  bumpVersion("products");
+  return jsonResponse({ message: "Product moved to trash" });
+}
+
+// Restore from trash
+export async function PATCH(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -123,8 +166,11 @@ export async function DELETE(
   const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Product not found");
 
-  await prisma.product.delete({ where: { id: Number(id) } });
+  await prisma.product.update({
+    where: { id: Number(id) },
+    data: { deletedAt: null },
+  });
   revalidateAll("products");
   bumpVersion("products");
-  return jsonResponse({ message: "Product deleted" });
+  return jsonResponse({ message: "Product restored" });
 }

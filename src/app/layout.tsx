@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
+import HeadScripts from "@/components/HeadScripts";
 import { prisma } from "@/lib/prisma";
 import { buildThemeCss } from "@/lib/theme-tokens";
 
@@ -118,38 +119,29 @@ export default async function RootLayout({
           <meta name="facebook-domain-verification" content={fbDomainVerification} />
         )}
         <style id="theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />
-        {/* Inline scripts in <head> are safe in React 19 (the "script in JSX"
-            warning only fires for scripts rendered into <body>). */}
-        <script
-          id="js-ready"
-          dangerouslySetInnerHTML={{
-            __html: `document.documentElement.classList.add("js-ready")`,
-          }}
-        />
-        <script
-          id="org-jsonld"
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "Organization",
-              name: siteName,
-              url: SITE_URL,
-              logo: siteLogoUrl,
-              ...(orgPhone && {
-                contactPoint: {
-                  "@type": "ContactPoint",
-                  telephone: orgPhone,
-                  contactType: "customer service",
-                  availableLanguage: ["Bengali", "English"],
-                },
-              }),
-              ...(sameAs.length > 0 && { sameAs }),
-            }),
-          }}
-        />
       </head>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
+        {/* React 19 refuses to render inline <script> in JSX (even via next/script).
+            HeadScripts is a client-only side-effect component that injects
+            the JSON-LD + js-ready class via the DOM API after mount. */}
+        <HeadScripts
+          orgJsonLd={{
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: siteName,
+            url: SITE_URL,
+            logo: siteLogoUrl,
+            ...(orgPhone && {
+              contactPoint: {
+                "@type": "ContactPoint",
+                telephone: orgPhone,
+                contactType: "customer service",
+                availableLanguage: ["Bengali", "English"],
+              },
+            }),
+            ...(sameAs.length > 0 && { sameAs }),
+          }}
+        />
         <ClientLayout initialSettings={settings}>{children}</ClientLayout>
       </body>
     </html>

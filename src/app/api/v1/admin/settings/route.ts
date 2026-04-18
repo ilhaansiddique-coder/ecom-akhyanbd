@@ -13,7 +13,16 @@ export async function GET(_request: NextRequest) {
   const settings = await prisma.siteSetting.findMany();
 
   // Sensitive keys — mask in API response (write-only)
-  const SENSITIVE_KEYS = new Set(["smtp_pass", "steadfast_api_key", "steadfast_secret_key", "fb_capi_access_token"]);
+  const SENSITIVE_KEYS = new Set([
+    "smtp_pass",
+    "steadfast_api_key",
+    "steadfast_secret_key",
+    "fb_capi_access_token",
+    "pathao_client_secret",
+    "pathao_password",
+    "pathao_access_token",
+    "pathao_refresh_token",
+  ]);
 
   // Convert to key-value object, masking sensitive values
   const result: Record<string, string | null> = {};
@@ -36,21 +45,38 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
 
     // Skip masked values — don't overwrite secrets with "••••••••"
-    const entries = Object.entries(body).filter(([_, value]) => value !== "••••••••");
-    const updates = entries.map(([key, value]) =>
-      prisma.siteSetting.upsert({
-        where: { key },
-        update: { value: value as string },
-        create: { key, value: value as string },
-      })
-    );
+    const incoming = Object.entries(body).filter(([_, v]) => v !== "••••••••");
+    if (incoming.length === 0) return jsonResponse({ message: "Nothing to update" });
 
-    await prisma.$transaction(updates);
+    // Only upsert keys whose value actually changed — saves N round trips per save.
+    const keys = incoming.map(([k]) => k);
+    const existing = await prisma.siteSetting.findMany({
+      where: { key: { in: keys } },
+      select: { key: true, value: true },
+    });
+    const existingMap = new Map(existing.map((r) => [r.key, r.value]));
+
+    const changed = incoming.filter(([k, v]) => existingMap.get(k) !== (v as string));
+    if (changed.length === 0) {
+      return jsonResponse({ message: "No changes" });
+    }
+
+    // Run upserts in parallel (no transaction needed — independent rows, idempotent).
+    await Promise.all(
+      changed.map(([key, value]) =>
+        prisma.siteSetting.upsert({
+          where: { key },
+          update: { value: value as string },
+          create: { key, value: value as string },
+        })
+      )
+    );
 
     revalidateAll("settings");
     clearSmtpCache();
-    return jsonResponse({ message: "Settings updated" });
+    return jsonResponse({ message: "Settings updated", changed: changed.length });
   } catch (error) {
+    console.error("Settings PUT error:", error);
     return errorResponse("Failed to update settings", 500);
   }
 }

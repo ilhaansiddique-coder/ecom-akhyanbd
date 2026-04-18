@@ -33,9 +33,16 @@ const productSelect = {
 // Cache the heavy DB fetch — busted by revalidateTag("products") on every mutation
 const prefetch = unstable_cache(
   async () => {
-    const [products, categories, brands] = await Promise.all([
-      // Load ALL products — client does search+pagination in memory (instant)
-      prisma.product.findMany({ select: productSelect, orderBy: { createdAt: "desc" } }),
+    // Try with soft-delete filter; fall back if `deleted_at` column missing
+    // (e.g. prisma generate / db:push not yet run after schema change).
+    let products;
+    try {
+      products = await prisma.product.findMany({ where: { deletedAt: null }, select: productSelect, orderBy: { createdAt: "desc" } });
+    } catch (e) {
+      console.warn("[products] deletedAt filter failed, falling back. Run `npx prisma generate && npx prisma db push`. Err:", e instanceof Error ? e.message : e);
+      products = await prisma.product.findMany({ select: productSelect, orderBy: { createdAt: "desc" } });
+    }
+    const [categories, brands] = await Promise.all([
       prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
       prisma.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     ]);

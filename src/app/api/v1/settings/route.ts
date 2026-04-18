@@ -7,6 +7,13 @@ const PRIVATE_KEYS = new Set([
   "steadfast_api_key",
   "steadfast_secret_key",
   "smtp_pass",
+  "pathao_client_id",
+  "pathao_client_secret",
+  "pathao_username",
+  "pathao_password",
+  "pathao_access_token",
+  "pathao_refresh_token",
+  "pathao_token_expires_at",
 ]);
 
 export async function GET() {

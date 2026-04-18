@@ -97,6 +97,7 @@ model Product {
   customShipping Boolean?  @default(false) @map("custom_shipping")
   shippingCost   Float?    @map("shipping_cost")
   sortOrder     Int       @default(0) @map("sort_order")
+  deletedAt     DateTime? @map("deleted_at") // Soft-delete; null = active, set = trashed
   createdAt     DateTime? @default(now()) @map("created_at")
   updatedAt     DateTime? @updatedAt @map("updated_at")
 
@@ -168,6 +169,7 @@ model Order {
   orderToken      String?   @unique @map("order_token")
   notes              String?
   courierSent        Boolean   @default(false) @map("courier_sent")
+  courierType        String?   @map("courier_type") // "steadfast" | "pathao"
   consignmentId      String?   @map("consignment_id")
   courierStatus      String?   @map("courier_status")
   courierScore       String?   @map("courier_score")

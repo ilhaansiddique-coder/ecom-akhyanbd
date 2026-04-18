@@ -116,7 +116,8 @@ export const api = {
     createProduct: (data: Record<string, unknown>) => fetchAPI("/admin/products", { method: "POST", body: JSON.stringify(data) }),
     getProduct: (id: number) => fetchAPI(`/admin/products/${id}`),
     updateProduct: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    deleteProduct: (id: number) => fetchAPI(`/admin/products/${id}`, { method: "DELETE" }),
+    deleteProduct: (id: number, force = false) => fetchAPI(`/admin/products/${id}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+    restoreProduct: (id: number) => fetchAPI(`/admin/products/${id}`, { method: "PATCH" }),
 
     // Categories
     getCategories: () => fetchAPI("/admin/categories"),
@@ -135,7 +136,7 @@ export const api = {
     getOrder: (id: number) => fetchAPI(`/admin/orders/${id}`),
     updateOrder: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     updateOrderStatus: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/orders/${id}/status`, { method: "PUT", body: JSON.stringify(data) }),
-    deleteOrder: (id: number) => fetchAPI(`/admin/orders/${id}`, { method: "DELETE" }),
+    deleteOrder: (id: number, force = false) => fetchAPI(`/admin/orders/${id}${force ? "?force=1" : ""}`, { method: "DELETE" }),
 
     // Users
     getUsers: (params?: string) => fetchAPI(`/admin/users${params ? `?${params}` : ""}`),
@@ -222,13 +223,31 @@ export const api = {
     addBlockedIp: (data: Record<string, unknown>) => fetchAPI("/admin/spam/blocked-ips", { method: "POST", body: JSON.stringify(data) }),
     deleteBlockedIp: (id: number) => fetchAPI(`/admin/spam/blocked-ips/${id}`, { method: "DELETE" }),
 
-    // Courier (Steadfast)
-    courierBalance: () => fetchAPI("/admin/courier?action=balance"),
-    courierStatus: (consignmentId: string) => fetchAPI(`/admin/courier?action=status&consignment_id=${consignmentId}`),
+    // Courier (Steadfast | Pathao). `provider` defaults to "steadfast".
+    listActiveCouriers: () =>
+      fetchAPI("/admin/courier/active") as Promise<{ couriers: { id: "steadfast" | "pathao"; label: string }[] }>,
+    courierBalance: (provider: "steadfast" | "pathao" = "steadfast") =>
+      fetchAPI(provider === "pathao" ? "/admin/courier/pathao?action=balance" : "/admin/courier?action=balance"),
+    courierStatus: (consignmentId: string, provider: "steadfast" | "pathao" = "steadfast") =>
+      fetchAPI(provider === "pathao"
+        ? `/admin/courier/pathao?action=status&consignment_id=${consignmentId}`
+        : `/admin/courier?action=status&consignment_id=${consignmentId}`),
     courierScore: (phone: string) => fetchAPI(`/admin/courier?action=score&phone=${phone}`),
-    sendToCourier: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ order_id: orderId }) }),
-    bulkSendToCourier: (orderIds: number[]) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ order_ids: orderIds }) }),
-    checkCourierStatus: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ action: "check_status", order_id: orderId }) }),
+    sendToCourier: (orderId: number, provider: "steadfast" | "pathao" = "steadfast") =>
+      fetchAPI(provider === "pathao" ? "/admin/courier/pathao" : "/admin/courier",
+        { method: "POST", body: JSON.stringify({ order_id: orderId }) }),
+    sendToPathaoWithPayload: (orderId: number, payload: Record<string, unknown>) =>
+      fetchAPI("/admin/courier/pathao",
+        { method: "POST", body: JSON.stringify({ order_id: orderId, payload }) }),
+    pathaoCities: () => fetchAPI("/admin/courier/pathao?action=cities") as Promise<{ items: { city_id: number; city_name: string }[] }>,
+    pathaoZones: (cityId: number) => fetchAPI(`/admin/courier/pathao?action=zones&city_id=${cityId}`) as Promise<{ items: { zone_id: number; zone_name: string }[] }>,
+    pathaoAreas: (zoneId: number) => fetchAPI(`/admin/courier/pathao?action=areas&zone_id=${zoneId}`) as Promise<{ items: { area_id: number; area_name: string }[] }>,
+    bulkSendToCourier: (orderIds: number[], provider: "steadfast" | "pathao" = "steadfast") =>
+      fetchAPI(provider === "pathao" ? "/admin/courier/pathao" : "/admin/courier",
+        { method: "POST", body: JSON.stringify({ order_ids: orderIds }) }),
+    checkCourierStatus: (orderId: number, provider?: "steadfast" | "pathao") =>
+      fetchAPI(provider === "pathao" ? "/admin/courier/pathao" : "/admin/courier",
+        { method: "POST", body: JSON.stringify({ action: "check_status", order_id: orderId }) }),
     checkCourierScore: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ action: "check_score", order_id: orderId }) }),
   },
 };
