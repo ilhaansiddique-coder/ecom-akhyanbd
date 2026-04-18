@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FiCheckCircle, FiPackage, FiPhone, FiMail, FiArrowLeft } from "react-icons/fi";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 interface OrderData {
   id: number;
@@ -19,6 +20,9 @@ interface OrderData {
 export default function ThankYouPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order");
+  const siteSettings = useSiteSettings();
+  const siteEmail = siteSettings.email || "";
+  const sitePhone = siteSettings.phone || "";
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -36,7 +40,7 @@ export default function ThankYouPage({ params: paramsPromise }: { params: Promis
         {/* Success card */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Header */}
-          <div className="bg-[#0f5931] text-white text-center py-8 px-6">
+          <div className="bg-primary text-white text-center py-8 px-6">
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <FiCheckCircle className="w-8 h-8" />
             </div>
@@ -47,15 +51,38 @@ export default function ThankYouPage({ params: paramsPromise }: { params: Promis
           {/* Order details */}
           <div className="p-6 space-y-5">
             {loading ? (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-4 border-[#0f5931] border-t-transparent rounded-full animate-spin mx-auto" />
-              </div>
+              // Inline content skeleton — same shape as the loaded state so
+              // the swap-in is invisible. Better UX than a spinner because
+              // the user immediately sees the structure of what's coming.
+              <>
+                <div className="bg-gray-50 rounded-xl p-4 text-center space-y-2">
+                  <div className="h-3 w-20 bg-gray-200 rounded mx-auto animate-pulse" />
+                  <div className="h-7 w-28 bg-gray-200 rounded mx-auto animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />
+                  <div className="h-4 w-2/3 bg-gray-100 rounded animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-16 bg-gray-100 rounded animate-pulse" />
+                  {[0, 1].map((i) => (
+                    <div key={i} className="bg-gray-50 rounded-xl px-4 py-3 flex justify-between items-center">
+                      <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-4 w-14 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-primary/5 rounded-xl p-4 flex justify-between items-center">
+                  <div className="h-5 w-12 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-6 w-20 bg-gray-200 rounded animate-pulse" />
+                </div>
+              </>
             ) : order ? (
               <>
                 {/* Order ID */}
                 <div className="bg-gray-50 rounded-xl p-4 text-center">
                   <p className="text-sm text-gray-500">অর্ডার নম্বর</p>
-                  <p className="text-2xl font-bold text-[#0f5931] mt-1">#{order.id}</p>
+                  <p className="text-2xl font-bold text-primary mt-1">#{order.id}</p>
                 </div>
 
                 {/* Customer */}
@@ -74,16 +101,16 @@ export default function ThankYouPage({ params: paramsPromise }: { params: Promis
                           <FiPackage className="w-4 h-4 text-gray-400" />
                           <span className="text-sm text-gray-700">{item.product_name} × {item.quantity}</span>
                         </div>
-                        <span className="font-semibold text-[#0f5931]">৳{item.price * item.quantity}</span>
+                        <span className="font-semibold text-primary">৳{item.price * item.quantity}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Total */}
-                <div className="bg-[#0f5931]/5 rounded-xl p-4 flex justify-between items-center">
+                <div className="bg-primary/5 rounded-xl p-4 flex justify-between items-center">
                   <span className="font-medium text-gray-700">মোট</span>
-                  <span className="text-xl font-bold text-[#0f5931]">৳{order.total}</span>
+                  <span className="text-xl font-bold text-primary">৳{order.total}</span>
                 </div>
 
                 {/* Delivery info */}
@@ -99,14 +126,20 @@ export default function ThankYouPage({ params: paramsPromise }: { params: Promis
             )}
 
             {/* Contact */}
-            <div className="flex items-center justify-center gap-4 text-xs text-gray-400 pt-2">
-              <a href="tel:+8801731492117" className="flex items-center gap-1 hover:text-gray-600"><FiPhone className="w-3 h-3" /> +8801731492117</a>
-              <a href="mailto:info@mavesoj.com" className="flex items-center gap-1 hover:text-gray-600"><FiMail className="w-3 h-3" /> info@mavesoj.com</a>
-            </div>
+            {(sitePhone || siteEmail) && (
+              <div className="flex items-center justify-center gap-4 text-xs text-gray-400 pt-2">
+                {sitePhone && (
+                  <a href={`tel:${sitePhone}`} className="flex items-center gap-1 hover:text-gray-600"><FiPhone className="w-3 h-3" /> {sitePhone}</a>
+                )}
+                {siteEmail && (
+                  <a href={`mailto:${siteEmail}`} className="flex items-center gap-1 hover:text-gray-600"><FiMail className="w-3 h-3" /> {siteEmail}</a>
+                )}
+              </div>
+            )}
 
             {/* Back to home */}
             <div className="text-center">
-              <Link href="/" className="inline-flex items-center gap-2 text-sm text-[#0f5931] font-medium hover:underline">
+              <Link href="/" className="inline-flex items-center gap-2 text-sm text-primary font-medium hover:underline">
                 <FiArrowLeft className="w-4 h-4" /> হোম পেজে ফিরে যান
               </Link>
             </div>

@@ -3,8 +3,8 @@ import { FiFileText, FiArrowLeft } from "react-icons/fi";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "ব্লগ — মা ভেষজ বাণিজ্যালয়",
-  description: "ভেষজ পণ্য, স্বাস্থ্য টিপস ও প্রাকৃতিক চিকিৎসা সম্পর্কে জানুন।",
+  title: "ব্লগ",
+  description: "সর্বশেষ পোস্ট, টিপস এবং আপডেট পড়ুন।",
 };
 
 export default function BlogPage() {
@@ -16,8 +16,8 @@ export default function BlogPage() {
         </div>
         <h1 className="text-3xl font-bold text-foreground mb-3">ব্লগ</h1>
         <p className="text-text-muted mb-8">
-          আমাদের ব্লগ শীঘ্রই আসছে। ভেষজ পণ্য, স্বাস্থ্য টিপস ও প্রাকৃতিক চিকিৎসা সম্পর্কে
-          দারুণ সব লেখা নিয়ে আমরা আসছি।
+          আমাদের ব্লগ শীঘ্রই আসছে। শিশু ফ্যাশন, স্টাইল টিপস ও প্যারেন্টিং গাইড নিয়ে
+          দারুণ সব লেখা থাকছে।
         </p>
         <Link
           href="/"

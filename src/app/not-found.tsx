@@ -3,7 +3,7 @@ import { FiHome, FiShoppingBag } from "react-icons/fi";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "পেজটি পাওয়া যায়নি — মা ভেষজ বাণিজ্যালয়",
+  title: "পেজটি পাওয়া যায়নি",
 };
 
 export default function NotFound() {

@@ -9,7 +9,7 @@ const FlashSaleClient = dynamic(() => import("./FlashSaleClient"), {
           <div className="p-2.5 bg-sale-red/10 rounded-xl w-11 h-11" />
           <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl">
           {[1, 2].map((i) => (
             <div key={i} className="bg-white rounded-2xl border border-border h-80 animate-pulse" />
           ))}

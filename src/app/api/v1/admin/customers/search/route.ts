@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 
 /**
  * GET /api/v1/admin/customers/search?q=01700
@@ -10,7 +10,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
  */
 export async function GET(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const q = request.nextUrl.searchParams.get("q") || "";
   if (q.length < 2) return jsonResponse([]);

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { FiCheck, FiPhone, FiMapPin, FiPackage } from "react-icons/fi";
 import { toBn } from "@/utils/toBn";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 interface OrderData {
   id: number;
@@ -44,6 +45,9 @@ const paymentLabels: Record<string, string> = {
 export default function OrderConfirmationPage() {
   const params = useParams();
   const token = params.token as string;
+  const siteSettings = useSiteSettings();
+  const siteName = siteSettings.site_name || "Site";
+  const sitePhone = siteSettings.phone || "";
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -206,7 +210,7 @@ export default function OrderConfirmationPage() {
             {/* Footer */}
             <div className="mt-8 text-center">
               <p className="text-xs text-gray-400">ধন্যবাদ আপনার অর্ডারের জন্য! শীঘ্রই আমরা যোগাযোগ করব।</p>
-              <p className="text-xs text-gray-400 mt-1">মা ভেষজ বাণিজ্যালয় | +880 1731492117</p>
+              <p className="text-xs text-gray-400 mt-1">{[siteName, sitePhone].filter(Boolean).join(" | ")}</p>
             </div>
           </div>
         </motion.div>

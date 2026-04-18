@@ -1,0 +1,2016 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { api } from "@/lib/api";
+import { toBn } from "@/utils/toBn";
+import DashboardLayout from "@/components/DashboardLayout";
+import Toast from "@/components/Toast";
+import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus, FiTrash2 } from "react-icons/fi";
+import { TableSkeleton } from "@/components/DashboardSkeleton";
+import Modal from "@/components/Modal";
+import DateRangePicker from "@/components/DateRangePicker";
+import StatusFilter from "@/components/StatusFilter";
+import InlineSelect from "@/components/InlineSelect";
+import { useLang } from "@/lib/LanguageContext";
+import { theme } from "@/lib/theme";
+import { SafeNextImage } from "@/components/SafeImage";
+
+interface OrderItem {
+  id: number;
+  product_id?: number;
+  product_name: string;
+  variant_id?: number;
+  variant_label?: string;
+  price: number;
+  quantity: number;
+  product?: { image?: string } | null;
+}
+interface Order {
+  id: number;
+  customer_name: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_address?: string;
+  city?: string;
+  zip_code?: string;
+  phone?: string;
+  subtotal: number;
+  shipping_cost: number;
+  total: number;
+  status: string;
+  payment_status: string;
+  payment_method: string;
+  transaction_id?: string;
+  notes?: string;
+  courier_sent?: boolean;
+  consignment_id?: string;
+  courier_status?: string;
+  courier_score?: string;
+  created_at: string;
+  items?: OrderItem[];
+  user?: { id: number; name: string; email: string } | null;
+}
+
+function useStatusOptions() {
+  const { t, lang } = useLang();
+  return [
+    { value: "", label: t("filter.allStatus"), color: "" },
+    { value: "pending", label: t("status.pending"), color: "bg-yellow-400" },
+    { value: "processing", label: t("status.processing"), color: "bg-indigo-400" },
+    { value: "on_hold", label: lang === "en" ? "On Hold" : "অন হোল্ড", color: "bg-orange-400" },
+    { value: "confirmed", label: t("status.confirmed"), color: "bg-blue-400" },
+    { value: "shipped", label: t("status.shipped"), color: "bg-purple-400" },
+    { value: "delivered", label: t("status.delivered"), color: "bg-green-400" },
+    { value: "cancelled", label: t("status.cancelled"), color: "bg-red-400" },
+    { value: "trashed", label: lang === "en" ? "Trash" : "ট্র্যাশ", color: "bg-gray-400" },
+  ];
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800",
+  processing: "bg-indigo-100 text-indigo-800",
+  on_hold: "bg-orange-100 text-orange-800",
+  confirmed: "bg-blue-100 text-blue-800",
+  shipped: "bg-purple-100 text-purple-800",
+  delivered: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800",
+  trashed: "bg-gray-100 text-gray-500",
+};
+
+function usePaymentOptions() {
+  const { t } = useLang();
+  return [
+    { value: "unpaid", label: t("status.unpaid"), color: "bg-orange-400" },
+    { value: "paid", label: t("status.paid"), color: "bg-green-400" },
+  ];
+}
+
+function usePaymentLabels() {
+  const { t } = useLang();
+  return {
+    cod: t("payment.cod"),
+    bkash: t("payment.bkash"),
+    nagad: t("payment.nagad"),
+    bank: t("payment.bank"),
+  } as Record<string, string>;
+}
+
+interface ShippingZoneData { id: number; name: string; rate: number }
+interface InitialData { items: Order[]; total: number; shippingZones: ShippingZoneData[] }
+
+export default function OrdersClient({ initialData }: { initialData?: InitialData }) {
+  const { t, lang } = useLang();
+  const STATUS_OPTIONS = useStatusOptions();
+  const PAYMENT_OPTIONS = usePaymentOptions();
+  const PAYMENT_LABELS = usePaymentLabels();
+  const [orders, setOrders] = useState<Order[]>(initialData?.items ?? []);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<Record<number, string>>({});
+  const [pendingPayment, setPendingPayment] = useState<Record<number, string>>({});
+  const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
+
+  // Shipping zones
+  const [shippingZones, setShippingZones] = useState<{ id: number; name: string; rate: number }[]>(initialData?.shippingZones ?? []);
+  useEffect(() => {
+    if (initialData?.shippingZones?.length) return; // already loaded from server
+    api.admin.getShippingZones()
+      .then((res: any) => setShippingZones((res.data || res || []).map((z: any) => ({ id: z.id, name: z.name, rate: z.rate }))))
+      .catch(() => {});
+  }, []);
+
+  // Bulk select + Courier
+  const [selectedOrders, setSelectedOrders] = useState<Set<number>>(new Set());
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<{ image: string; x: number; y: number } | null>(null);
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
+  const [editingCN, setEditingCN] = useState<{ orderId: number; value: string } | null>(null);
+  const [courierLoading, setCourierLoading] = useState<number | null>(null);
+  const [courierBalance, setCourierBalance] = useState<number | null>(null);
+  const [scoreLoading, setScoreLoading] = useState<number | null>(null);
+  const [scorePopup, setScorePopup] = useState<{
+    orderId: number;
+    total_parcels: number;
+    total_delivered: number;
+    total_cancelled?: number;
+    success_ratio: string;
+  } | null>(null);
+
+  // Bulk courier refresh
+  const [bulkRefreshOpen, setBulkRefreshOpen] = useState(false);
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const [bulkRefreshProgress, setBulkRefreshProgress] = useState({ done: 0, total: 0, delivered: 0 });
+
+  // Bulk score check
+  const [bulkScoreOpen, setBulkScoreOpen] = useState(false);
+  const [bulkScoreChecking, setBulkScoreChecking] = useState(false);
+  const [bulkScoreProgress, setBulkScoreProgress] = useState({ done: 0, total: 0 });
+
+  // Detail modal
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Create order modal
+  const [createOpen, setCreateOpen] = useState(false);
+  interface CreateItem { product_id: number; product_name: string; price: number; stock: number; quantity: number; image?: string }
+  const [createForm, setCreateForm] = useState({
+    customer_name: "", customer_phone: "", customer_email: "",
+    customer_address: "", city: "", zip_code: "",
+    payment_method: "cod", notes: "", shipping_cost: "60", discount: "0",
+    items: [] as CreateItem[],
+  });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [allProducts, setAllProducts] = useState<{ id: number; name: string; slug?: string; price: number; stock: number; image?: string }[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerResults, setCustomerResults] = useState<{ id?: number; name: string; phone: string; email?: string; address?: string; city?: string; zip_code?: string; source: string }[]>([]);
+  const [customerSearchTimer, setCustomerSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // Edit modal
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [editForm, setEditForm] = useState({
+    customer_name: "", customer_phone: "", customer_email: "", customer_address: "",
+    city: "", zip_code: "", status: "", payment_status: "", payment_method: "",
+    shipping_cost: "", discount: "0", notes: "",
+    items: [] as CreateItem[],
+  });
+  const [editProductSearch, setEditProductSearch] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Courier connection state + auto score check
+  const [courierConnected, setCourierConnected] = useState(false);
+  const autoCheckedRef = useRef(new Set<number>());
+
+  useEffect(() => {
+    api.admin.courierBalance()
+      .then(() => setCourierConnected(true))
+      .catch(() => setCourierConnected(false));
+  }, []);
+
+  // Auto-check courier scores when courier is connected
+  useEffect(() => {
+    if (!courierConnected || orders.length === 0) return;
+    const unchecked = orders.filter((o) => !o.courier_score && !autoCheckedRef.current.has(o.id));
+    if (unchecked.length === 0) return;
+    unchecked.forEach((o) => autoCheckedRef.current.add(o.id));
+    let cancelled = false;
+    (async () => {
+      for (const order of unchecked) {
+        if (cancelled) break;
+        try {
+          const res = await api.admin.checkCourierScore(order.id);
+          const ratio = res.success_ratio || "0.0%";
+          setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_score: ratio } : o));
+        } catch { break; }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [courierConnected, orders]);
+
+  const showToast = (message: string, type: "success" | "error" = "success") =>
+    setToast({ message, type });
+
+  const fetchAll = useCallback((background = false) => {
+    if (!background) setLoading(true);
+    const params = statusFilter ? `status=${statusFilter}` : "";
+    api.admin.getOrders(params)
+      .then((res) => {
+        const all = res.data || res || [];
+        // Hide trashed orders from "all" view, only show when explicitly filtered
+        setOrders(statusFilter === "trashed" ? all : all.filter((o: Order) => o.status !== "trashed"));
+      })
+      .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
+
+  // Close bulk status dropdown on outside click
+  useEffect(() => {
+    if (!bulkStatusOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-bulk-status]")) setBulkStatusOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [bulkStatusOpen]);
+
+  const openDetail = async (orderId: number) => {
+    setDetailLoading(true);
+    try {
+      const res = await api.admin.getOrder(orderId);
+      setDetailOrder(res.data || res);
+    } catch {
+      showToast(t("toast.loadError"), "error");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const openEdit = async (orderId: number) => {
+    try {
+      const res = await api.admin.getOrder(orderId);
+      const o = res.data || res;
+      setEditOrder(o);
+      setEditForm({
+        customer_name: o.customer_name || "",
+        customer_phone: o.customer_phone || o.phone || "",
+        customer_email: o.customer_email || "",
+        customer_address: o.customer_address || "",
+        city: o.city || "",
+        zip_code: o.zip_code || "",
+        status: o.status || "pending",
+        payment_status: o.payment_status || "unpaid",
+        payment_method: o.payment_method || "cod",
+        shipping_cost: String(o.shipping_cost ?? 0),
+        discount: String(o.discount ?? 0),
+        notes: o.notes || "",
+        items: (o.items || []).map((i: any) => ({
+          product_id: i.product_id || i.productId,
+          product_name: i.product_name || i.productName || "",
+          price: Number(i.price),
+          stock: 9999,
+          quantity: Number(i.quantity),
+          image: i.product?.image || "",
+        })),
+      });
+      setEditProductSearch("");
+      // Fetch products for picker if not loaded
+      if (allProducts.length === 0) {
+        api.admin.getProducts("per_page=200").then((res) => {
+          const data = res.data || res || [];
+          setAllProducts(Array.isArray(data) ? data.map((p: Record<string, unknown>) => ({
+            id: p.id as number,
+            name: (p.name as string) || "",
+            slug: (p.slug as string) || "",
+            price: Number(p.price) || 0,
+            stock: Number(p.stock) || 0,
+            image: (p.image as string) || "",
+          })) : []);
+        }).catch(() => {});
+      }
+    } catch {
+      showToast(t("toast.loadError"), "error");
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editOrder) return;
+    setEditSaving(true);
+    try {
+      // Auto-set payment based on status
+      const autoPayment = editForm.status === "delivered" ? "paid" : editForm.status === "cancelled" ? "unpaid" : editForm.payment_status;
+      const subtotal = editForm.items.reduce((s, i) => s + i.price * i.quantity, 0);
+      const shipping = Number(editForm.shipping_cost) || 0;
+      const discount = Number(editForm.discount) || 0;
+      const res = await api.admin.updateOrder(editOrder.id, {
+        customer_name: editForm.customer_name,
+        customer_phone: editForm.customer_phone,
+        customer_email: editForm.customer_email,
+        customer_address: editForm.customer_address,
+        status: editForm.status,
+        payment_status: autoPayment,
+        payment_method: editForm.payment_method,
+        shipping_cost: shipping,
+        notes: editForm.notes,
+        subtotal,
+        discount,
+        total: Math.max(0, subtotal + shipping - discount),
+        items: editForm.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, price: i.price, quantity: i.quantity })),
+      });
+      const updated = res.data || res;
+      setOrders((prev) => prev.map((o) => (o.id === editOrder.id ? { ...o, ...updated } : o)));
+      setEditOrder(null);
+      showToast(t("toast.updated"));
+    } catch {
+      showToast(t("toast.error"), "error");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleTrashOrder = async (orderId: number) => {
+    if (!confirm(lang === "en" ? "Move this order to trash?" : "এই অর্ডারটি ট্র্যাশে পাঠাতে চান?")) return;
+    try {
+      await api.admin.updateOrder(orderId, { status: "trashed" });
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      showToast(lang === "en" ? "Moved to trash" : "ট্র্যাশে পাঠানো হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Failed to trash" : "ট্র্যাশে পাঠাতে সমস্যা", "error");
+    }
+  };
+
+  const handlePermanentDelete = async (orderId: number) => {
+    if (!confirm(lang === "en" ? "Permanently delete this order? This cannot be undone." : "এই অর্ডারটি স্থায়ীভাবে মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।")) return;
+    try {
+      await api.admin.deleteOrder(orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      showToast(lang === "en" ? "Permanently deleted" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Failed to delete" : "মুছতে সমস্যা হয়েছে", "error");
+    }
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (selectedOrders.size === 0) return;
+    if (!confirm(lang === "en" ? `Permanently delete ${selectedOrders.size} orders?` : `${selectedOrders.size}টি অর্ডার স্থায়ীভাবে মুছবেন?`)) return;
+    try {
+      await Promise.all(Array.from(selectedOrders).map((id) => api.admin.deleteOrder(id)));
+      setOrders((prev) => prev.filter((o) => !selectedOrders.has(o.id)));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? "Deleted permanently" : "স্থায়ীভাবে মুছে ফেলা হয়েছে");
+    } catch {
+      showToast(lang === "en" ? "Bulk delete failed" : "মুছতে সমস্যা", "error");
+    }
+  };
+
+  const toggleSelectOrder = (id: number) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const unsent = filtered.filter(o => !o.courier_sent);
+    if (selectedOrders.size >= unsent.length) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(unsent.map(o => o.id)));
+    }
+  };
+
+  const handleBulkSendToCourier = async () => {
+    if (selectedOrders.size === 0) return;
+    if (!confirm(lang === "en" ? `Send ${selectedOrders.size} orders to Steadfast?` : `${selectedOrders.size}টি অর্ডার Steadfast-এ পাঠাবেন?`)) return;
+    setBulkSending(true);
+    try {
+      const res = await fetch("/api/v1/admin/courier", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bulk_send", order_ids: Array.from(selectedOrders) }),
+      }).then(r => r.json());
+
+      const sent = res.results?.filter((r: any) => r.status === "success").length || 0;
+      const failed = res.results?.filter((r: any) => r.status === "error").length || 0;
+
+      // Update local state for sent orders
+      if (res.results) {
+        for (const r of res.results) {
+          if (r.status === "success" && r.consignment_id) {
+            setOrders(prev => prev.map(o => o.id === r.order_id ? { ...o, courier_sent: true, consignment_id: r.consignment_id, courier_status: "pending" } : o));
+          }
+        }
+      }
+
+      setSelectedOrders(new Set());
+      showToast(`${sent} sent${failed > 0 ? `, ${failed} failed` : ""}`);
+    } catch {
+      showToast(lang === "en" ? "Bulk send failed" : "বাল্ক সেন্ড ব্যর্থ", "error");
+    } finally {
+      setBulkSending(false);
+    }
+  };
+
+  const handleBulkStatusChange = async (status: string) => {
+    if (selectedOrders.size === 0) return;
+    setBulkStatusOpen(false);
+    setBulkStatusLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedOrders).map((id) =>
+          api.admin.updateOrderStatus(id, { status })
+        )
+      );
+      setOrders((prev) => prev.map((o) => selectedOrders.has(o.id) ? { ...o, status } : o));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? `${selectedOrders.size} orders updated to ${status}` : `${selectedOrders.size}টি অর্ডার আপডেট হয়েছে`);
+    } catch {
+      showToast(lang === "en" ? "Bulk update failed" : "আপডেট ব্যর্থ", "error");
+    } finally {
+      setBulkStatusLoading(false);
+    }
+  };
+
+  const handleBulkTrash = async () => {
+    if (selectedOrders.size === 0) return;
+    if (!confirm(lang === "en" ? `Move ${selectedOrders.size} orders to trash?` : `${selectedOrders.size}টি অর্ডার ট্র্যাশে পাঠাবেন?`)) return;
+    setBulkStatusLoading(true);
+    try {
+      await Promise.all(
+        Array.from(selectedOrders).map((id) =>
+          api.admin.updateOrder(id, { status: "trashed" })
+        )
+      );
+      setOrders((prev) => prev.filter((o) => !selectedOrders.has(o.id)));
+      setSelectedOrders(new Set());
+      showToast(lang === "en" ? `${selectedOrders.size} orders trashed` : `${selectedOrders.size}টি অর্ডার ট্র্যাশ হয়েছে`);
+    } catch {
+      showToast(lang === "en" ? "Bulk trash failed" : "ট্র্যাশ ব্যর্থ", "error");
+    } finally {
+      setBulkStatusLoading(false);
+    }
+  };
+
+  const handleSendToCourier = async (orderId: number) => {
+    setCourierLoading(orderId);
+    try {
+      const res = await api.admin.sendToCourier(orderId);
+      if (res.consignment_id || res.order?.consignment_id) {
+        const cid = String(res.consignment_id || res.order?.consignment_id);
+        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_sent: true, consignment_id: cid, courier_status: "pending" } : o));
+        if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_sent: true, consignment_id: cid, courier_status: "pending" } : prev);
+        showToast("কুরিয়ারে পাঠানো হয়েছে!");
+      } else if (res.message?.includes("Already sent")) {
+        showToast("ইতিমধ্যে কুরিয়ারে পাঠানো হয়েছে");
+        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_sent: true } : o));
+      } else {
+        showToast(res.message || "কুরিয়ারে পাঠাতে সমস্যা হয়েছে", "error");
+      }
+    } catch (err) {
+      const error = err as { message?: string };
+      showToast(error.message || "কুরিয়ারে পাঠাতে সমস্যা হয়েছে", "error");
+    } finally {
+      setCourierLoading(null);
+    }
+  };
+
+  const handleCheckCourierStatus = async (orderId: number) => {
+    setCourierLoading(orderId);
+    try {
+      const res = await api.admin.checkCourierStatus(orderId);
+      if (res.delivery_status) {
+        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_status: res.delivery_status } : o));
+        if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_status: res.delivery_status } : prev);
+        showToast(`কুরিয়ার স্ট্যাটাস: ${res.delivery_status}`);
+      }
+    } catch {
+      showToast("স্ট্যাটাস চেক করতে সমস্যা হয়েছে", "error");
+    } finally {
+      setCourierLoading(null);
+    }
+  };
+
+  const handleBulkCourierRefresh = async (scope: "page" | "pending") => {
+    const eligible = (scope === "page" ? filtered : orders).filter(
+      (o) => o.courier_sent && o.courier_status !== "delivered" && o.courier_status !== "cancelled"
+    );
+    if (eligible.length === 0) {
+      showToast(lang === "en" ? "No orders to refresh" : "রিফ্রেশ করার মতো কোনো অর্ডার নেই");
+      setBulkRefreshOpen(false);
+      return;
+    }
+    setBulkRefreshing(true);
+    setBulkRefreshProgress({ done: 0, total: eligible.length, delivered: 0 });
+    let deliveredCount = 0;
+    for (const order of eligible) {
+      try {
+        const res = await api.admin.checkCourierStatus(order.id);
+        if (res.delivery_status) {
+          setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_status: res.delivery_status } : o));
+          // Auto-mark as delivered if courier says delivered
+          if (res.delivery_status === "delivered" && order.status !== "delivered") {
+            deliveredCount++;
+            try {
+              await api.admin.updateOrderStatus(order.id, { status: "delivered", payment_status: "paid" });
+              setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "delivered", payment_status: "paid" } : o));
+            } catch {}
+          }
+        }
+      } catch {}
+      setBulkRefreshProgress((p) => ({ ...p, done: p.done + 1, delivered: deliveredCount }));
+    }
+    setBulkRefreshing(false);
+    setBulkRefreshOpen(false);
+    showToast(lang === "en"
+      ? `${eligible.length} orders checked${deliveredCount > 0 ? ` • ${deliveredCount} auto-delivered` : ""}`
+      : `${eligible.length}টি অর্ডার চেক হয়েছে${deliveredCount > 0 ? ` • ${deliveredCount}টি ডেলিভারড` : ""}`);
+  };
+
+  const handleBulkScoreCheck = async (scope: "page" | "all") => {
+    const eligible = (scope === "page" ? filtered : orders).filter(
+      (o) => !o.courier_score && o.status !== "delivered"
+    );
+    if (eligible.length === 0) {
+      showToast(lang === "en" ? "No orders to check" : "চেক করার মতো কোনো অর্ডার নেই");
+      setBulkScoreOpen(false);
+      return;
+    }
+    setBulkScoreChecking(true);
+    setBulkScoreProgress({ done: 0, total: eligible.length });
+    for (const order of eligible) {
+      try {
+        const res = await api.admin.checkCourierScore(order.id);
+        const ratio = res.success_ratio || "0.0%";
+        setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_score: ratio } : o));
+      } catch { break; }
+      setBulkScoreProgress((p) => ({ ...p, done: p.done + 1 }));
+    }
+    setBulkScoreChecking(false);
+    setBulkScoreOpen(false);
+    showToast(lang === "en"
+      ? `${eligible.length} scores checked`
+      : `${eligible.length}টি স্কোর চেক হয়েছে`);
+  };
+
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const handleCheckBalance = async () => {
+    setBalanceLoading(true);
+    try {
+      const res = await api.admin.courierBalance();
+      setCourierBalance(res.balance ?? null);
+    } catch {
+      showToast("ব্যালেন্স চেক করতে সমস্যা হয়েছে — কুরিয়ার API কী চেক করুন", "error");
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
+
+  const handleCustomerSearch = (q: string) => {
+    setCustomerSearch(q);
+    if (customerSearchTimer) clearTimeout(customerSearchTimer);
+    if (q.length < 2) { setCustomerResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.admin.searchCustomers(q);
+        setCustomerResults(Array.isArray(res) ? res : []);
+      } catch { setCustomerResults([]); }
+    }, 300);
+    setCustomerSearchTimer(timer);
+  };
+
+  const selectCustomer = (c: typeof customerResults[0]) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      customer_name: c.name,
+      customer_phone: c.phone,
+      customer_email: c.email || "",
+      customer_address: c.address || prev.customer_address,
+      city: c.city || prev.city,
+      zip_code: c.zip_code || prev.zip_code,
+    }));
+    setCustomerSearch("");
+    setCustomerResults([]);
+  };
+
+  const openCreateOrder = () => {
+    setCreateOpen(true);
+    setProductSearch("");
+    // Pre-select first shipping zone
+    if (shippingZones.length > 0) {
+      setCreateForm(f => ({ ...f, shipping_cost: String(shippingZones[0].rate) }));
+    }
+    // Fetch products for picker
+    api.admin.getProducts("per_page=200").then((res) => {
+      const data = res.data || res || [];
+      setAllProducts(Array.isArray(data) ? data.map((p: Record<string, unknown>) => ({
+        id: p.id as number,
+        name: (p.name as string) || "",
+        slug: (p.slug as string) || "",
+        price: Number(p.price) || 0,
+        stock: Number(p.stock) || 0,
+        image: (p.image as string) || "",
+      })) : []);
+    }).catch(() => {});
+  };
+
+  const addProductToOrder = (product: typeof allProducts[0]) => {
+    // Check if already added
+    if (createForm.items.some((i) => i.product_id === product.id)) {
+      showToast("পণ্যটি ইতিমধ্যে যোগ করা হয়েছে", "error");
+      return;
+    }
+    setCreateForm((prev) => ({
+      ...prev,
+      items: [...prev.items, {
+        product_id: product.id,
+        product_name: product.name,
+        price: product.price,
+        stock: product.stock,
+        quantity: 1,
+        image: product.image,
+      }],
+    }));
+    setProductSearch("");
+  };
+
+  const handleCreateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateSaving(true);
+    try {
+      if (createForm.items.length === 0) { showToast("অন্তত একটি পণ্য যোগ করুন", "error"); setCreateSaving(false); return; }
+
+      const items = createForm.items.map((i) => ({
+        product_id: i.product_id,
+        product_name: i.product_name,
+        quantity: i.quantity,
+        price: i.price,
+      }));
+
+      const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      const discount = Number(createForm.discount) || 0;
+      const shipping = Number(createForm.shipping_cost) || 0;
+      const total = Math.max(0, subtotal - discount + shipping);
+
+      const res = await api.createOrder({
+        customer_name: createForm.customer_name,
+        customer_phone: createForm.customer_phone,
+        customer_email: createForm.customer_email || undefined,
+        customer_address: createForm.customer_address,
+        city: createForm.city || undefined,
+        zip_code: createForm.zip_code || undefined,
+        subtotal,
+        discount,
+        shipping_cost: shipping,
+        total,
+        payment_method: createForm.payment_method,
+        notes: createForm.notes || undefined,
+        items,
+      });
+
+      const created = res.data || res;
+      setOrders((prev) => [created, ...prev]);
+      setCreateOpen(false);
+      setCreateForm({
+        customer_name: "", customer_phone: "", customer_email: "",
+        customer_address: "", city: "", zip_code: "",
+        payment_method: "cod", notes: "", shipping_cost: "60", discount: "0",
+        items: [],
+      });
+      showToast(t("toast.created"));
+    } catch (err) {
+      const error = err as { message?: string };
+      showToast(error.message || t("toast.error"), "error");
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
+  const removeItem = (idx: number) => setCreateForm((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
+  const updateItemQty = (idx: number, qty: number) => setCreateForm((prev) => ({
+    ...prev,
+    items: prev.items.map((item, i) => i === idx ? { ...item, quantity: Math.min(Math.max(1, qty), item.stock) } : item),
+  }));
+
+  const handleCheckScore = async (orderId: number) => {
+    setScoreLoading(orderId);
+    try {
+      const res = await api.admin.checkCourierScore(orderId);
+      const totalParcels = res.total_parcels || 0;
+      const totalDelivered = res.total_delivered || 0;
+      const totalCancelled = totalParcels - totalDelivered;
+      const ratio = res.success_ratio || (totalParcels > 0 ? `${((totalDelivered / totalParcels) * 100).toFixed(1)}%` : "0%");
+
+      // Update order in list
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_score: ratio } : o));
+
+      // Show popup
+      setScorePopup({
+        orderId,
+        total_parcels: totalParcels,
+        total_delivered: totalDelivered,
+        total_cancelled: totalCancelled,
+        success_ratio: ratio,
+      });
+    } catch {
+      showToast("স্কোর চেক করতে সমস্যা হয়েছে", "error");
+    } finally {
+      setScoreLoading(null);
+    }
+  };
+
+  const handleStatusUpdate = async (orderId: number) => {
+    const newStatus = pendingStatus[orderId];
+    if (!newStatus) return;
+    setUpdatingId(orderId);
+    try {
+      const payload: Record<string, string> = { status: newStatus };
+      // Auto-set payment: delivered → paid, cancelled → unpaid
+      if (newStatus === "delivered") payload.payment_status = "paid";
+      if (newStatus === "cancelled") payload.payment_status = "unpaid";
+      await api.admin.updateOrderStatus(orderId, payload);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...payload } : o)));
+      if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, ...payload } : prev);
+      showToast(t("toast.updated"));
+      setPendingStatus((p) => { const n = { ...p }; delete n[orderId]; return n; });
+    } catch {
+      showToast(t("toast.error"), "error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const filtered = orders.filter((o) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      o.customer_name?.toLowerCase().includes(q) ||
+      (o.customer_phone || o.phone || "").toLowerCase().includes(q) ||
+      String(o.id).includes(q);
+    if (!matchesSearch) return false;
+
+    // Date filter
+    if (dateFrom || dateTo) {
+      const orderDate = new Date(o.created_at);
+      if (dateFrom && orderDate < new Date(dateFrom)) return false;
+      if (dateTo) {
+        const toEnd = new Date(dateTo);
+        toEnd.setHours(23, 59, 59, 999);
+        if (orderDate > toEnd) return false;
+      }
+    }
+    return true;
+  });
+
+  const inputCls = theme.input;
+  const selectCls = theme.selectSmall;
+
+  return (
+    <DashboardLayout title={t("dash.orders")}>
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ ...toast, message: "" })} />
+
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+        {/* Toolbar */}
+        <div className="space-y-3">
+          {/* Row 1: Filters + actions */}
+          <div className="flex flex-wrap gap-2 md:gap-3 items-center">
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+            />
+            <StatusFilter
+              value={statusFilter}
+              options={STATUS_OPTIONS}
+              onChange={setStatusFilter}
+              placeholder={t("filter.allStatus")}
+            />
+            {/* Courier balance — fetch on click only */}
+            <button type="button" onClick={handleCheckBalance} disabled={balanceLoading}
+              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:shadow-sm transition-all whitespace-nowrap disabled:opacity-50" title="Check Courier Balance">
+              <FiTruck className="w-4 h-4" />
+              {balanceLoading ? "..." : courierBalance !== null ? `৳${courierBalance}` : lang === "en" ? "Balance" : "ব্যালেন্স"}
+            </button>
+            {/* Bulk actions — shown when orders are selected */}
+            {selectedOrders.size > 0 && (
+              <>
+                {/* Send to Courier */}
+                <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading}
+                  className="flex items-center gap-2 px-3.5 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 whitespace-nowrap">
+                  <FiTruck className="w-4 h-4" />
+                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : `Send ${selectedOrders.size} to Courier`}</span>
+                  <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
+                </button>
+
+                {/* Bulk Status Change */}
+                <div className="relative" data-bulk-status>
+                  <button type="button" onClick={() => setBulkStatusOpen((o) => !o)} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiCheckCircle className="w-4 h-4 text-gray-500" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Set Status" : "স্ট্যাটাস"}</span>
+                    <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${bulkStatusOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {bulkStatusOpen && (
+                    <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl shadow-black/10 min-w-44 py-1">
+                      {[
+                        { value: "pending",    label: lang === "en" ? "Pending" : "পেন্ডিং",       dot: "bg-yellow-400" },
+                        { value: "confirmed",  label: lang === "en" ? "Confirmed" : "কনফার্মড",     dot: "bg-blue-400" },
+                        { value: "processing", label: lang === "en" ? "Processing" : "প্রসেসিং",   dot: "bg-indigo-400" },
+                        { value: "shipped",    label: lang === "en" ? "Shipped" : "শিপড",           dot: "bg-purple-400" },
+                        { value: "delivered",  label: lang === "en" ? "Delivered" : "ডেলিভারড",    dot: "bg-green-400" },
+                        { value: "cancelled",  label: lang === "en" ? "Cancelled" : "বাতিল",       dot: "bg-red-400" },
+                      ].map(({ value, label, dot }) => (
+                        <button key={value} type="button" onClick={() => handleBulkStatusChange(value)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bulk Trash or Bulk Permanent Delete */}
+                {statusFilter === "trashed" ? (
+                  <button type="button" onClick={handleBulkPermanentDelete} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-red-500 rounded-xl text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiXCircle className="w-4 h-4" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Delete Forever" : "স্থায়ীভাবে মুছুন"}</span>
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleBulkTrash} disabled={bulkStatusLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    <FiTrash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">{lang === "en" ? "Trash" : "ট্র্যাশ"}</span>
+                  </button>
+                )}
+              </>
+            )}
+            {/* Search: visible only on desktop, inline */}
+            <div className="relative flex-1 min-w-52 hidden md:block">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder={t("search.customers")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none"
+              />
+            </div>
+            {/* Add Order button */}
+            <button type="button" onClick={openCreateOrder}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors whitespace-nowrap ml-auto">
+              <FiPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">{t("btn.add")} {t("dash.orders")}</span>
+            </button>
+          </div>
+          {/* Row 2: Search bar on mobile/tablet (full width below) */}
+          <div className="relative md:hidden">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder={t("search.customers")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="lg:hidden space-y-3">
+          {loading ? (
+            <TableSkeleton />
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-12 text-center text-gray-400">{t("empty.orders")}</div>
+          ) : filtered.map((o) => (
+            <div key={o.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              {/* Card header */}
+              <div className="px-4 pt-4 pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {!o.courier_sent && (
+                      <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)] shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 font-medium">#{toBn(o.id)}</span>
+                        <span className="text-xs text-gray-400">{new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}</span>
+                      </div>
+                      <p className="font-semibold text-gray-800 truncate">{o.customer_name}</p>
+                      <p className="text-xs text-gray-500">{o.customer_phone || o.phone || "—"}</p>
+                    </div>
+                  </div>
+                  <p className="text-lg font-bold text-[var(--primary)] shrink-0">৳{toBn(o.total)}</p>
+                </div>
+              </div>
+              {/* Badges row */}
+              <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
+                <InlineSelect
+                  value={o.status}
+                  options={STATUS_OPTIONS.filter((s) => s.value)}
+                  onChange={async (v) => {
+                    try {
+                      const paymentStatus = v === "delivered" ? "paid" : v === "cancelled" ? "unpaid" : undefined;
+                      await api.admin.updateOrderStatus(o.id, { status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) });
+                      setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) } : x)));
+                      showToast(t("toast.updated"));
+                    } catch { showToast(t("toast.error"), "error"); }
+                  }}
+                />
+                <button type="button" onClick={() => handleCheckScore(o.id)} disabled={scoreLoading === o.id}
+                  className={`text-xs px-2 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
+                    o.courier_score
+                      ? parseFloat(o.courier_score) >= 70 ? "bg-green-100 text-green-700 hover:bg-green-200"
+                      : parseFloat(o.courier_score) >= 40 ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                      : "bg-red-100 text-red-700 hover:bg-red-200"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}>
+                  {scoreLoading === o.id ? "..." : o.courier_score || "Score"}
+                </button>
+                {o.consignment_id && (
+                  <a href={`https://steadfast.com.bd/user/consignment/${o.consignment_id}`} target="_blank" rel="noopener noreferrer"
+                    className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded-full inline-flex items-center gap-1 hover:bg-blue-100 transition-colors">
+                    {o.consignment_id} <FiExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              {/* Footer: courier + actions */}
+              <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
+                <div>
+                  {o.courier_sent ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
+                        o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
+                        o.courier_status === "cancelled" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                      }`}>{o.courier_status || "sent"}</span>
+                      <button type="button" onClick={() => handleCheckCourierStatus(o.id)} disabled={courierLoading === o.id}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                        <FiRefreshCw className={`w-3 h-3 ${courierLoading === o.id ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => handleSendToCourier(o.id)} disabled={courierLoading === o.id}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-lg font-medium hover:bg-[var(--primary)] hover:text-white transition-colors disabled:opacity-50">
+                      <FiTruck className="w-3 h-3" /> {courierLoading === o.id ? "..." : "Send"}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => openDetail(o.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"><FiEye className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(o.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FiEdit2 className="w-4 h-4" /></button>
+                  {o.status === "trashed" ? (
+                    <button onClick={() => handlePermanentDelete(o.id)} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Permanently delete"><FiXCircle className="w-4 h-4" /></button>
+                  ) : (
+                    <button onClick={() => handleTrashOrder(o.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden lg:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          {loading ? (
+            <TableSkeleton />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-2 py-3 w-8">
+                      <input type="checkbox" checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.filter(o => !o.courier_sent).length}
+                        onChange={toggleSelectAll} className="w-4 h-4 accent-[var(--primary)]" />
+                    </th>
+                    {["#", t("th.customer"), t("th.phone"), t("th.total"), t("th.status")].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                    ))}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        Courier
+                        <button type="button" onClick={() => setBulkRefreshOpen(true)} className="p-0.5 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded transition-colors" title="Bulk refresh courier status">
+                          <FiRefreshCw className="w-3 h-3" />
+                        </button>
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        Score
+                        <button type="button" onClick={() => setBulkScoreOpen(true)} className="p-0.5 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded transition-colors" title="Bulk check scores">
+                          <FiRefreshCw className="w-3 h-3" />
+                        </button>
+                      </span>
+                    </th>
+                    {["Consignment", t("th.date"), t("th.actions")].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={10} className="py-12 text-center text-gray-400">{t("empty.orders")}</td></tr>
+                  ) : filtered.map((o) => {
+                    const isExpanded = expandedId === o.id;
+                    return (
+                      <Fragment key={o.id}>
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className="px-2 py-3">
+                            {!o.courier_sent && (
+                              <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)]" />
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 font-medium">#{toBn(o.id)}</td>
+                          <td className="px-4 py-3 font-medium text-gray-800 max-w-32 truncate">{o.customer_name}</td>
+                          <td className="px-4 py-3 text-gray-500">{o.customer_phone || o.phone || "—"}</td>
+                          <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">৳{toBn(o.total)}</td>
+                          <td className="px-4 py-3">
+                            <InlineSelect
+                              value={o.status}
+                              options={STATUS_OPTIONS.filter((s) => s.value)}
+                              onChange={async (v) => {
+                                try {
+                                  const paymentStatus = v === "delivered" ? "paid" : v === "cancelled" ? "unpaid" : undefined;
+                                  await api.admin.updateOrderStatus(o.id, { status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) });
+                                  setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) } : x)));
+                                  showToast(t("toast.updated"));
+                                } catch { showToast(t("toast.error"), "error"); }
+                              }}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            {o.courier_sent ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                  o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
+                                  o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
+                                  o.courier_status === "cancelled" ? "bg-red-100 text-red-700" :
+                                  "bg-blue-100 text-blue-700"
+                                }`}>
+                                  {o.courier_status || "sent"}
+                                </span>
+                                <button type="button" onClick={() => handleCheckCourierStatus(o.id)} disabled={courierLoading === o.id}
+                                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Refresh status">
+                                  <FiRefreshCw className={`w-3 h-3 ${courierLoading === o.id ? "animate-spin" : ""}`} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => handleSendToCourier(o.id)} disabled={courierLoading === o.id}
+                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-lg font-medium hover:bg-[var(--primary)] hover:text-white transition-colors disabled:opacity-50">
+                                <FiTruck className="w-3 h-3" />
+                                {courierLoading === o.id ? "..." : "Send"}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button type="button" onClick={() => handleCheckScore(o.id)} disabled={scoreLoading === o.id}
+                              className={`text-xs px-2 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
+                                o.courier_score
+                                  ? parseFloat(o.courier_score) >= 70 ? "bg-green-100 text-green-700 hover:bg-green-200"
+                                  : parseFloat(o.courier_score) >= 40 ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                                  : "bg-red-100 text-red-700 hover:bg-red-200"
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              }`} title="Click to check score">
+                              {scoreLoading === o.id ? "..." : o.courier_score || "Check"}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            {o.consignment_id ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-gray-600">{o.consignment_id}</span>
+                                <a href={`https://steadfast.com.bd/user/consignment/${o.consignment_id}`} target="_blank" rel="noopener noreferrer"
+                                  className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors" title="Track on Steadfast">
+                                  <FiExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                            {new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => openDetail(o.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="View details">
+                                <FiEye className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => openEdit(o.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                <FiEdit2 className="w-3.5 h-3.5" />
+                              </button>
+                              {o.status === "trashed" ? (
+                                <button onClick={() => handlePermanentDelete(o.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors" title="Permanently delete">
+                                  <FiXCircle className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button onClick={() => handleTrashOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Trash">
+                                  <FiTrash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button onClick={() => setExpandedId(isExpanded ? null : o.id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" title="Toggle items">
+                                {isExpanded ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <tr key={`exp-${o.id}`}>
+                              <td colSpan={11} className="p-0">
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+                                  <div className="bg-gray-50/80 border-t border-gray-100 px-6 py-4">
+                                    {o.items && o.items.length > 0 && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {o.items.map((item) => (
+                                          <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-sm">
+                                            <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                                              onMouseEnter={(e) => {
+                                                if (!item.product?.image) return;
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setHoverPreview({ image: item.product.image, x: rect.left + rect.width / 2, y: rect.top });
+                                              }}
+                                              onMouseLeave={() => setHoverPreview(null)}
+                                              onClick={() => item.product?.image && setPreviewImage(item.product.image)}>
+                                              {item.product?.image ? (
+                                                <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="56px" className="object-cover hover:scale-110 transition-transform" />
+                                              ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-[var(--primary)]/10 text-[var(--primary)]">
+                                                  <FiPackage className="w-6 h-6" />
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-semibold text-gray-800 truncate">{item.product_name}</p>
+                                              {item.variant_label && <p className="text-[11px] text-gray-400">{item.variant_label}</p>}
+                                              <p className="text-xs text-gray-400">৳{toBn(item.price)} × {toBn(item.quantity)}</p>
+                                            </div>
+                                            <p className="text-sm font-bold text-[var(--primary)] shrink-0">৳{toBn(item.price * item.quantity)}</p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center justify-end gap-4 mt-3 pt-2 border-t border-gray-200/60 text-xs text-gray-400">
+                                      <span>{t("form.subtotal")}: <b className="text-gray-600">৳{toBn(o.subtotal)}</b></span>
+                                      {o.shipping_cost > 0 && <span>{t("form.shippingCost")}: <b className="text-gray-600">৳{toBn(o.shipping_cost)}</b></span>}
+                                      <span className="text-sm font-bold text-[var(--primary)]">৳{toBn(o.total)}</span>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              </td>
+                            </tr>
+                          )}
+                        </AnimatePresence>
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Order Detail Modal */}
+      <Modal open={!!(detailOrder || detailLoading)} onClose={() => setDetailOrder(null)} title={detailOrder ? `${t("modal.orderDetails")} #${toBn(detailOrder.id)}` : t("misc.loading")} size="xl">
+              {detailLoading && !detailOrder ? (
+                <div className="p-12 text-center text-gray-400">{t("misc.loading")}</div>
+              ) : detailOrder && (() => {
+                const o = detailOrder;
+                const stColor = STATUS_COLORS[o.status] || "bg-gray-100 text-gray-800";
+                const stLabel = STATUS_OPTIONS.find((s) => s.value === o.status)?.label || o.status;
+                return (
+                    <div className="p-6 space-y-5">
+                      <p className="text-xs text-gray-400">
+                        <FiCalendar className="inline w-3 h-3 mr-1" />
+                        {new Date(o.created_at).toLocaleString("bn-BD")}
+                      </p>
+                      {/* Status badges */}
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${stColor}`}>{stLabel}</span>
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                          {o.payment_status === "paid" ? t("status.paid") : t("status.unpaid")}
+                        </span>
+                        <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gray-100 text-gray-700">
+                          <FiCreditCard className="inline w-3 h-3 mr-1" />
+                          {PAYMENT_LABELS[o.payment_method] || o.payment_method}
+                        </span>
+                        {o.transaction_id && (
+                          <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-blue-100 text-blue-700">
+                            TrxID: {o.transaction_id}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Customer Info */}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t("misc.customerInfo")}</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <FiUser className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span className="font-medium">{o.customer_name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-700">
+                            <FiPhone className="w-4 h-4 text-gray-400 shrink-0" />
+                            <span>{o.customer_phone || o.phone || "—"}</span>
+                          </div>
+                          {(o.customer_email) && (
+                            <div className="flex items-center gap-2 text-gray-700">
+                              <FiMail className="w-4 h-4 text-gray-400 shrink-0" />
+                              <span>{o.customer_email}</span>
+                            </div>
+                          )}
+                          {o.user && (
+                            <div className="flex items-center gap-2 text-gray-500 text-xs">
+                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{t("common.registeredCustomer")}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Delivery Address */}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t("misc.deliveryAddress")}</h3>
+                        <div className="flex items-start gap-2 text-sm text-gray-700">
+                          <FiMapPin className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p>{o.customer_address || "—"}</p>
+                            {o.zip_code && <p className="text-gray-500">{o.zip_code}</p>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Order Items */}
+                      <div>
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                          <FiPackage className="w-3.5 h-3.5" />
+                          {t("misc.productItems")} ({toBn(o.items?.length || 0)})
+                        </h3>
+                        <div className="space-y-2">
+                          {o.items?.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                              <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                                onMouseEnter={(e) => {
+                                  if (!item.product?.image) return;
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setHoverPreview({ image: item.product.image, x: rect.left + rect.width / 2, y: rect.top });
+                                }}
+                                onMouseLeave={() => setHoverPreview(null)}
+                                onClick={() => item.product?.image && setPreviewImage(item.product.image)}>
+                                {item.product?.image ? (
+                                  <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="48px" className="object-cover hover:scale-110 transition-transform" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-[var(--primary)]/10 text-[var(--primary)]">
+                                    <FiPackage className="w-5 h-5" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">
+                                  {item.product_name}
+                                  {item.variant_label && <span className="text-gray-400 font-normal"> — {item.variant_label}</span>}
+                                </p>
+                                <p className="text-xs text-gray-500">৳{toBn(item.price)} × {toBn(item.quantity)}</p>
+                              </div>
+                              <p className="text-sm font-bold text-[var(--primary)] whitespace-nowrap">৳{toBn(item.price * item.quantity)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Price Breakdown */}
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between text-gray-600">
+                            <span>{t("form.subtotal")}</span>
+                            <span>৳{toBn(o.subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-600">
+                            <span className="flex items-center gap-1"><FiTruck className="w-3.5 h-3.5" /> {t("checkout.shipping")}{o.city ? ` ${o.city}` : ""}</span>
+                            <span>৳{toBn(o.shipping_cost)}</span>
+                          </div>
+                          <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-gray-800 text-base">
+                            <span>{t("checkout.total")}</span>
+                            <span className="text-[var(--primary)]">৳{toBn(o.total)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      {o.notes && (
+                        <div className="bg-yellow-50 rounded-xl p-4">
+                          <h3 className="text-xs font-bold text-yellow-700 mb-1">{t("form.notes")}</h3>
+                          <p className="text-sm text-yellow-800">{o.notes}</p>
+                        </div>
+                      )}
+
+                      {/* Courier Section */}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                          <FiTruck className="w-3.5 h-3.5" /> Courier (Steadfast)
+                        </h3>
+                        {o.courier_sent ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="text-gray-500">CN:</span>
+                              {editingCN?.orderId === o.id ? (
+                                <input value={editingCN.value} onChange={(e) => setEditingCN({ ...editingCN, value: e.target.value })}
+                                  className="font-mono text-sm px-2 py-1 border border-gray-300 rounded-lg focus:border-[var(--primary)] focus:outline-none w-36" autoFocus />
+                              ) : (
+                                <span className="font-mono font-medium text-gray-800 bg-white px-2 py-0.5 rounded border border-gray-200">{o.consignment_id}</span>
+                              )}
+                              {/* Edit CN */}
+                              <button type="button" onClick={() => {
+                                if (editingCN?.orderId === o.id) {
+                                  // Save
+                                  const cn = editingCN.value.trim();
+                                  if (cn) {
+                                    api.admin.updateOrder(o.id, { consignment_id: cn, courier_sent: true }).then(() => {
+                                      setOrders(prev => prev.map(ord => ord.id === o.id ? { ...ord, consignment_id: cn, courier_sent: true } : ord));
+                                      if (detailOrder?.id === o.id) setDetailOrder(prev => prev ? { ...prev, consignment_id: cn, courier_sent: true } : prev);
+                                      showToast("CN updated");
+                                    }).catch(() => showToast("Update failed", "error"));
+                                  }
+                                  setEditingCN(null);
+                                } else {
+                                  setEditingCN({ orderId: o.id, value: o.consignment_id || "" });
+                                }
+                              }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit CN">
+                                {editingCN?.orderId === o.id ? <FiCheckCircle className="w-3.5 h-3.5 text-green-600" /> : <FiEdit2 className="w-3.5 h-3.5" />}
+                              </button>
+                              {/* Delete CN */}
+                              <button type="button" onClick={async () => {
+                                if (!confirm("CN নম্বর মুছে ফেলতে চান? এটি আবার কুরিয়ারে পাঠানোর জন্য প্রস্তুত হবে।")) return;
+                                try {
+                                  await api.admin.updateOrder(o.id, { courier_sent: false, consignment_id: null, courier_status: null });
+                                  setOrders(prev => prev.map(ord => ord.id === o.id ? { ...ord, courier_sent: false, consignment_id: undefined, courier_status: undefined } : ord));
+                                  if (detailOrder?.id === o.id) setDetailOrder(prev => prev ? { ...prev, courier_sent: false, consignment_id: undefined, courier_status: undefined } : prev);
+                                  showToast("CN removed — ready to resend");
+                                } catch { showToast("Failed", "error"); }
+                              }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete CN">
+                                <FiTrash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm">
+                              <span className="text-gray-500">Status:</span>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
+                                o.courier_status === "cancelled" || o.courier_status === "partial_delivered" ? "bg-red-100 text-red-700" :
+                                "bg-blue-100 text-blue-700"
+                              }`}>{o.courier_status || "pending"}</span>
+                              <button type="button" onClick={() => handleCheckCourierStatus(o.id)} disabled={courierLoading === o.id}
+                                className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                                {courierLoading === o.id ? "Checking..." : "Refresh"}
+                              </button>
+                            </div>
+                            {o.courier_score && (
+                              <div className="flex items-center gap-3 text-sm">
+                                <span className="text-gray-500">Score:</span>
+                                <span className="font-medium">{o.courier_score}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => handleSendToCourier(o.id)} disabled={courierLoading === o.id}
+                            className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50">
+                            <FiTruck className="w-4 h-4" />
+                            {courierLoading === o.id ? "Sending..." : "Send to Courier"}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Quick Status Update */}
+                      <div className="border-t border-gray-100 pt-4">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t("misc.statusPayment")}</h3>
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">{t("form.orderStatus")}</div>
+                            <InlineSelect
+                              value={pendingStatus[o.id] ?? o.status}
+                              options={STATUS_OPTIONS.filter((s) => s.value)}
+                              onChange={(v) => setPendingStatus({ ...pendingStatus, [o.id]: v })}
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleStatusUpdate(o.id)}
+                            disabled={updatingId === o.id}
+                            className="px-4 py-2 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50"
+                          >
+                            {updatingId === o.id ? t("btn.saving") : t("btn.update")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                );
+              })()}
+      </Modal>
+      {/* Edit Order Modal */}
+      <Modal open={!!editOrder} onClose={() => setEditOrder(null)} title={editOrder ? `${t("modal.editOrder")} #${toBn(editOrder.id)}` : ""} size="lg">
+        {editOrder && (
+              <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+                {/* Customer Info with search */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[var(--primary)] uppercase tracking-wide">{t("misc.customerInfo")}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.name")} *</label>
+                      <input required value={editForm.customer_name} onChange={(e) => {
+                        setEditForm({ ...editForm, customer_name: e.target.value });
+                        handleCustomerSearch(e.target.value);
+                      }} className={inputCls} placeholder={lang === "en" ? "Type to search..." : "নাম লিখুন..."} />
+                      {customerResults.length > 0 && customerSearch.length >= 2 && (
+                        <div className="absolute top-full left-0 right-[calc(-100%-12px)] mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                          {customerResults.map((c, i) => (
+                            <button type="button" key={`edit-${c.phone}-${i}`} onClick={() => {
+                              setEditForm(f => ({ ...f, customer_name: c.name, customer_phone: c.phone, customer_email: c.email || f.customer_email, customer_address: c.address || f.customer_address }));
+                              setCustomerResults([]);
+                            }}
+                              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 text-sm text-left transition-colors border-b border-gray-50 last:border-0">
+                              <div>
+                                <span className="font-medium text-gray-800">{c.name}</span>
+                                <span className="text-xs text-gray-400 ml-2">{c.phone}</span>
+                              </div>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.source === "registered" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}>
+                                {c.source === "registered" ? "Registered" : "Guest"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.phone")} *</label>
+                      <input required value={editForm.customer_phone} onChange={(e) => {
+                        setEditForm({ ...editForm, customer_phone: e.target.value });
+                        handleCustomerSearch(e.target.value);
+                      }} className={inputCls} placeholder="01XXXXXXXXX" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.email")}</label>
+                    <input type="email" value={editForm.customer_email} onChange={(e) => setEditForm({ ...editForm, customer_email: e.target.value })} className={inputCls} />
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.address")} *</label>
+                  <textarea rows={2} required value={editForm.customer_address} onChange={(e) => setEditForm({ ...editForm, customer_address: e.target.value })} className={inputCls + " resize-none"} />
+                </div>
+
+                {/* Product Picker (same as create form) */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[var(--primary)] uppercase tracking-wide">{t("misc.productItems")}</p>
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="text" value={editProductSearch} onChange={(e) => setEditProductSearch(e.target.value)}
+                      placeholder={t("search.products")} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none" />
+                    {editProductSearch.trim() && (
+                      <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                        {allProducts
+                          .filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(editProductSearch.toLowerCase()) && !editForm.items.some((i) => i.product_id === p.id))
+                          .slice(0, 8)
+                          .map((p) => (
+                            <button type="button" key={p.id} onClick={() => {
+                              setEditForm(f => ({ ...f, items: [...f.items, { product_id: p.id, product_name: p.name, price: p.price, stock: p.stock, quantity: 1, image: p.image }] }));
+                              setEditProductSearch("");
+                            }}
+                              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors">
+                              <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                                onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
+                                onMouseLeave={() => setHoverPreview(null)}
+                                onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
+                                {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                              </div>
+                              <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
+                              <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
+                            </button>
+                          ))}
+                        {allProducts.filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(editProductSearch.toLowerCase()) && !editForm.items.some((i) => i.product_id === p.id)).length === 0 && (
+                          <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {editForm.items.length === 0 ? (
+                    <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">{t("search.products")}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {editForm.items.map((item, idx) => (
+                        <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                            onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
+                            onMouseLeave={() => setHoverPreview(null)}
+                            onClick={() => item.image && setPreviewImage(item.image)}>
+                            {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="40px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{item.product_name}</p>
+                            <p className="text-xs text-gray-400">৳{item.price} × {item.quantity} = ৳{item.price * item.quantity}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button type="button" onClick={() => {
+                              const items = [...editForm.items];
+                              if (items[idx].quantity <= 1) items.splice(idx, 1);
+                              else items[idx] = { ...items[idx], quantity: items[idx].quantity - 1 };
+                              setEditForm({ ...editForm, items });
+                            }} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
+                            <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                            <button type="button" onClick={() => {
+                              const items = [...editForm.items];
+                              items[idx] = { ...items[idx], quantity: items[idx].quantity + 1 };
+                              setEditForm({ ...editForm, items });
+                            }} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                          </div>
+                          <span className="text-sm font-bold text-[var(--primary)] w-16 text-right">৳{item.price * item.quantity}</span>
+                          <button type="button" onClick={() => {
+                            const items = [...editForm.items]; items.splice(idx, 1); setEditForm({ ...editForm, items });
+                          }} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                            <FiX className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment & Shipping */}
+                <div className="space-y-3">
+                  <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
+                      <InlineSelect fullWidth value={editForm.payment_method} options={[
+                        { value: "cod", label: t("payment.cod") },
+                        { value: "bkash", label: t("payment.bkash") },
+                        { value: "nagad", label: t("payment.nagad") },
+                        { value: "bank", label: t("payment.bank") },
+                      ]} onChange={(v) => setEditForm({ ...editForm, payment_method: v })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.shippingCost")}</label>
+                      <InlineSelect fullWidth value={editForm.shipping_cost} options={shippingZones.map(z => ({ value: String(z.rate), label: `${z.name} — ৳${z.rate}` }))} onChange={(v) => setEditForm({ ...editForm, shipping_cost: v })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
+                      <input type="number" min="0" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} className={inputCls} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.notes")}</label>
+                  <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    className={inputCls + " resize-none"} placeholder="অর্ডার সম্পর্কে নোট..." />
+                </div>
+
+                {/* Summary */}
+                {(() => {
+                  const sub = editForm.items.reduce((s, i) => s + i.price * i.quantity, 0);
+                  const ship = Number(editForm.shipping_cost || 0);
+                  const disc = Number(editForm.discount || 0);
+                  return (
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-1 text-sm">
+                      <div className="flex justify-between"><span className="text-gray-500">{t("form.subtotal")}</span><span className="font-medium">৳{sub}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">{t("form.shippingCost")}</span><span className="font-medium">৳{ship}</span></div>
+                      {disc > 0 && <div className="flex justify-between"><span className="text-green-600">Discount</span><span className="font-medium text-green-600">-৳{disc}</span></div>}
+                      <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-1 mt-1"><span>{t("th.total")}</span><span className="text-[var(--primary)]">৳{Math.max(0, sub + ship - disc)}</span></div>
+                    </div>
+                  );
+                })()}
+
+                {/* Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setEditOrder(null)}
+                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                    {t("btn.cancel")}
+                  </button>
+                  <button type="submit" disabled={editSaving}
+                    className="flex-1 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50">
+                    {editSaving ? t("btn.saving") : t("btn.update")}
+                  </button>
+                </div>
+              </form>
+        )}
+      </Modal>
+
+      {/* Score Detail Popup */}
+      <Modal open={!!scorePopup} onClose={() => setScorePopup(null)} title="Steadfast Success Rate" size="sm">
+        {scorePopup && (
+          <div className="p-6 space-y-4">
+            {/* Score circle */}
+            <div className="flex justify-center">
+              <div className={`w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-4 ${
+                parseFloat(scorePopup.success_ratio) >= 70
+                  ? "border-green-400 text-green-600 bg-green-50"
+                  : parseFloat(scorePopup.success_ratio) >= 40
+                  ? "border-yellow-400 text-yellow-600 bg-yellow-50"
+                  : "border-red-400 text-red-600 bg-red-50"
+              }`}>
+                {scorePopup.success_ratio}
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <FiPackage className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Total Orders</span>
+                </div>
+                <span className="text-lg font-bold text-gray-800">{scorePopup.total_parcels}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                    <FiCheckCircle className="w-4 h-4 text-green-600" />
+                  </div>
+                  <span className="text-sm font-medium text-green-700">Total Delivered</span>
+                </div>
+                <span className="text-lg font-bold text-green-700">{scorePopup.total_delivered}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+                    <FiXCircle className="w-4 h-4 text-red-600" />
+                  </div>
+                  <span className="text-sm font-medium text-red-700">Total Cancelled</span>
+                </div>
+                <span className="text-lg font-bold text-red-700">{scorePopup.total_cancelled || 0}</span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-[var(--primary)]/5 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
+                    <FiTruck className="w-4 h-4 text-[var(--primary)]" />
+                  </div>
+                  <span className="text-sm font-medium text-[var(--primary)]">Success Ratio</span>
+                </div>
+                <span className="text-lg font-bold text-[var(--primary)]">{scorePopup.success_ratio}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Bulk Courier Refresh Popup */}
+      <Modal open={bulkRefreshOpen} onClose={() => !bulkRefreshing && setBulkRefreshOpen(false)} title={lang === "en" ? "Refresh Courier Status" : "কুরিয়ার স্ট্যাটাস রিফ্রেশ"} size="sm">
+        <div className="p-6">
+          {bulkRefreshing ? (
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div className="w-16 h-16 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
+                  <FiRefreshCw className="w-7 h-7 text-[var(--primary)] animate-spin" />
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-700">{lang === "en" ? "Checking..." : "চেক হচ্ছে..."} {bulkRefreshProgress.done}/{bulkRefreshProgress.total}</p>
+                <div className="mt-3 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[var(--primary)] h-full rounded-full transition-all duration-300" style={{ width: `${bulkRefreshProgress.total > 0 ? (bulkRefreshProgress.done / bulkRefreshProgress.total) * 100 : 0}%` }} />
+                </div>
+                {bulkRefreshProgress.delivered > 0 && (
+                  <p className="mt-2 text-xs text-green-600 font-medium">
+                    {lang === "en" ? `${bulkRefreshProgress.delivered} auto-delivered` : `${bulkRefreshProgress.delivered}টি অটো-ডেলিভারড হয়েছে`}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 text-center">
+                {lang === "en" ? "Which orders should be refreshed?" : "কোন অর্ডারগুলোর কুরিয়ার স্ট্যাটাস রিফ্রেশ করবেন?"}
+              </p>
+              <div className="space-y-2.5">
+                <button type="button" onClick={() => handleBulkCourierRefresh("page")}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-100 hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-[var(--primary)]/10 transition-colors">
+                    <FiRefreshCw className="w-5 h-5 text-blue-600 group-hover:text-[var(--primary)] transition-colors" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800">{lang === "en" ? "Current Page" : "বর্তমান পেজ"}</p>
+                    <p className="text-xs text-gray-500">{lang === "en" ? "Check all orders on this page" : "এই পেজের সব অর্ডার চেক করুন"}</p>
+                  </div>
+                </button>
+                <button type="button" onClick={() => handleBulkCourierRefresh("pending")}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-100 hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-[var(--primary)]/10 transition-colors">
+                    <FiTruck className="w-5 h-5 text-orange-600 group-hover:text-[var(--primary)] transition-colors" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800">{lang === "en" ? "All Pending Orders" : "সব পেন্ডিং অর্ডার"}</p>
+                    <p className="text-xs text-gray-500">{lang === "en" ? "Check all orders except delivered" : "ডেলিভারড ছাড়া সব অর্ডার চেক করুন"}</p>
+                  </div>
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 text-center">
+                {lang === "en"
+                  ? "Delivered & cancelled orders will be skipped. Orders marked delivered by courier will be auto-updated."
+                  : "ডেলিভারড ও বাতিল অর্ডার স্কিপ হবে। কুরিয়ার ডেলিভারড হলে অর্ডার অটো-ডেলিভারড হবে।"}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Bulk Score Check Popup */}
+      <Modal open={bulkScoreOpen} onClose={() => !bulkScoreChecking && setBulkScoreOpen(false)} title={lang === "en" ? "Bulk Score Check" : "বাল্ক স্কোর চেক"} size="sm">
+        <div className="p-6">
+          {bulkScoreChecking ? (
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div className="w-16 h-16 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
+                  <FiRefreshCw className="w-7 h-7 text-[var(--primary)] animate-spin" />
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-700">{lang === "en" ? "Checking..." : "চেক হচ্ছে..."} {bulkScoreProgress.done}/{bulkScoreProgress.total}</p>
+                <div className="mt-3 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[var(--primary)] h-full rounded-full transition-all duration-300" style={{ width: `${bulkScoreProgress.total > 0 ? (bulkScoreProgress.done / bulkScoreProgress.total) * 100 : 0}%` }} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 text-center">
+                {lang === "en" ? "Which orders should be score-checked?" : "কোন অর্ডারগুলোর স্কোর চেক করবেন?"}
+              </p>
+              <div className="space-y-2.5">
+                <button type="button" onClick={() => handleBulkScoreCheck("page")}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-100 hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-[var(--primary)]/10 transition-colors">
+                    <FiRefreshCw className="w-5 h-5 text-blue-600 group-hover:text-[var(--primary)] transition-colors" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800">{lang === "en" ? "Current Page" : "বর্তমান পেজ"}</p>
+                    <p className="text-xs text-gray-500">{lang === "en" ? "Check unchecked orders on this page" : "এই পেজের আনচেকড অর্ডার চেক করুন"}</p>
+                  </div>
+                </button>
+                <button type="button" onClick={() => handleBulkScoreCheck("all")}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-100 hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-[var(--primary)]/10 transition-colors">
+                    <FiCheckCircle className="w-5 h-5 text-orange-600 group-hover:text-[var(--primary)] transition-colors" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-800">{lang === "en" ? "All Unchecked Orders" : "সব আনচেকড অর্ডার"}</p>
+                    <p className="text-xs text-gray-500">{lang === "en" ? "Check all orders without a score" : "স্কোর ছাড়া সব অর্ডার চেক করুন"}</p>
+                  </div>
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 text-center">
+                {lang === "en"
+                  ? "Already scored & delivered orders will be skipped."
+                  : "স্কোর থাকা ও ডেলিভারড অর্ডার স্কিপ হবে।"}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Create Order Modal */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={`${t("btn.add")} ${t("dash.orders")}`} size="lg">
+        <form onSubmit={handleCreateOrder} className="p-6 space-y-4">
+          {/* Customer info — search integrated into name/phone fields */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[var(--primary)] uppercase tracking-wide">{t("misc.customerInfo")}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.name")} *</label>
+                <input required value={createForm.customer_name} onChange={(e) => {
+                  setCreateForm({ ...createForm, customer_name: e.target.value });
+                  handleCustomerSearch(e.target.value);
+                }} className={inputCls} placeholder={lang === "en" ? "Type to search..." : "নাম লিখুন..."} />
+                {customerResults.length > 0 && customerSearch.length >= 2 && (
+                  <div className="absolute top-full left-0 right-[calc(-100%-12px)] mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    {customerResults.map((c, i) => (
+                      <button type="button" key={`${c.phone}-${i}`} onClick={() => { selectCustomer(c); setCustomerResults([]); }}
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 text-sm text-left transition-colors border-b border-gray-50 last:border-0">
+                        <div>
+                          <span className="font-medium text-gray-800">{c.name}</span>
+                          <span className="text-xs text-gray-400 ml-2">{c.phone}</span>
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${c.source === "registered" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}>
+                          {c.source === "registered" ? "Registered" : "Guest"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.phone")} *</label>
+                <input required value={createForm.customer_phone} onChange={(e) => {
+                  setCreateForm({ ...createForm, customer_phone: e.target.value });
+                  handleCustomerSearch(e.target.value);
+                }} className={inputCls} placeholder="01XXXXXXXXX" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.email")}</label>
+              <input type="email" value={createForm.customer_email} onChange={(e) => setCreateForm({ ...createForm, customer_email: e.target.value })}
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.address")} *</label>
+            <textarea rows={2} required value={createForm.customer_address} onChange={(e) => setCreateForm({ ...createForm, customer_address: e.target.value })}
+              className={inputCls + " resize-none"} />
+          </div>
+
+          {/* Product Picker */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-[var(--primary)] uppercase tracking-wide">{t("misc.productItems")}</p>
+
+            {/* Search products */}
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder={t("search.products")}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none"
+              />
+              {/* Dropdown results */}
+              {productSearch.trim() && (
+                <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                  {allProducts
+                    .filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(productSearch.toLowerCase()) && !createForm.items.some((i) => i.product_id === p.id))
+                    .slice(0, 8)
+                    .map((p) => (
+                      <button type="button" key={p.id} onClick={() => addProductToOrder(p)}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors">
+                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                          onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
+                          onMouseLeave={() => setHoverPreview(null)}
+                          onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
+                          {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                        </div>
+                        <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
+                        <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
+                      </button>
+                    ))}
+                  {allProducts.filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(productSearch.toLowerCase()) && !createForm.items.some((i) => i.product_id === p.id)).length === 0 && (
+                    <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected items */}
+            {createForm.items.length === 0 ? (
+              <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">{t("search.products")}</div>
+            ) : (
+              <div className="space-y-2">
+                {createForm.items.map((item, idx) => (
+                  <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                      onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
+                      onMouseLeave={() => setHoverPreview(null)}
+                      onClick={() => item.image && setPreviewImage(item.image)}>
+                      {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="40px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{item.product_name}</p>
+                      <p className="text-xs text-gray-400">৳{item.price} × {item.quantity} = ৳{item.price * item.quantity}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => updateItemQty(idx, item.quantity - 1)}
+                        className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
+                      <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                      <button type="button" onClick={() => updateItemQty(idx, item.quantity + 1)}
+                        disabled={item.quantity >= item.stock}
+                        className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold disabled:opacity-30">+</button>
+                    </div>
+                    <span className="text-sm font-bold text-[var(--primary)] w-16 text-right">৳{item.price * item.quantity}</span>
+                    <button type="button" onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <FiX className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Payment, Shipping, Discount */}
+          <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
+              <InlineSelect fullWidth value={createForm.payment_method} options={[
+                { value: "cod", label: t("payment.cod") },
+                { value: "bkash", label: t("payment.bkash") },
+                { value: "nagad", label: t("payment.nagad") },
+                { value: "bank", label: t("payment.bank") },
+              ]} onChange={(v) => setCreateForm({ ...createForm, payment_method: v })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.shippingCost")}</label>
+              <InlineSelect fullWidth value={createForm.shipping_cost} options={shippingZones.map(z => ({ value: String(z.rate), label: `${z.name} — ৳${z.rate}` }))} onChange={(v) => setCreateForm({ ...createForm, shipping_cost: v })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
+              <input type="number" min="0" value={createForm.discount} onChange={(e) => setCreateForm({ ...createForm, discount: e.target.value })}
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.notes")}</label>
+            <textarea rows={2} value={createForm.notes} onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
+              className={inputCls + " resize-none"} placeholder="Order notes..." />
+          </div>
+
+          {/* Price Breakdown */}
+          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between text-gray-500">
+              <span>Subtotal</span>
+              <span>৳{createForm.items.reduce((s, i) => s + i.price * i.quantity, 0)}</span>
+            </div>
+            {Number(createForm.discount) > 0 && (
+              <div className="flex justify-between text-red-500">
+                <span>Discount</span>
+                <span>-৳{createForm.discount}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-gray-500">
+              <span>Shipping</span>
+              <span>৳{createForm.shipping_cost || 0}</span>
+            </div>
+            <div className="flex justify-between font-bold text-[var(--primary)] text-base border-t border-gray-200 pt-1.5">
+              <span>{t("th.total")}</span>
+              <span>৳{Math.max(0, createForm.items.reduce((s, i) => s + i.price * i.quantity, 0) - (Number(createForm.discount) || 0) + (Number(createForm.shipping_cost) || 0))}</span>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setCreateOpen(false)}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              {t("btn.cancel")}
+            </button>
+            <button type="submit" disabled={createSaving}
+              className="flex-1 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50">
+              {createSaving ? t("btn.saving") : t("btn.create")}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Hover Tooltip Preview — floats above image */}
+      {hoverPreview && (
+        <div className="fixed z-[9999] pointer-events-none"
+          style={{ left: hoverPreview.x, top: hoverPreview.y, transform: "translate(-50%, -100%) translateY(-8px)" }}>
+          <div className="w-56 h-56 rounded-2xl overflow-hidden border-2 border-white shadow-2xl bg-white relative">
+            <SafeNextImage src={hoverPreview.image} alt="" fill sizes="224px" className="object-cover" />
+          </div>
+        </div>
+      )}
+
+      {/* Click Fullscreen Preview */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="relative max-w-sm w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+                <div className="relative aspect-square">
+                  <SafeNextImage src={previewImage} alt="Preview" fill sizes="384px" className="object-contain" />
+                </div>
+              </div>
+              <button onClick={() => setPreviewImage(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
+                <FiX className="w-4 h-4" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </DashboardLayout>
+  );
+}

@@ -6,6 +6,13 @@
 
 /* ==================== THEME VARIABLES ==================== */
 
+/*
+ * Default theme tokens — these are the FALLBACKS only. The real values are
+ * injected by app/layout.tsx via a server-rendered <style id="theme-tokens">
+ * block based on rows in the site_setting table (keys: theme.color.*, etc.
+ * registered in src/lib/theme-tokens.ts). This block is overridden on every
+ * page render, so editing it here only changes the no-DB defaults.
+ */
 :root {
   --primary: #0f5931;
   --primary-light: #12693a;
@@ -25,6 +32,18 @@
   --instagram: #8a3ab9;
   --youtube: #cd201f;
   --whatsapp: #25d366;
+
+  /* Customizer-driven tokens (typography + layout). */
+  --font-body-stack: var(--font-hind-siliguri), "Hind Siliguri", system-ui, sans-serif;
+  --font-heading-stack: var(--font-bricolage), "Bricolage Grotesque", system-ui, sans-serif;
+  --font-size-base: 16px;
+  --line-height-base: 1.6;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --container-max: 1280px;
+  --section-y: 80px;
 }
 
 @theme inline {
@@ -103,10 +122,16 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "BanglaDigits", var(--font-heading-stack);
 }
 
 /* Anek Bangla — ONLY for Bengali digits ০-৯ and ৳ (fixes Hind Siliguri ১ clipping) */

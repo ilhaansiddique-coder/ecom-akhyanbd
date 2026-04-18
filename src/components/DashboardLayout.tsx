@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
+
+// Context lets a single outer shell (dashboard/layout.tsx) own the persistent
+// sidebar/header. Nested <DashboardLayout title="..."> calls inside individual
+// pages then just publish their title up to the shell and render children
+// directly — no double sidebar, and the sidebar doesn't unmount on navigation.
+interface ShellCtx { setTitle: (s: string) => void; }
+const DashboardShellContext = createContext<ShellCtx | null>(null);
+export const useIsInsideDashboardShell = () => useContext(DashboardShellContext) !== null;
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 import {
   FiHome,
@@ -24,6 +33,7 @@ import {
   FiLayout,
   FiTruck,
   FiSettings,
+  FiDroplet,
   FiLogOut,
   FiMenu,
   FiX,
@@ -49,7 +59,48 @@ interface NavGroup {
   href?: string;
 }
 
-function buildNavGroups(t: (key: string) => string): NavGroup[] {
+// Routes a "staff" role can navigate to. Anything outside this list is hidden
+// from the sidebar AND blocked by the per-page server guards. Keep in sync
+// with the page-level `isStaffOrAdmin` checks in the dashboard route segments.
+const STAFF_ALLOWED_PREFIXES = [
+  "/dashboard",            // dashboard home
+  "/dashboard/products",   // products list + new + [id]/edit
+  "/dashboard/orders",     // orders list + [id]/details
+];
+
+export function isStaffAllowedPath(pathname: string): boolean {
+  // Exact "/dashboard" or starts with one of the allowed prefixes followed by /
+  return STAFF_ALLOWED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+}
+
+function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
+  const isStaffOnly = role === "staff";
+
+  // Staff sees a stripped-down sidebar — only Dashboard + Products + Orders.
+  // Categories/Brands stay admin-only since they affect the whole catalog
+  // taxonomy; staff only manages individual products.
+  if (isStaffOnly) {
+    return [
+      { label: t("dash.dashboard"), icon: FiHome, href: "/dashboard" },
+      {
+        label: t("dash.productMgmt"),
+        icon: FiBox,
+        items: [
+          { label: t("dash.products"), href: "/dashboard/products", icon: FiBox },
+        ],
+      },
+      {
+        label: t("dash.orderMgmt"),
+        icon: FiShoppingBag,
+        items: [
+          { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
+        ],
+      },
+    ];
+  }
+
   return [
     {
       label: t("dash.dashboard"),
@@ -102,6 +153,11 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       ],
     },
     {
+      label: t("dash.customizer") || "Customizer",
+      icon: FiDroplet,
+      href: "/dashboard/customizer",
+    },
+    {
       label: t("dash.settings"),
       icon: FiSettings,
       items: [
@@ -128,14 +184,33 @@ function getInitialCollapsed(): boolean {
 }
 
 export default function DashboardLayout({ children, title }: DashboardLayoutProps) {
+  const outerShell = useContext(DashboardShellContext);
+  // When an outer shell is present, just publish title and render children inline.
+  useEffect(() => {
+    if (outerShell) outerShell.setTitle(title);
+  }, [outerShell, title]);
+  if (outerShell) return <>{children}</>;
+  return <DashboardLayoutShell initialTitle={title}>{children}</DashboardLayoutShell>;
+}
+
+// The shell is the actual sidebar + header + main wrapper. It can be mounted
+// once at dashboard/layout.tsx, OR (legacy) by a single per-page DashboardLayout.
+export function DashboardLayoutShell({ children, initialTitle = "" }: { children: React.ReactNode; initialTitle?: string }) {
+  const [title, setTitle] = useState(initialTitle);
   const pathname = usePathname();
+  // NOTE: the customizer-route bypass MUST come after all hook calls below —
+  // an early return before later hooks would flip the hook count on
+  // navigation and trigger "Rendered fewer hooks than expected".
+  const isCustomizerRoute = !!pathname?.startsWith("/dashboard/customizer");
   const router = useRouter();
   const { user, loading, logout } = useAuth();
   const { t } = useLang();
+  const settings = useSiteSettings();
+  const siteLogo = settings.site_logo || "/logo.svg";
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const navGroups = buildNavGroups(t);
+  const navGroups = buildNavGroups(t, user?.role ?? "");
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -167,20 +242,29 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
     router.push("/");
   };
 
-  const shouldRedirect = !loading && (!user || user.role !== "admin");
+  // Redirect rules:
+  //   - Not logged in or customer role → kick to home.
+  //   - Staff role → allowed only on STAFF_ALLOWED_PREFIXES; if they land on
+  //     anything else (e.g. /dashboard/customizer via direct URL), bounce to
+  //     /dashboard so they get a graceful experience instead of a 403.
+  const isStaff = user?.role === "staff";
+  const isAdmin = user?.role === "admin";
+  const shouldRedirectHome = !loading && (!user || (!isAdmin && !isStaff));
+  const shouldRedirectStaff = !loading && isStaff && !isStaffAllowedPath(pathname ?? "");
 
   useEffect(() => {
-    if (shouldRedirect) router.push("/");
-  }, [shouldRedirect, router]);
+    if (shouldRedirectHome) router.push("/");
+    else if (shouldRedirectStaff) router.push("/dashboard");
+  }, [shouldRedirectHome, shouldRedirectStaff, router]);
 
   // Expanded sidebar content (used for desktop expanded + mobile)
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 py-5 border-b border-white/10 flex justify-center">
-        <Image src="/logo.svg" alt="মা ভেষজ বাণিজ্যালয়" width={160} height={48} className="h-10 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "block"; }} />
+        <Image src={siteLogo} alt="Site Logo" width={160} height={48} className="h-10 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "block"; }} />
         <div className="hidden text-center">
-          <div className="text-white font-bold text-lg leading-tight">মা ভেষজ বাণিজ্যালয়</div>
+          <div className="text-white font-bold text-lg leading-tight">{t("footer.companyName")}</div>
           <div className="text-white/60 text-xs mt-1 font-medium tracking-wide uppercase">{t("dash.adminPanel")}</div>
         </div>
       </div>
@@ -287,7 +371,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
     <div className="flex flex-col h-full items-center overflow-visible">
       {/* Collapsed header */}
       <div className="py-5 border-b border-white/10 w-full flex justify-center">
-        <Image src="/logo.svg" alt="মা ভেষজ বাণিজ্যালয়" width={36} height={28} className="h-7 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"; }} />
+        <Image src={siteLogo} alt="Site Logo" width={36} height={28} className="h-7 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"; }} />
         <div className="hidden w-9 h-9 rounded-xl bg-white/20 items-center justify-center text-white font-bold text-sm">ম</div>
       </div>
 
@@ -308,9 +392,9 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
               >
                 <group.icon className="w-5 h-5" />
                 {/* Tooltip */}
-                <div className="absolute left-full ml-3 px-3 py-2 bg-[#0f5931] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
+                <div className="absolute left-full ml-3 px-3 py-2 bg-[var(--primary)] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
                   {group.label}
-                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+                  <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
                 </div>
               </Link>
             );
@@ -332,7 +416,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                 <group.icon className="w-5 h-5" />
               </div>
               {/* Flyout menu */}
-              <div className="absolute left-full top-0 ml-3 py-2 bg-[#0f5931] rounded-xl shadow-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] min-w-[200px]">
+              <div className="absolute left-full top-0 ml-3 py-2 bg-[var(--primary)] rounded-xl shadow-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] min-w-[200px]">
                 <div className="px-3.5 py-2 text-white/50 text-[10px] font-bold uppercase tracking-wider border-b border-white/10 mb-1">{group.label}</div>
                 {group.items.map((item) => {
                   const isItemActive = pathname === item.href;
@@ -351,7 +435,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
                     </Link>
                   );
                 })}
-                <div className="absolute top-3 -left-1.5 w-3 h-3 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+                <div className="absolute top-3 -left-1.5 w-3 h-3 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
               </div>
             </div>
           );
@@ -364,20 +448,31 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
           <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold cursor-pointer">
             {user?.name?.charAt(0).toUpperCase()}
           </div>
-          <div className="absolute left-full ml-3 px-3 py-2 bg-[#0f5931] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
+          <div className="absolute left-full ml-3 px-3 py-2 bg-[var(--primary)] text-white text-xs font-semibold rounded-xl whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none z-[100] shadow-lg border border-white/10">
             {user?.name}
-            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#0f5931] rotate-45 border-l border-b border-white/10" />
+            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
           </div>
         </div>
       </div>
     </div>
   );
 
+  // Customizer renders its own fullscreen chrome — bypass the sidebar/header.
+  // Placed after all hook calls above to keep the hook order stable.
+  if (isCustomizerRoute) {
+    return (
+      <DashboardShellContext.Provider value={{ setTitle }}>
+        {children}
+      </DashboardShellContext.Provider>
+    );
+  }
+
   return (
+    <DashboardShellContext.Provider value={{ setTitle }}>
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar — no width transition to prevent flash on navigation */}
       <aside
-        className={`hidden lg:flex flex-col flex-shrink-0 bg-[#0f5931] relative ${
+        className={`hidden lg:flex flex-col flex-shrink-0 bg-[var(--primary)] relative ${
           collapsed ? "w-[68px] overflow-visible" : "w-[260px]"
         }`}
       >
@@ -385,7 +480,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         {/* Collapse toggle button */}
         <button
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-8 w-6 h-6 bg-[#0f5931] border-2 border-gray-200 rounded-full flex items-center justify-center text-white hover:bg-[#12693a] transition-colors z-10 shadow-sm"
+          className="absolute -right-3 top-8 w-6 h-6 bg-[var(--primary)] border-2 border-gray-200 rounded-full flex items-center justify-center text-white hover:bg-[var(--primary-light)] transition-colors z-10 shadow-sm"
         >
           {collapsed ? (
             <FiChevronRight className="w-3 h-3" />
@@ -411,7 +506,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
               animate={{ x: 0 }}
               exit={{ x: -260 }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed left-0 top-0 bottom-0 w-[260px] bg-[#0f5931] z-50 lg:hidden flex flex-col"
+              className="fixed left-0 top-0 bottom-0 w-[260px] bg-[var(--primary)] z-50 lg:hidden flex flex-col"
             >
               {/* Close button floating top-right */}
               <button
@@ -442,7 +537,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-[#0f5931] hover:bg-green-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--primary)] hover:bg-green-50 rounded-lg transition-colors"
             >
               <FiHome className="w-4 h-4" />
               <span className="hidden sm:block">{t("dash.homepage")}</span>
@@ -464,5 +559,6 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         </main>
       </div>
     </div>
+    </DashboardShellContext.Provider>
   );
 }

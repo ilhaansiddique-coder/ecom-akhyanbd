@@ -71,6 +71,10 @@ const nextConfig: NextConfig = {
   },
   compress: true,
   poweredByHeader: false,
+  // Hide the floating Next.js dev badge / route-rendering spinner. The
+  // prewarmer + ISR already make navigations feel instant; the indicator just
+  // adds visual noise during dev. (No effect on production builds.)
+  devIndicators: false,
 };
 
 export default nextConfig;

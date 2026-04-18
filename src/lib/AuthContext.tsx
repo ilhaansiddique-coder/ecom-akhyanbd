@@ -22,25 +22,50 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Session cache key — stores basic user info so subsequent mounts are instant
+const SESSION_KEY = "akh_session_user";
+
+function getCachedUser(): User | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function setCachedUser(u: User | null) {
+  try {
+    if (u) sessionStorage.setItem(SESSION_KEY, JSON.stringify(u));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached = typeof window !== "undefined" ? getCachedUser() : null;
+  const [user, setUser] = useState<User | null>(cached);
+  // If we have a cached user, start as not loading (instant render)
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
-    // Check session via cookie-based auth
+    // Always verify with server in background (cache may be stale)
     api.getUser()
       .then((res) => {
         const u = res.data || res;
         setUser(u);
+        setCachedUser(u);
         if (u?.id) setTrackingUserId(u.id);
       })
-      .catch(() => setUser(null))
+      .catch(() => {
+        setUser(null);
+        setCachedUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const res = await api.login({ email, password });
     setUser(res.user);
+    setCachedUser(res.user);
     if (res.user?.id) setTrackingUserId(res.user.id);
     return res.user;
   }, []);
@@ -58,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
     // Cookie is cleared by the server
     setUser(null);
+    setCachedUser(null);
   }, []);
 
   return (

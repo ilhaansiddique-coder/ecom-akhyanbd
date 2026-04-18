@@ -5,8 +5,8 @@ import ContactInfo from "@/components/ContactInfo";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "যোগাযোগ — মা ভেষজ বাণিজ্যালয়",
-  description: "যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন। মা ভেষজ বাণিজ্যালয়।",
+  title: "যোগাযোগ",
+  description: "যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন।",
 };
 
 export default function ContactPage() {

@@ -1,8 +1,8 @@
 import { FiShield } from "react-icons/fi";
 
 export const metadata = {
-  title: "গোপনীয়তা নীতি — মা ভেষজ বাণিজ্যালয়",
-  description: "মা ভেষজ বাণিজ্যালয়ের গোপনীয়তা নীতি সম্পর্কে জানুন।",
+  title: "গোপনীয়তা নীতি",
+  description: "আমাদের গোপনীয়তা নীতি সম্পর্কে জানুন।",
 };
 
 export default function PrivacyPage() {
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
           <div className="max-w-3xl mx-auto">
             <div className="bg-primary/5 border border-primary/15 rounded-2xl p-5 mb-10">
               <p className="text-text-body text-sm leading-relaxed">
-                মা ভেষজ বাণিজ্যালয় আপনার গোপনীয়তাকে সর্বোচ্চ গুরুত্ব দেয়। এই গোপনীয়তা নীতিটি
+                আমরা আপনার গোপনীয়তাকে সর্বোচ্চ গুরুত্ব দিই। এই গোপনীয়তা নীতিটি
                 আমাদের ওয়েবসাইট ব্যবহার করার সময় আমরা কীভাবে আপনার তথ্য সংগ্রহ, ব্যবহার এবং
                 সুরক্ষিত রাখি তা বর্ণনা করে। আমাদের সেবা ব্যবহার করার মাধ্যমে আপনি এই নীতিতে
                 সম্মত হচ্ছেন বলে বিবেচিত হবে।
@@ -194,9 +194,7 @@ export default function PrivacyPage() {
                     গোপনীয়তা সংক্রান্ত যেকোনো প্রশ্ন বা উদ্বেগের জন্য আমাদের সাথে যোগাযোগ করুন:
                   </p>
                   <div className="bg-background-alt border border-border rounded-xl p-4 space-y-1.5">
-                    <p><strong className="text-foreground">ইমেইল:</strong> info@mavesoj.com</p>
-                    <p><strong className="text-foreground">ফোন:</strong> +880 1731492117</p>
-                    <p><strong className="text-foreground">ঠিকানা:</strong> ইব্রাহিমপুর, লক্ষ্মীপুর, সদর, নাটোর-৬৪০০, বাংলাদেশ</p>
+                    <p>বিস্তারিত যোগাযোগের তথ্যের জন্য আমাদের যোগাযোগ পেজ দেখুন।</p>
                   </div>
                   <p>
                     এই গোপনীয়তা নীতি যেকোনো সময় পরিবর্তন করা হতে পারে। গুরুত্বপূর্ণ পরিবর্তনের

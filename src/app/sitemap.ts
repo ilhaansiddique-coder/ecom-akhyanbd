@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mavesoj.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

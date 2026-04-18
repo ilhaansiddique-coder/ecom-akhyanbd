@@ -1,5 +1,5 @@
 /**
- * ─── Mavesoj Design Theme ───
+ * ─── Site Design Theme ───
  * Single source of truth for all UI classes across the site.
  * Import and use everywhere to keep the design consistent.
  *

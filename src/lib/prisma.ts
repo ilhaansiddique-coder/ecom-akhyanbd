@@ -9,18 +9,3 @@ export const prisma =
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-// Enable WAL mode + performance pragmas on first connection
-// WAL allows concurrent reads while writing (vs default journal mode which locks entire DB)
-const walInitialized = globalThis as unknown as { __walInit?: boolean };
-if (!walInitialized.__walInit) {
-  walInitialized.__walInit = true;
-  prisma.$executeRawUnsafe("PRAGMA journal_mode = WAL").catch(() => {});
-  prisma.$executeRawUnsafe("PRAGMA busy_timeout = 5000").catch(() => {});  // Wait 5s instead of failing immediately
-  prisma.$executeRawUnsafe("PRAGMA synchronous = NORMAL").catch(() => {}); // Faster writes, still safe with WAL
-  prisma.$executeRawUnsafe("PRAGMA cache_size = -40000").catch(() => {});   // 40MB cache
-  prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON").catch(() => {});
-  prisma.$executeRawUnsafe("PRAGMA mmap_size = 268435456").catch(() => {}); // 256MB memory-mapped I/O
-  prisma.$executeRawUnsafe("PRAGMA temp_store = MEMORY").catch(() => {});   // Temp tables in RAM
-  prisma.$executeRawUnsafe("PRAGMA optimize").catch(() => {});              // Reanalyze query plans
-}

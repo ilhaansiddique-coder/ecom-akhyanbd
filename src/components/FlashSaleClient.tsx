@@ -50,7 +50,7 @@ function Countdown({ endTime }: { endTime?: string }) {
 
 const ProductGrid = memo(function ProductGrid({ products }: { products: Product[] }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl">
+    <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-2xl">
       {products.map((product, i) => (
         <MotionFadeIn key={product.id} delay={i * 0.1}>
           <ProductCard product={product} priority={i === 0} />

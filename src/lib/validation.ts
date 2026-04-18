@@ -293,6 +293,7 @@ export const landingPageSchema = z.object({
   meta_title: strOpt,
   meta_description: strOpt,
   whatsapp: strOpt,
+  contact_mode: strOpt,
   section_visibility: strOpt,
   primary_color: strOpt,
 });

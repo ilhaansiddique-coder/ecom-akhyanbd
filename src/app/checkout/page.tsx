@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { FiShoppingBag, FiCheck, FiPrinter, FiDownload, FiMinus, FiPlus, FiTrash2 } from "react-icons/fi";
 import { useCart, CartItem } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
+import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { api } from "@/lib/api";
 import { trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
 import { useFingerprint } from "@/hooks/useFingerprint";
@@ -40,6 +41,11 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, hydrated, totalPrice, clearCart, updateQuantity, removeItem } = useCart();
   const { user } = useAuth();
+  const siteSettings = useSiteSettings();
+  const siteName = siteSettings.site_name || "Site";
+  const siteEmail = siteSettings.email || "";
+  const sitePhone = siteSettings.phone || "";
+  const siteAddress = siteSettings.address || "";
   const invoiceRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const { getFpHash } = useFingerprint();
@@ -57,6 +63,18 @@ export default function CheckoutPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const phoneRef = useRef<HTMLInputElement>(null);
+
+  const validatePhone = (val: string): string => {
+    const digits = val.replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.length !== 11) return `ফোন নম্বর অবশ্যই ১১ সংখ্যার হতে হবে (আপনি দিয়েছেন ${digits.length}টি)`;
+    const validPrefixes = ["013","014","015","016","017","018","019"];
+    if (!validPrefixes.some(p => digits.startsWith(p))) return "অবৈধ নম্বর — ০১৩/০১৪/০১৫/০১৬/০১৭/০১৮/০১৯ দিয়ে শুরু হতে হবে";
+    return "";
+  };
+
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [order, setOrder] = useState<OrderData | null>(null);
   const [savedItems, setSavedItems] = useState<CartItem[]>([]);
@@ -221,6 +239,14 @@ export default function CheckoutPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    const phoneErr = validatePhone(phone);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
+      phoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      phoneRef.current?.focus();
+      return;
+    }
+    setPhoneError("");
     setLoading(true);
 
     try {
@@ -337,10 +363,9 @@ export default function CheckoutPage() {
       <div class="invoice">
         <div class="header">
           <div class="brand">
-            <h1>মা ভেষজ বাণিজ্যালয়</h1>
-            <p>প্রাকৃতিক ভেষজ পণ্যের দোকান</p>
-            <p>ইব্রাহিমপুর, লক্ষ্মীপুর, সদর, নাটোর-৬৪০০</p>
-            <p>info@mavesoj.com</p>
+            <h1>${siteName}</h1>
+            ${siteAddress ? `<p>${siteAddress}</p>` : ""}
+            ${siteEmail ? `<p>${siteEmail}</p>` : ""}
           </div>
           <div class="invoice-meta">
             <h2>ইনভয়েস</h2>
@@ -395,14 +420,14 @@ export default function CheckoutPage() {
         <div class="totals-wrap">
           <div class="totals">
             <div class="row"><span>সাবটোটাল</span><span>৳${toBn(order!.subtotal)}</span></div>
-            <div class="row"><span>শিপিং চার্জ</span><span>৳${toBn(order!.shipping_cost)}</span></div>
+            <div class="row"><span>শিপিং চার্জ</span><span>${order!.shipping_cost === 0 ? "ফ্রি" : `৳${toBn(order!.shipping_cost)}`}</span></div>
             <div class="row total-row"><span>সর্বমোট</span><span>৳${toBn(order!.total)}</span></div>
           </div>
         </div>
 
         <div class="footer">
-          <p>ধন্যবাদ আপনার অর্ডারের জন্য! — মা ভেষজ বাণিজ্যালয়</p>
-          <p style="margin-top:4px">info@mavesoj.com | +880 1731492117</p>
+          <p>ধন্যবাদ আপনার অর্ডারের জন্য! — ${siteName}</p>
+          ${(siteEmail || sitePhone) ? `<p style="margin-top:4px">${[siteEmail, sitePhone].filter(Boolean).join(" | ")}</p>` : ""}
         </div>
       </div>
       <script>
@@ -481,10 +506,9 @@ export default function CheckoutPage() {
                 {/* Invoice Header */}
                 <div className="header flex items-start justify-between p-6 md:p-8 border-b-2 border-primary">
                   <div className="brand">
-                    <h1 className="text-xl md:text-2xl font-bold text-primary">মা ভেষজ বাণিজ্যালয়</h1>
-                    <p className="text-text-muted text-xs mt-1">প্রাকৃতিক ভেষজ পণ্যের দোকান</p>
-                    <p className="text-text-muted text-xs">ইব্রাহিমপুর, লক্ষ্মীপুর, সদর, নাটোর-৬৪০০</p>
-                    <p className="text-text-muted text-xs">info@mavesoj.com</p>
+                    <h1 className="text-xl md:text-2xl font-bold text-primary">{siteName}</h1>
+                    {siteAddress && <p className="text-text-muted text-xs mt-1">{siteAddress}</p>}
+                    {siteEmail && <p className="text-text-muted text-xs">{siteEmail}</p>}
                   </div>
                   <div className="invoice-meta text-right">
                     <h2 className="text-lg font-bold text-primary">ইনভয়েস</h2>
@@ -550,7 +574,7 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex justify-between py-2 text-sm">
                       <span className="text-text-muted">শিপিং চার্জ</span>
-                      <span className="font-medium">৳{toBn(order.shipping_cost)}</span>
+                      <span className={`font-medium ${order.shipping_cost === 0 ? "text-green-600" : ""}`}>{order.shipping_cost === 0 ? "ফ্রি" : `৳${toBn(order.shipping_cost)}`}</span>
                     </div>
                     <div className="flex justify-between py-3 text-lg font-bold border-t-2 border-primary mt-2">
                       <span>সর্বমোট</span>
@@ -561,8 +585,10 @@ export default function CheckoutPage() {
 
                 {/* Footer */}
                 <div className="px-6 md:px-8 pb-6 pt-4 border-t border-border text-center">
-                  <p className="text-xs text-text-muted">ধন্যবাদ আপনার অর্ডারের জন্য! — মা ভেষজ বাণিজ্যালয়</p>
-                  <p className="text-xs text-text-light mt-1">info@mavesoj.com | +880 1731492117</p>
+                  <p className="text-xs text-text-muted">ধন্যবাদ আপনার অর্ডারের জন্য! — {siteName}</p>
+                  {(siteEmail || sitePhone) && (
+                    <p className="text-xs text-text-light mt-1">{[siteEmail, sitePhone].filter(Boolean).join(" | ")}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -602,17 +628,17 @@ export default function CheckoutPage() {
                           <SafeNextImage src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-sm truncate">{item.name}{item.variantLabel ? ` - ${item.variantLabel}` : ""}</div>
+                          <div className="font-bold text-sm break-words">{item.name}{item.variantLabel ? ` - ${item.variantLabel}` : ""}</div>
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1), item.variantId)}
                               disabled={item.quantity <= 1}
-                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
-                            <span className="w-8 text-center font-bold text-sm">{toBn(item.quantity)}</span>
+                            <span className="min-w-[2.25rem] text-center font-bold text-lg">{toBn(item.quantity)}</span>
                             <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1, item.variantId)}
                               disabled={!item.unlimitedStock && item.stock != null && item.quantity >= item.stock}
-                              className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -641,7 +667,24 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex-1">
                   <label className="block font-bold text-sm mb-2 px-1">মোবাইল নম্বর *</label>
-                  <input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} placeholder="০১৭XXXXXXXX" />
+                  <input
+                    required type="tel" value={phone}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^\d]/g, "");
+                      setPhone(val);
+                      if (phoneError) setPhoneError(validatePhone(val));
+                    }}
+                    onBlur={(e) => setPhoneError(validatePhone(e.target.value.replace(/[^\d]/g, "")))}
+                    ref={phoneRef}
+                    maxLength={11}
+                    inputMode="numeric"
+                    className={`${inputCls} ${phoneError ? "!bg-red-50 !border-red-400 !ring-red-300" : ""}`}
+                    placeholder="01700000000" />
+                  {phoneError && (
+                    <p className="mt-1.5 text-xs text-red-500 px-1 flex items-center gap-1">
+                      <span>⚠</span> {phoneError}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -825,7 +868,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">শিপিং চার্জ</span>
-                  <span className="font-semibold">৳{toBn(effectiveShipping)}</span>
+                  <span className={`font-semibold ${effectiveShipping === 0 ? "text-green-600" : ""}`}>{effectiveShipping === 0 ? "ফ্রি" : `৳${toBn(effectiveShipping)}`}</span>
                 </div>
                 <div className="flex justify-between text-xl font-extrabold pt-3 border-t-2 border-primary/20">
                   <span>সর্বমোট</span>

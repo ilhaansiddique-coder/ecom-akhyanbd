@@ -1,8 +1,8 @@
 import { FiRefreshCw } from "react-icons/fi";
 
 export const metadata = {
-  title: "রিফান্ড পলিসি — মা ভেষজ বাণিজ্যালয়",
-  description: "মা ভেষজ বাণিজ্যালয়ের রিফান্ড ও রিটার্ন নীতি সম্পর্কে জানুন।",
+  title: "রিফান্ড পলিসি",
+  description: "আমাদের রিফান্ড ও রিটার্ন নীতি সম্পর্কে জানুন।",
 };
 
 export default function RefundPage() {
@@ -27,7 +27,7 @@ export default function RefundPage() {
           <div className="max-w-3xl mx-auto">
             <div className="bg-primary/5 border border-primary/15 rounded-2xl p-5 mb-10">
               <p className="text-text-body text-sm leading-relaxed">
-                মা ভেষজ বাণিজ্যালয় আপনার সন্তুষ্টিকে সর্বোচ্চ অগ্রাধিকার দেয়। আমাদের রিফান্ড
+                আমরা আপনার সন্তুষ্টিকে সর্বোচ্চ অগ্রাধিকার দেই। আমাদের রিফান্ড
                 পলিসি সম্পূর্ণ স্বচ্ছ ও সহজ। আপনি যদি কোনো কারণে আমাদের পণ্যে সন্তুষ্ট না হন,
                 তাহলে নিচের নির্দেশিকা অনুসরণ করে রিফান্ড বা এক্সচেঞ্জের জন্য আবেদন করুন।
               </p>
@@ -75,7 +75,7 @@ export default function RefundPage() {
                   <p>রিফান্ডের জন্য নিচের ধাপগুলি অনুসরণ করুন:</p>
                   <div className="space-y-3">
                     {[
-                      { step: "ধাপ ১", desc: "আমাদের কাস্টমার সার্ভিস নম্বরে (+880 1731492117) ফোন করুন অথবা info@mavesoj.com-এ ইমেইল পাঠান।" },
+                      { step: "ধাপ ১", desc: "আমাদের যোগাযোগ পেজে দেওয়া নম্বরে ফোন করুন অথবা ইমেইল পাঠান।" },
                       { step: "ধাপ ২", desc: "আপনার অর্ডার নম্বর, সমস্যার বিবরণ এবং সমস্যার ছবি (যদি প্রযোজ্য) শেয়ার করুন।" },
                       { step: "ধাপ ৩", desc: "আমরা ২৪ ঘণ্টার মধ্যে আপনার আবেদন পর্যালোচনা করব এবং সিদ্ধান্ত জানাব।" },
                       { step: "ধাপ ৪", desc: "রিফান্ড অনুমোদন হলে পণ্য ফেরত পাঠানোর নির্দেশনা দেওয়া হবে।" },
@@ -154,25 +154,7 @@ export default function RefundPage() {
                   যোগাযোগ
                 </h2>
                 <div className="pl-11 space-y-3 text-text-body text-sm leading-relaxed">
-                  <p>রিফান্ড বা এক্সচেঞ্জ সংক্রান্ত যেকোনো প্রশ্নের জন্য আমাদের সাথে যোগাযোগ করুন:</p>
-                  <div className="bg-background-alt border border-border rounded-xl p-5 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-primary font-bold w-24 shrink-0">ইমেইল</span>
-                      <a href="mailto:info@mavesoj.com" className="text-primary hover:underline">info@mavesoj.com</a>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-primary font-bold w-24 shrink-0">ফোন</span>
-                      <a href="tel:+8801731492117" className="text-primary hover:underline">+880 1731492117</a>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-primary font-bold w-24 shrink-0">হোয়াটসঅ্যাপ</span>
-                      <span>+880 1731492117</span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <span className="text-primary font-bold w-24 shrink-0">সময়</span>
-                      <span>সকাল ৯টা থেকে রাত ৯টা (সাত দিন)</span>
-                    </div>
-                  </div>
+                  <p>রিফান্ড বা এক্সচেঞ্জ সংক্রান্ত যেকোনো প্রশ্নের জন্য আমাদের যোগাযোগ পেজ দেখুন।</p>
                   <p className="text-xs text-text-muted">
                     আমরা আপনার সমস্যা দ্রুত সমাধান করতে সর্বদা প্রস্তুত। গ্রাহক সন্তুষ্টিই আমাদের
                     সর্বোচ্চ অগ্রাধিকার।

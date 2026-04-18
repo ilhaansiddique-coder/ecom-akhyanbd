@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 import { prisma } from "@/lib/prisma";
+import { buildThemeCss } from "@/lib/theme-tokens";
 
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
@@ -34,83 +35,115 @@ const bricolage = Bricolage_Grotesque({
   display: "swap",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mavesoj.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-export const metadata: Metadata = {
-  title: {
-    default: "মা ভেষজ বাণিজ্যালয় — প্রাকৃতিক ভেষজ পণ্যের দোকান",
-    template: "%s — মা ভেষজ বাণিজ্যালয়",
-  },
-  description:
-    "প্রকৃতির শক্তিতে সুস্থ থাকুন। ভেষজ গুঁড়ো, চা, হার্ট কেয়ার ও প্রাকৃতিক পণ্য — সরাসরি প্রকৃতি থেকে আপনার দোরগোড়ায়।",
-  metadataBase: new URL(SITE_URL),
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-    ],
-    apple: "/apple-touch-icon.png",
-  },
-  openGraph: {
-    type: "website",
-    locale: "bn_BD",
-    siteName: "মা ভেষজ বাণিজ্যালয়",
-    title: "মা ভেষজ বাণিজ্যালয় — প্রাকৃতিক ভেষজ পণ্যের দোকান",
-    description: "প্রকৃতির শক্তিতে সুস্থ থাকুন। ভেষজ গুঁড়ো, চা, হার্ট কেয়ার ও প্রাকৃতিক পণ্য।",
-    url: SITE_URL,
-    images: [{ url: "/logo.svg", width: 512, height: 512, alt: "মা ভেষজ বাণিজ্যালয়" }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "মা ভেষজ বাণিজ্যালয়",
-    description: "প্রকৃতির শক্তিতে সুস্থ থাকুন। ভেষজ গুঁড়ো, চা, হার্ট কেয়ার ও প্রাকৃতিক পণ্য।",
-    images: ["/logo.svg"],
-  },
-};
+async function loadSiteSettings(): Promise<Record<string, string | null>> {
+  try {
+    const rows = await prisma.siteSetting.findMany();
+    const out: Record<string, string | null> = {};
+    for (const r of rows) out[r.key] = r.value ?? null;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await loadSiteSettings();
+  const siteName = settings.site_name || "Site";
+  const description = settings.site_description || settings.meta_description || "";
+  const logo = settings.site_logo || "/logo.svg";
+  return {
+    title: {
+      default: siteName,
+      template: `%s — ${siteName}`,
+    },
+    description,
+    metadataBase: new URL(SITE_URL),
+    icons: {
+      icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
+        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      ],
+      apple: "/apple-touch-icon.png",
+    },
+    openGraph: {
+      type: "website",
+      siteName,
+      title: siteName,
+      description,
+      url: SITE_URL,
+      images: [{ url: logo, width: 512, height: 512, alt: siteName }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: siteName,
+      description,
+      images: [logo],
+    },
+  };
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Domain verification meta tag — read from DB
-  let fbDomainVerification: string | null = null;
-  try {
-    const setting = await prisma.siteSetting.findUnique({ where: { key: "fb_domain_verification" } });
-    fbDomainVerification = setting?.value || null;
-  } catch {}
+  // Load all site settings server-side so the SiteSettingsContext hydrates synchronously.
+  // This eliminates the logo flash on reload caused by the previous client-side fetch.
+  const settings = await loadSiteSettings();
+  const fbDomainVerification = settings.fb_domain_verification || null;
+  const siteName = settings.site_name || "Site";
+  const siteLogoUrl = settings.site_logo
+    ? (settings.site_logo.startsWith("http") ? settings.site_logo : `${SITE_URL}${settings.site_logo}`)
+    : `${SITE_URL}/logo.svg`;
+  const orgPhone = settings.phone || "";
+  const sameAs = [settings.facebook, settings.instagram, settings.youtube].filter(Boolean) as string[];
+
+  // Build the theme CSS variables block from saved customizer tokens.
+  // Rendered into <head> so it overrides the defaults in globals.css before paint (no FOUC).
+  const themeCss = buildThemeCss(settings);
 
   return (
     <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
-      {fbDomainVerification && (
-        <head>
+      <head>
+        {fbDomainVerification && (
           <meta name="facebook-domain-verification" content={fbDomainVerification} />
-        </head>
-      )}
+        )}
+        <style id="theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />
+      </head>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
-        {/* Mark JS as active so fade-in animations only apply after hydration */}
-        <Script id="js-ready" strategy="beforeInteractive">{`document.documentElement.classList.add("js-ready")`}</Script>
-        {/* Organization JSON-LD */}
-        <Script id="org-jsonld" type="application/ld+json" strategy="beforeInteractive"
+        {/* next/script with beforeInteractive bypasses the React 19 "script in JSX"
+            warning. The `js-ready` class gates fade-in animations until hydration. */}
+        <Script id="js-ready" strategy="beforeInteractive">
+          {`document.documentElement.classList.add("js-ready")`}
+        </Script>
+        {/* Organization JSON-LD — type="application/ld+json" is data, not executable;
+            served via next/script for consistency with React 19's script handling. */}
+        <Script
+          id="org-jsonld"
+          type="application/ld+json"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "Organization",
-              name: "মা ভেষজ বাণিজ্যালয়",
-              alternateName: "Ma Vesoj",
+              name: siteName,
               url: SITE_URL,
-              logo: `${SITE_URL}/logo.svg`,
-              contactPoint: {
-                "@type": "ContactPoint",
-                telephone: "+880-1731492117",
-                contactType: "customer service",
-                availableLanguage: ["Bengali", "English"],
-              },
-              sameAs: ["https://www.facebook.com/mavesoj", "https://www.instagram.com/mavesoj", "https://www.youtube.com/@mavesoj"],
+              logo: siteLogoUrl,
+              ...(orgPhone && {
+                contactPoint: {
+                  "@type": "ContactPoint",
+                  telephone: orgPhone,
+                  contactType: "customer service",
+                  availableLanguage: ["Bengali", "English"],
+                },
+              }),
+              ...(sameAs.length > 0 && { sameAs }),
             }),
           }}
         />
-        <ClientLayout>{children}</ClientLayout>
+        <ClientLayout initialSettings={settings}>{children}</ClientLayout>
       </body>
     </html>
   );

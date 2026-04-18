@@ -7,7 +7,7 @@ import { FiSearch, FiShoppingCart, FiMenu, FiX, FiPhone, FiUser, FiLogOut } from
 import { useAuth } from "@/lib/AuthContext";
 import { useCart } from "@/lib/CartContext";
 import { useLang } from "@/lib/LanguageContext";
-import { useSiteSettings } from "@/lib/SiteSettingsContext";
+import { useSiteSettings, useOption } from "@/lib/SiteSettingsContext";
 import { toBn } from "@/utils/toBn";
 
 interface NavbarProps {
@@ -65,6 +65,17 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
   const { t, lang } = useLang();
   const settings = useSiteSettings();
   const headerPhone = settings.phone || "";
+  const siteName = settings.site_name || t("hero.title");
+  const siteTagline = settings.site_tagline || t("footer.tagline");
+
+  // Customizer-driven layout / visibility
+  const layout      = useOption<string>("header.layout");      // "classic" | "centered" | "minimal"
+  const sticky      = useOption<boolean>("header.sticky");
+  const showTopbar  = useOption<boolean>("header.show_topbar") && layout !== "minimal";
+  const showSearch  = useOption<boolean>("header.show_search");
+  const showCart    = useOption<boolean>("header.show_cart");
+  const showLogin   = useOption<boolean>("header.show_login");
+  const isCentered  = layout === "centered";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -86,6 +97,7 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
   return (
     <>
       {/* Top Bar */}
+      {showTopbar && (
       <div className="bg-primary text-white text-sm py-2 hidden md:block">
         <div className="container mx-auto px-4 flex items-center justify-between">
           {headerPhone && (
@@ -102,11 +114,12 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
           </p>
         </div>
       </div>
+      )}
 
       {/* Main Nav */}
-      <nav className={`bg-white sticky top-0 z-50 w-full transition-shadow duration-300 ${scrolled ? "shadow-md" : "shadow-sm"}`}>
+      <nav className={`bg-white w-full transition-shadow duration-300 ${sticky ? "sticky top-0 z-50" : ""} ${scrolled ? "shadow-md" : "shadow-sm"}`}>
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16 lg:h-20">
+          <div className={`flex items-center h-16 lg:h-20 ${isCentered ? "justify-center relative" : "justify-between"}`}>
             <button
               className="lg:hidden p-2 -ml-2 text-foreground hover:text-primary transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -117,13 +130,13 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 shrink-0">
-              <Image src="/logo.svg" alt={t("hero.title")} width={48} height={38} className="h-9 lg:h-11" style={{ width: "auto" }} priority />
+              <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={48} height={38} className="h-9 lg:h-11" style={{ width: "auto" }} priority unoptimized={!!settings.site_logo} />
               <div className="hidden sm:block">
                 <h1 className="text-base lg:text-lg font-bold text-primary leading-tight tracking-tight">
-                  {t("hero.title")}
+                  {siteName}
                 </h1>
                 <p className="text-[10px] lg:text-[11px] text-text-muted -mt-0.5">
-                  {t("footer.tagline")}
+                  {siteTagline}
                 </p>
               </div>
             </Link>
@@ -143,21 +156,26 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
 
             {/* Actions */}
             <div className="flex items-center gap-1.5">
-              <button
-                onClick={onSearchOpen}
-                className="p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
-                aria-label={t("nav.search")}
-              >
-                <FiSearch className="w-5 h-5" />
-              </button>
-              <button
-                onClick={onCartOpen}
-                className="relative p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
-                aria-label={t("nav.cart")}
-              >
-                <FiShoppingCart className="w-5 h-5" />
-                {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-sale-red text-white text-[10px] font-bold rounded-full flex items-center justify-center" suppressHydrationWarning>{toBn(totalItems)}</span>}
-              </button>
+              {showSearch && (
+                <button
+                  onClick={onSearchOpen}
+                  className="p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
+                  aria-label={t("nav.search")}
+                >
+                  <FiSearch className="w-5 h-5" />
+                </button>
+              )}
+              {showCart && (
+                <button
+                  onClick={onCartOpen}
+                  className="relative p-2.5 hover:bg-background-alt rounded-full transition-colors text-foreground hover:text-primary"
+                  aria-label={t("nav.cart")}
+                >
+                  <FiShoppingCart className="w-5 h-5" />
+                  {totalItems > 0 && <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-sale-red text-white text-[10px] font-bold rounded-full flex items-center justify-center" suppressHydrationWarning>{toBn(totalItems)}</span>}
+                </button>
+              )}
+              {showLogin && <AuthButton onAuthOpen={onAuthOpen} />}
             </div>
           </div>
         </div>

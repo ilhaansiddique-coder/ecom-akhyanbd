@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -444,6 +445,9 @@ model LandingPage {
 
   // WhatsApp
   whatsapp         String?   @map("whatsapp")
+  // Per-page override of the global widget.contact_mode setting.
+  // "inherit" (default) → use site setting, "whatsapp" → force WhatsApp, "phone" → force phone call.
+  contactMode      String?   @default("inherit") @map("contact_mode")
 
   // Section Visibility (JSON string: {"hero":true,"problem":true,...})
   sectionVisibility String?  @map("section_visibility")

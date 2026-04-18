@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { useRouter } from "next/navigation";
@@ -17,11 +17,11 @@ export default function CDLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (user) {
-    router.push("/dashboard");
-    return null;
-  }
+  // Redirect if already logged in (effect — never call router.push during render)
+  useEffect(() => {
+    if (user) router.push("/dashboard");
+  }, [user, router]);
+  if (user) return null;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,7 +47,7 @@ export default function CDLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f5931]/5 via-white to-[#0f5931]/10 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-[var(--primary)]/5 via-white to-[var(--primary)]/10 flex items-center justify-center px-4 py-12">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -57,7 +57,7 @@ export default function CDLoginPage() {
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-[#0f5931] to-[#0d4526] px-8 py-10 text-center">
+          <div className="bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] px-8 py-10 text-center">
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
@@ -101,7 +101,7 @@ export default function CDLoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="admin@example.com"
-                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl text-sm focus:border-[#0f5931] focus:ring-2 focus:ring-[#0f5931]/20 focus:outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl text-sm focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 focus:outline-none transition-all"
                   />
                 </div>
               </div>
@@ -122,7 +122,7 @@ export default function CDLoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="••••••••"
-                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl text-sm focus:border-[#0f5931] focus:ring-2 focus:ring-[#0f5931]/20 focus:outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl text-sm focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 focus:outline-none transition-all"
                   />
                 </div>
               </div>
@@ -131,7 +131,7 @@ export default function CDLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-[#0f5931] to-[#0d4526] text-white py-3.5 rounded-xl font-semibold hover:shadow-lg hover:shadow-[#0f5931]/20 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] text-white py-3.5 rounded-xl font-semibold hover:shadow-lg hover:shadow-[var(--primary)]/20 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -160,7 +160,7 @@ export default function CDLoginPage() {
         <div className="mt-6 text-center">
           <button
             onClick={() => router.push("/")}
-            className="text-sm text-gray-600 hover:text-[#0f5931] transition-colors"
+            className="text-sm text-gray-600 hover:text-[var(--primary)] transition-colors"
           >
             ← Back to Homepage
           </button>

@@ -1,3 +1,4 @@
+import { cache, Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FiTruck, FiShield, FiStar } from "react-icons/fi";
@@ -9,8 +10,8 @@ import ProductCard from "@/components/ProductCard";
 import { ProductGalleryWithVariants, ReviewsSection } from "@/components/ProductDetailClient";
 import type { Metadata } from "next";
 
-// ISR: regenerate every 60s
-export const revalidate = 60;
+// ISR: regenerate every 5 minutes (was 60s — too aggressive, kills static cache).
+export const revalidate = 300;
 export const dynamicParams = true;
 
 function resolveImage(img: string): string {
@@ -18,22 +19,17 @@ function resolveImage(img: string): string {
   return img;
 }
 
-async function getProduct(slug: string) {
+// React `cache()` dedupes calls within a single request. Without this, the
+// product fetch ran TWICE per request (once in generateMetadata, once in the
+// page itself) — adding ~150-300ms of extra Singapore round-trip.
+const getProduct = cache(async (slug: string) => {
   try {
-    // Decode URL-encoded slugs (handles Bangla characters like %E0%A6%AC%E0%A6%BF...)
     const decoded = decodeURIComponent(slug);
-
-    // Try exact match first, then decoded version
     const product = await prisma.product.findFirst({
-      where: {
-        OR: [
-          { slug: slug },
-          { slug: decoded },
-        ],
-      },
+      where: { OR: [{ slug }, { slug: decoded }] },
       include: {
         category: { select: { id: true, name: true, slug: true } },
-        brand: { select: { id: true, name: true, slug: true } },
+        brand:    { select: { id: true, name: true, slug: true } },
         variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
       },
     });
@@ -42,14 +38,16 @@ async function getProduct(slug: string) {
   } catch {
     return null;
   }
-}
+});
 
 export async function generateStaticParams() {
   try {
+    // Pre-render up to 500 active products at build time so the most popular
+    // slugs serve from the static cache instead of cold-starting Prisma.
     const products = await prisma.product.findMany({
       where: { isActive: true },
       select: { slug: true },
-      take: 100,
+      take: 500,
     });
     return products.map((p) => ({ slug: p.slug }));
   } catch {
@@ -66,11 +64,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const desc = product.description_bn || product.description || "";
 
   return {
-    title: `${name} — মা ভেষজ বাণিজ্যালয়`,
-    description: desc.slice(0, 160) || `${name} — প্রাকৃতিক ভেষজ পণ্য। মা ভেষজ বাণিজ্যালয় থেকে অর্ডার করুন।`,
+    title: name,
+    description: desc.slice(0, 160) || `${name} — অর্ডার করুন।`,
     openGraph: {
       title: name,
-      description: desc.slice(0, 160) || `${name} — প্রাকৃতিক ভেষজ পণ্য`,
+      description: desc.slice(0, 160) || name,
       images: product.image?.startsWith("http") ? [product.image] : undefined,
     },
   };
@@ -114,23 +112,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const displayName = product.nameBn || product.name;
   const discount = product.originalPrice ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100) : 0;
 
-  // Related products — direct Prisma query, same category, exclude current
-  let related: Product[] = [];
-  try {
-    const relatedRows = await prisma.product.findMany({
-      where: { isActive: true, categoryId: raw.category_id as number, id: { not: product.id } },
-      include: {
-        category: { select: { id: true, name: true, slug: true } },
-        brand: { select: { id: true, name: true, slug: true } },
-        variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
-      },
-      orderBy: { sortOrder: "asc" },
-      take: 4,
-    });
-    related = relatedRows.map((p) => mapApiProduct(serialize(p)));
-  } catch {}
-
-  const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mavesoj.com";
+  const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  // Brand name for JSON-LD — avoid a separate DB round-trip just for this.
+  // Falls back to env or a static default; not worth a query per page render.
+  const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Site";
   const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -138,7 +123,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     description: product.descriptionBn || product.description || "",
     image: product.image.startsWith("http") ? product.image : `${SITE_URL}${product.image}`,
     url: `${SITE_URL}/products/${slug}`,
-    brand: { "@type": "Brand", name: "মা ভেষজ বাণিজ্যালয়" },
+    brand: { "@type": "Brand", name: siteName },
     offers: {
       "@type": "Offer",
       price: product.price,
@@ -206,8 +191,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div className="mt-6 grid grid-cols-3 gap-3">
                 {[
                   { icon: FiTruck, text: "দ্রুত ডেলিভারি" },
-                  { icon: FiShield, text: "১০০% খাঁটি" },
-                  { icon: FiStar, text: "সেরা মান" },
+                  { icon: FiShield, text: "ত্বক-বান্ধব" },
+                  { icon: FiStar, text: "প্রিমিয়াম মান" },
                 ].map((b) => (
                   <div key={b.text} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-border">
                     <b.icon className="w-4 h-4 text-primary shrink-0" />
@@ -228,17 +213,63 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         <ReviewsSection productId={product.id} />
 
-        {related.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-xl font-bold text-foreground mb-6">সম্পর্কিত পণ্য</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              {related.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Related products stream in separately — the main product paints
+            the moment its own query resolves; this section can take its time
+            without blocking the rest of the page. */}
+        <Suspense fallback={<RelatedSkeleton />}>
+          <RelatedProducts categoryId={raw.category_id as number} excludeId={product.id} />
+        </Suspense>
       </div>
     </section>
+  );
+}
+
+// ─── Related products: own async server component, own Suspense boundary ───
+
+async function RelatedProducts({ categoryId, excludeId }: { categoryId: number; excludeId: number }) {
+  let related: Product[] = [];
+  try {
+    const relatedRows = await prisma.product.findMany({
+      where: { isActive: true, categoryId, id: { not: excludeId } },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
+      },
+      orderBy: { sortOrder: "asc" },
+      take: 4,
+    });
+    related = relatedRows.map((p) => mapApiProduct(serialize(p)));
+  } catch {}
+
+  if (related.length === 0) return null;
+
+  return (
+    <div className="mt-12">
+      <h2 className="text-xl font-bold text-foreground mb-6">সম্পর্কিত পণ্য</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        {related.map((p) => (
+          <ProductCard key={p.id} product={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RelatedSkeleton() {
+  return (
+    <div className="mt-12">
+      <div className="h-6 w-40 bg-gray-200 rounded animate-pulse mb-6" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-2xl border border-border overflow-hidden">
+            <div className="aspect-square w-full bg-gray-200 animate-pulse" />
+            <div className="p-3 space-y-2">
+              <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
+              <div className="h-5 w-1/2 bg-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

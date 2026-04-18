@@ -14,6 +14,8 @@ interface HeroContent {
   trust_1?: string;
   trust_2?: string;
   trust_3?: string;
+  hero_logo?: string;
+  floating_tags?: { emoji: string; label: string }[];
 }
 
 export default function Hero({ content }: { content?: HeroContent }) {
@@ -71,10 +73,10 @@ export default function Hero({ content }: { content?: HeroContent }) {
             <div className="relative">
               <div className="w-80 h-80 xl:w-96 xl:h-96 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20">
                 <div className="w-64 h-64 xl:w-80 xl:h-80 bg-white/10 rounded-full flex items-center justify-center overflow-hidden">
-                  <Image src="/logo.svg" alt="Ma Bhesoj" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl" style={{ height: "auto" }} priority />
+                  <Image src={content?.hero_logo || "/logo.svg"} alt="Site Logo" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl object-contain" style={{ height: "auto" }} priority unoptimized={!!(content?.hero_logo)} />
                 </div>
               </div>
-              <HeroFloatingTags />
+              <HeroFloatingTags tags={content?.floating_tags} />
             </div>
           </div>
         </div>

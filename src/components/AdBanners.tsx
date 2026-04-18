@@ -16,8 +16,8 @@ interface Banner {
 }
 
 const fallbackBanners: Banner[] = [
-  { id: 1, title: "বিশেষ উপহার", description: "প্রিয়জনকে দিন খাঁটি ভেষজ উপহার", button_text: "উপহার কিনুন", button_url: "/shop", gradient: "from-primary to-primary-dark", emoji: "🎁" },
-  { id: 2, title: "সকল পণ্য", description: "আমাদের সব পণ্য দেখুন", button_text: "শপ করুন", button_url: "/shop", gradient: "from-amber-600 to-amber-800", emoji: "🛒" },
+  { id: 1, title: "ঈদ কালেকশন", description: "ছোট্ট সোনামণিদের জন্য বিশেষ ঈদ পোশাক", button_text: "কালেকশন দেখুন", button_url: "/shop", gradient: "from-primary to-primary-dark", emoji: "🎉" },
+  { id: 2, title: "নতুন আগমন", description: "এই সপ্তাহের ট্রেন্ডিং পোশাক", button_text: "শপ করুন", button_url: "/shop", gradient: "from-amber-600 to-amber-800", emoji: "👕" },
   { id: 3, title: "কম্বো অফার", description: "কম্বো প্যাকে বাঁচান বেশি", button_text: "অফার দেখুন", button_url: "/shop", gradient: "from-emerald-600 to-emerald-800", emoji: "📦" },
 ];
 

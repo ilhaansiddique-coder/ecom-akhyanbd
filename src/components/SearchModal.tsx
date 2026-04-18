@@ -156,7 +156,7 @@ export default function SearchModal({ open, onClose }: SearchModalProps) {
               {query.length === 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <span className="text-sm text-text-muted mr-2">জনপ্রিয়:</span>
-                  {["ভেষজ চা", "বিটরুট", "সজনে পাতা", "মেথি", "হার্ট কেয়ার", "মেহেদী"].map((tag) => (
+                  {["টি-শার্ট", "পোলো", "রম্পার", "প্যান্ট", "ঈদ কালেকশন", "কম্বো"].map((tag) => (
                     <button key={tag} onClick={() => handleTagClick(tag)} className="px-3 py-1.5 text-sm bg-background-alt hover:bg-primary/10 hover:text-primary rounded-full transition-colors">
                       {tag}
                     </button>

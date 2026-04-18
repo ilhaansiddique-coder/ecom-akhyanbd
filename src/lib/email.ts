@@ -52,7 +52,16 @@ async function getTransporter() {
 
 async function getFrom(): Promise<string> {
   const db = await getSmtpConfig();
-  return db.smtp_from || process.env.SMTP_FROM || process.env.SMTP_USER || "info@mavesoj.com";
+  return db.smtp_from || process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@example.com";
+}
+
+async function getSiteName(): Promise<string> {
+  try {
+    const s = await prisma.siteSetting.findUnique({ where: { key: "site_name" } });
+    return s?.value || "Site";
+  } catch {
+    return "Site";
+  }
 }
 
 async function getAdminEmail(): Promise<string> {
@@ -64,14 +73,15 @@ export async function sendWelcomeEmail(to: string, name: string) {
   try {
     const transporter = await getTransporter();
     const from = await getFrom();
+    const siteName = await getSiteName();
     await transporter.sendMail({
-      from: `"মা ভেষজ বাণিজ্যালয়" <${from}>`,
+      from: `"${siteName}" <${from}>`,
       to,
       subject: "স্বাগতম! আপনার অ্যাকাউন্ট তৈরি হয়েছে",
       html: `
         <h2>স্বাগতম, ${h(name)}!</h2>
-        <p>মা ভেষজ বাণিজ্যালয়ে আপনাকে স্বাগত জানাই।</p>
-        <p>আমাদের প্রাকৃতিক ও ভেষজ পণ্য ব্রাউজ করুন এবং আপনার পছন্দের পণ্য অর্ডার করুন।</p>
+        <p>${h(siteName)}-এ আপনাকে স্বাগত জানাই।</p>
+        <p>আমাদের পণ্য ব্রাউজ করুন এবং আপনার পছন্দের পণ্য অর্ডার করুন।</p>
       `,
     });
   } catch {
@@ -98,11 +108,12 @@ export async function sendAdminOrderNotification(data: OrderEmailData & { phone:
       .join("");
 
     const paymentLabels: Record<string, string> = { cod: "Cash on Delivery", bkash: "bKash", nagad: "Nagad", bank: "Bank Transfer" };
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://mavesoj.com";
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
     const orderUrl = data.orderToken ? `${siteUrl}/order/${data.orderToken}` : `${siteUrl}/dashboard/orders`;
+    const siteName = await getSiteName();
 
     await transporter.sendMail({
-      from: `"মা ভেষজ বাণিজ্যালয়" <${from}>`,
+      from: `"${siteName}" <${from}>`,
       to: adminEmail,
       subject: `🛒 নতুন অর্ডার #${data.orderId} — ৳${data.total} — ${data.customerName}`,
       html: `
@@ -144,12 +155,13 @@ export async function sendOrderConfirmation(to: string, data: OrderEmailData) {
   try {
     const transporter = await getTransporter();
     const from = await getFrom();
+    const siteName = await getSiteName();
     const itemsHtml = data.items
       .map((i) => `<tr><td>${h(i.productName)}</td><td>${i.quantity}</td><td>৳${i.price}</td></tr>`)
       .join("");
 
     await transporter.sendMail({
-      from: `"মা ভেষজ বাণিজ্যালয়" <${from}>`,
+      from: `"${siteName}" <${from}>`,
       to,
       subject: `অর্ডার নিশ্চিতকরণ #${data.orderId}`,
       html: `
@@ -173,6 +185,7 @@ export async function sendAdminContactNotification(data: { id: number; name: str
     const from = await getFrom();
     const adminEmail = await getAdminEmail();
     if (!adminEmail) return;
+    const siteName = await getSiteName();
 
     const subjectLabels: Record<string, string> = {
       order: "অর্ডার সংক্রান্ত",
@@ -183,7 +196,7 @@ export async function sendAdminContactNotification(data: { id: number; name: str
     };
 
     await transporter.sendMail({
-      from: `"মা ভেষজ বাণিজ্যালয়" <${from}>`,
+      from: `"${siteName}" <${from}>`,
       to: adminEmail,
       replyTo: data.email,
       subject: `📩 নতুন যোগাযোগ #${data.id} — ${h(data.name)} — ${subjectLabels[data.subject] || "সাধারণ"}`,

@@ -1,8 +1,14 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import LandingPageClient from "./LandingPageClient";
 
 const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
+
+// ISR: regenerate every 5 minutes. Landing pages change rarely; the customizer
+// can revalidate on demand if it needs immediate updates.
+export const revalidate = 300;
+export const dynamicParams = true;
 
 interface LandingPageData {
   id: number;
@@ -25,6 +31,8 @@ interface LandingPageData {
   meta_title?: string;
   meta_description?: string;
   primary_color?: string;
+  contact_mode?: string;
+  whatsapp?: string;
   resolved_products?: {
     id: number;
     name: string;
@@ -35,21 +43,31 @@ interface LandingPageData {
     description?: string;
     stock: number;
     selected_quantity: number;
+    has_variations?: boolean;
+    variation_type?: string;
+    custom_shipping?: boolean;
+    shipping_cost?: number;
+    variants?: { id: number; label: string; price: number; original_price?: number; stock: number; image?: string; isActive?: boolean }[];
   }[];
 }
 
-async function getLandingPage(slug: string): Promise<LandingPageData | null> {
+// React `cache()` dedupes per request: generateMetadata + the page itself
+// would otherwise fire two identical fetches (~150-300ms extra each on a cold
+// edge). `next: { revalidate }` lets the framework cache the response between
+// requests instead of `cache: "no-store"`, which was forcing a live DB hit on
+// every single page view.
+const getLandingPage = cache(async (slug: string): Promise<LandingPageData | null> => {
   try {
     const res = await fetch(`${API_URL}/landing-pages/${slug}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 60 },
+      next: { revalidate: 300, tags: [`landing-page:${slug}`] },
     });
     if (!res.ok) return null;
     return res.json();
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

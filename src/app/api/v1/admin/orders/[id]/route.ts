@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const { id } = await params;
   const order = await prisma.order.findUnique({
@@ -27,7 +27,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });
@@ -94,7 +94,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FiCheck, FiStar, FiChevronDown, FiMinus, FiPlus, FiPhone, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { SafeImg, SafeNextImage } from "@/components/SafeImage";
@@ -9,6 +9,7 @@ import { Autoplay, Pagination, Navigation } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 import { api } from "@/lib/api";
+import { useOption } from "@/lib/SiteSettingsContext";
 
 interface ProductVariant {
   id: number; label: string; price: number; original_price?: number; stock: number; image?: string;
@@ -40,6 +41,7 @@ interface PageData {
   guarantee_text?: string; success_message?: string;
   section_visibility?: string;
   whatsapp?: string;
+  contact_mode?: string; // "inherit" | "whatsapp" | "phone"
   primary_color?: string; resolved_products?: Product[];
 }
 
@@ -50,7 +52,13 @@ function parseJSON<T>(str?: string | null): T[] {
 
 export default function LandingPageClient({ page }: { page: PageData }) {
   const router = useRouter();
-  const color = page.primary_color || "#0f5931";
+  const siteContactMode = useOption<string>("widget.contact_mode"); // "whatsapp" | "phone"
+  // Per-page override wins unless set to "inherit" (the default).
+  const contactMode = page.contact_mode && page.contact_mode !== "inherit" ? page.contact_mode : siteContactMode;
+  // Falls back to the global theme primary CSS variable so customizer color
+  // changes propagate to LP buttons/qty controls/totals when this LP doesn't
+  // override its own primary_color.
+  const color = page.primary_color || "var(--primary)";
   const vis: Record<string, boolean> = (() => {
     try { return JSON.parse(page.section_visibility || "{}"); } catch { return {}; }
   })();
@@ -61,18 +69,21 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     Object.fromEntries(products.map((p) => [p.id, p.selected_quantity || 1]))
   );
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", city: "" });
-  // Variant selection: productId → selected variantId
-  const [selectedVariants, setSelectedVariants] = useState<Record<number, number>>(() => {
-    const initial: Record<number, number> = {};
-    for (const p of products) {
-      const hasVars = p.has_variations || p.hasVariations;
-      const vars = p.variants || [];
-      if (hasVars && vars.length > 0) initial[p.id] = vars[0].id;
-    }
-    return initial;
-  });
+  // Variant selection: productId → selected variantId (undefined = none selected)
+  const [selectedVariants, setSelectedVariants] = useState<Record<number, number | undefined>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const phoneRef = useRef<HTMLInputElement>(null);
+
+  const validatePhone = (phone: string): string => {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 0) return "";
+    if (digits.length !== 11) return `ফোন নম্বর অবশ্যই ১১ সংখ্যার হতে হবে (আপনি দিয়েছেন ${digits.length}টি)`;
+    const validPrefixes = ["013","014","015","016","017","018","019"];
+    if (!validPrefixes.some(p => digits.startsWith(p))) return "অবৈধ নম্বর — ০১৩/০১৪/০১৫/০১৬/০১৭/০১৮/০১৯ দিয়ে শুরু হতে হবে";
+    return "";
+  };
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [shippingZones, setShippingZones] = useState<{ id: number; name: string; rate: number; estimated_days?: string }[]>([]);
   const [selectedZone, setSelectedZone] = useState<number | null>(null);
@@ -124,15 +135,27 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     return p.price;
   };
 
-  const subtotal = products.reduce((sum, p) => sum + getProductPrice(p) * (quantities[p.id] || 1), 0);
+  const subtotal = products.reduce((sum, p) => {
+    const hasVars = p.has_variations || p.hasVariations;
+    const vars = p.variants || [];
+    if (hasVars && vars.length > 0) {
+      const variantId = selectedVariants[p.id];
+      if (!variantId) return sum;
+      const v = vars.find(v => v.id === variantId);
+      if (!v) return sum;
+      const vKey = `${p.id}_${v.id}`;
+      return sum + v.price * (quantities[vKey as unknown as number] || 1);
+    }
+    return sum + getProductPrice(p) * (quantities[p.id] || 1);
+  }, 0);
   const activeZone = shippingZones.find((z) => z.id === selectedZone);
 
-  // Custom shipping: if any product has custom shipping, use max of those
+  // Custom shipping: if any product has custom shipping (incl. 0 = free), use max of those.
+  // The custom_shipping flag is the gate — value of 0 is valid and means free shipping.
   const customShippingValues = products
     .filter(p => p.custom_shipping || p.customShipping)
-    .map(p => Number(p.shipping_cost ?? p.shippingCost ?? 0))
-    .filter(v => v > 0);
-  const zoneShipping = page.custom_shipping ? (page.shipping_cost ?? 60) : (activeZone?.rate ?? page.shipping_cost ?? 60);
+    .map(p => Number(p.shipping_cost ?? p.shippingCost ?? 0));
+  const zoneShipping = page.custom_shipping ? (page.shipping_cost != null ? Number(page.shipping_cost) : 60) : (activeZone?.rate ?? (page.shipping_cost != null ? Number(page.shipping_cost) : 60));
   const shipping = customShippingValues.length > 0 ? Math.max(...customShippingValues) : zoneShipping;
   const total = subtotal + shipping;
 
@@ -158,16 +181,47 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     e.preventDefault();
     setSubmitting(true);
     setError("");
+    // Phone validation
+    const phoneErr = validatePhone(form.phone);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
+      setSubmitting(false);
+      phoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      phoneRef.current?.focus();
+      return;
+    }
+    setPhoneError("");
     try {
-      const items = products.map((p) => {
-        const variantId = selectedVariants[p.id];
-        const variant = variantId && p.variants ? p.variants.find(v => v.id === variantId) : null;
-        return {
+      // Validate variant products have a selection
+      for (const p of products) {
+        const hasVars = p.has_variations || p.hasVariations;
+        const vars = p.variants || [];
+        if (hasVars && vars.length > 0 && !selectedVariants[p.id]) {
+          setError(`"${p.name}" এর জন্য একটি অপশন সিলেক্ট করুন`);
+          setSubmitting(false);
+          return;
+        }
+      }
+      const items = products.flatMap((p) => {
+        const hasVars = p.has_variations || p.hasVariations;
+        const vars = p.variants || [];
+        if (hasVars && vars.length > 0) {
+          const variantId = selectedVariants[p.id];
+          if (!variantId) return [];
+          const variant = vars.find(v => v.id === variantId);
+          if (!variant) return [];
+          const vKey = `${p.id}_${variant.id}`;
+          return [{
+            product_id: p.id, product_name: `${p.name} — ${variant.label}`,
+            quantity: quantities[vKey as unknown as number] || 1, price: variant.price,
+            variant_id: variant.id,
+            variant_label: variant.label,
+          }];
+        }
+        return [{
           product_id: p.id, product_name: p.name,
-          quantity: quantities[p.id] || 1, price: variant ? variant.price : p.price,
-          variant_id: variant?.id || undefined,
-          variant_label: variant?.label || undefined,
-        };
+          quantity: quantities[p.id] || 1, price: p.price,
+        }];
       });
       const res = await api.createOrder({
         customer_name: form.name, customer_phone: form.phone,
@@ -285,39 +339,39 @@ export default function LandingPageClient({ page }: { page: PageData }) {
           <div className="max-w-7xl mx-auto px-6 md:px-8">
             <div className="text-center mb-8">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-2">{page.products_title || "আমাদের প্রোডাক্ট"}</h2>
-              <p className="text-lg text-gray-500 italic">{page.products_subtitle || page.products_sub || "১০০% খাঁটি ও প্রিমিয়াম মানের"}</p>
+              <p className="text-lg text-gray-500 italic">{page.products_subtitle || page.products_sub || "ত্বক-বান্ধব ও প্রিমিয়াম মানের"}</p>
             </div>
-            <div className={`mx-auto grid grid-cols-1 gap-8 ${products.length === 1 ? "max-w-sm" : products.length === 2 ? "max-w-2xl md:grid-cols-2" : "max-w-5xl md:grid-cols-2 lg:grid-cols-3"} justify-items-center`}>
+            <div className={`mx-auto grid gap-3 sm:gap-6 md:gap-8 ${products.length === 1 ? "grid-cols-1 max-w-sm" : products.length === 2 ? "grid-cols-2 max-w-2xl" : "grid-cols-2 max-w-5xl lg:grid-cols-3"} justify-items-stretch`}>
               {products.map((p) => (
-                <div key={p.id} className="bg-white rounded-2xl overflow-hidden group shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
+                <div key={p.id} className="bg-white rounded-2xl overflow-hidden group shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 w-full">
                   <a href="#checkout" className="block">
-                    <div className="relative overflow-hidden aspect-[4/3] bg-gray-50">
+                    <div className="relative overflow-hidden aspect-square sm:aspect-[4/3] bg-gray-50">
                       <SafeNextImage src={p.image} alt={p.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
                       {p.original_price && p.original_price > p.price && (
-                        <span className="absolute top-3 left-3 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md" style={{ backgroundColor: "#e53e3e" }}>
+                        <span className="absolute top-2 left-2 sm:top-3 sm:left-3 text-white text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-full shadow-md" style={{ backgroundColor: "#e53e3e" }}>
                           -{Math.round(((p.original_price - p.price) / p.original_price) * 100)}%
                         </span>
                       )}
                       <div className="absolute inset-0 group-hover:bg-black/5 transition-colors duration-300" />
                     </div>
                   </a>
-                  <div className="p-4">
+                  <div className="p-3 sm:p-4">
                     <a href="#checkout">
-                      <h3 className="font-extrabold text-gray-800 text-xl md:text-2xl leading-tight line-clamp-2 group-hover:text-[var(--lp)] transition-colors">
+                      <h3 className="font-extrabold text-gray-800 text-sm sm:text-xl md:text-2xl leading-tight line-clamp-2 group-hover:text-[var(--lp)] transition-colors">
                         {p.name}
                       </h3>
                     </a>
                     {p.description && (
-                      <p className="text-xs text-gray-400 mt-1 line-clamp-1">{p.description.split("\n")[0]}</p>
+                      <p className="text-[11px] sm:text-xs text-gray-400 mt-1 line-clamp-1">{p.description.split("\n")[0]}</p>
                     )}
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-xl" style={{ color }}>৳{toBn(p.price)}</span>
+                    <div className="mt-2 sm:mt-3 flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-base sm:text-xl" style={{ color }}>৳{toBn(p.price)}</span>
                       {p.original_price && p.original_price > p.price && (
-                        <span className="text-gray-400 line-through text-sm">৳{toBn(p.original_price)}</span>
+                        <span className="text-gray-400 line-through text-xs sm:text-sm">৳{toBn(p.original_price)}</span>
                       )}
                     </div>
                     <a href="#checkout"
-                      className="mt-3 w-full py-2.5 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center shadow-sm hover:opacity-90"
+                      className="mt-3 w-full py-2 sm:py-2.5 text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center shadow-sm hover:opacity-90"
                       style={{ backgroundColor: color }}>
                       অর্ডার করুন
                     </a>
@@ -523,9 +577,24 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                   </div>
                   <div className="flex-1">
                     <label className="block font-bold text-sm mb-2 px-1">মোবাইল নম্বর *</label>
-                    <input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className="w-full bg-gray-50 border-none rounded-xl p-4 focus:ring-2 focus:outline-none text-sm" style={{ "--tw-ring-color": color } as React.CSSProperties}
-                      placeholder="০১৭XXXXXXXX" />
+                    <input required value={form.phone}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d]/g, "");
+                        setForm({ ...form, phone: val });
+                        if (phoneError) setPhoneError(validatePhone(val));
+                      }}
+                      onBlur={(e) => setPhoneError(validatePhone(e.target.value.replace(/[^\d]/g, "")))}
+                      ref={phoneRef}
+                      maxLength={11}
+                      inputMode="numeric"
+                      className={`w-full border-2 rounded-xl p-4 focus:ring-2 focus:outline-none text-sm transition-colors ${phoneError ? "bg-red-50 border-red-400 focus:ring-red-300" : "bg-gray-50 border-transparent"}`}
+                      style={!phoneError ? { "--tw-ring-color": color } as React.CSSProperties : {}}
+                      placeholder="01700000000" />
+                    {phoneError && (
+                      <p className="mt-1.5 text-xs text-red-500 px-1 flex items-center gap-1">
+                        <span>⚠</span> {phoneError}
+                      </p>
+                    )}
                   </div>
                 </div>
                 {page.show_email && (
@@ -553,56 +622,117 @@ export default function LandingPageClient({ page }: { page: PageData }) {
 
                 {/* Product quantity selector */}
                 <div>
-                  <label className="block font-bold text-sm mb-4 px-1">পরিমাণ সিলেক্ট করুন</label>
+                  <label className="block font-bold text-sm mb-4 px-1">পণ্য / প্রোডাক্ট সিলেক্ট করুন</label>
                   <div className="space-y-3">
                     {products.map((p) => {
                       const hasVars = p.has_variations || p.hasVariations;
                       const vars = p.variants || [];
-                      const selectedVar = hasVars && vars.length > 0 ? vars.find(v => v.id === selectedVariants[p.id]) || vars[0] : null;
+                      const selectedVar = hasVars && vars.length > 0 ? (vars.find(v => v.id === selectedVariants[p.id]) ?? null) : null;
                       const effectivePrice = selectedVar ? selectedVar.price : p.price;
                       const effectiveOrigPrice = selectedVar ? selectedVar.original_price : p.original_price;
                       const effectiveImage = (selectedVar?.image) || p.image;
 
                       return (
-                      <div key={p.id} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
-                        {/* Variant selector */}
-                        {hasVars && vars.length > 0 && (
-                          <div className="mb-3 pb-3 border-b border-gray-100">
-                            <div className="text-xs font-semibold text-gray-500 mb-2">{p.variation_type || p.variationType || "ভ্যারিয়েশন"} সিলেক্ট করুন</div>
-                            <div className="flex flex-wrap gap-2">
-                              {vars.map(v => (
-                                <button key={v.id} type="button"
+                      <div key={p.id}>
+                        {/* Variant product: render each variant as a selectable radio row */}
+                        {hasVars && vars.length > 0 ? (
+                          <div className="space-y-2">
+                            {vars.map(v => {
+                              const isSelected = selectedVariants[p.id] === v.id;
+                              const vImg = v.image || p.image;
+                              const vKey = `${p.id}_${v.id}`;
+                              const vQty = quantities[vKey as unknown as number] || 1;
+                              const vMaxStock = (v as any).unlimited_stock ? 999 : (v.stock > 0 ? v.stock : 999);
+                              const vAtMax = vQty >= vMaxStock && vMaxStock < 999;
+                              return (
+                                <div key={v.id}
                                   onClick={() => setSelectedVariants(prev => ({ ...prev, [p.id]: v.id }))}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${
-                                    selectedVariants[p.id] === v.id
-                                      ? "text-white border-transparent"
-                                      : "border-gray-200 text-gray-600 hover:border-gray-300"
-                                  }`}
-                                  style={selectedVariants[p.id] === v.id ? { background: color, borderColor: color } : {}}>
-                                  {v.label} — ৳{toBn(v.price)}
-                                </button>
-                              ))}
-                            </div>
+                                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                    isSelected
+                                      ? "border-[var(--lp)] bg-[var(--lp-light)]"
+                                      : "border-gray-100 hover:border-gray-200"
+                                  }`}>
+                                  {/* Row: radio + image + name/price + [qty desktop] + price */}
+                                  <div className="flex items-center gap-3">
+                                    <input type="radio"
+                                      name={`variant_${p.id}`}
+                                      checked={isSelected}
+                                      onChange={() => setSelectedVariants(prev => ({ ...prev, [p.id]: v.id }))}
+                                      onClick={e => e.stopPropagation()}
+                                      className="w-4 h-4 shrink-0"
+                                      style={{ accentColor: color }} />
+                                    {vImg && (
+                                      <div className="w-10 h-10 rounded-lg overflow-hidden relative shrink-0">
+                                        <SafeNextImage src={vImg} alt={v.label} fill sizes="40px" className="object-cover" />
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-semibold text-sm break-words">{p.name} — {v.label}</div>
+                                      <div className="text-xs text-gray-400">৳{toBn(v.price)} / পিস</div>
+                                    </div>
+                                    {/* Desktop qty controls — inline */}
+                                    {isSelected && (
+                                      <div className="hidden md:flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                                        <button type="button"
+                                          onClick={() => setQuantities(prev => ({ ...prev, [vKey as unknown as number]: Math.max(1, vQty - 1) }))}
+                                          disabled={vQty <= 1}
+                                          className="w-7 h-7 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                          <FiMinus className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="min-w-[2rem] text-center font-bold text-base">{toBn(vQty)}</span>
+                                        <button type="button"
+                                          onClick={() => setQuantities(prev => ({ ...prev, [vKey as unknown as number]: Math.min(vQty + 1, vMaxStock) }))}
+                                          disabled={vAtMax}
+                                          className="w-7 h-7 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                          <FiPlus className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                    <div className="font-bold text-sm shrink-0" style={{ color }}>৳{toBn(v.price * vQty)}</div>
+                                  </div>
+                                  {/* Mobile qty controls — stacked below */}
+                                  {isSelected && (
+                                    <div className="md:hidden flex items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-100"
+                                      onClick={e => e.stopPropagation()}>
+                                      <button type="button"
+                                        onClick={() => setQuantities(prev => ({ ...prev, [vKey as unknown as number]: Math.max(1, vQty - 1) }))}
+                                        disabled={vQty <= 1}
+                                        className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                        <FiMinus className="w-3.5 h-3.5" />
+                                      </button>
+                                      <span className="min-w-[2.5rem] text-center font-bold text-lg">{toBn(vQty)}</span>
+                                      <button type="button"
+                                        onClick={() => setQuantities(prev => ({ ...prev, [vKey as unknown as number]: Math.min(vQty + 1, vMaxStock) }))}
+                                        disabled={vAtMax}
+                                        className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                        <FiPlus className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        )}
+                        ) : (
+                        <div className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
                         {/* Desktop: grid layout for aligned columns */}
                         {(() => { const mxS = getMaxStock(p); const curQ = quantities[p.id] || 1; const atMax = curQ >= mxS && mxS < 999; return (
                         <div className="hidden md:grid md:grid-cols-[48px_1fr_130px_80px] items-center gap-3">
                           <div className="w-12 h-12 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={effectiveImage} alt={p.name} fill sizes="48px" className="object-cover" /></div>
                           <div className="min-w-0">
-                            <div className="font-bold text-sm truncate">{p.name}{selectedVar ? ` (${selectedVar.label})` : ""}</div>
+                            <div className="font-bold text-sm truncate">{p.name}</div>
                             <div className="text-xs text-gray-400">৳{toBn(effectivePrice)} / পিস{mxS < 999 && <span className="ml-1 text-gray-300">· {toBn(mxS)}টি আছে</span>}</div>
                           </div>
                           <div className="flex items-center justify-center gap-2">
                             <button type="button" onClick={() => updateQty(p.id, curQ - 1)}
                               disabled={curQ <= 1}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
                             <span className="w-10 text-center font-bold">{toBn(curQ)}</span>
                             <button type="button" onClick={() => updateQty(p.id, curQ + 1)}
                               disabled={atMax}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -617,7 +747,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg overflow-hidden relative shrink-0"><SafeNextImage src={effectiveImage} alt={p.name} fill sizes="40px" className="object-cover" /></div>
                             <div className="flex-1 min-w-0">
-                              <div className="font-bold text-sm truncate">{p.name}{selectedVar ? ` (${selectedVar.label})` : ""}</div>
+                              <div className="font-bold text-sm truncate">{p.name}</div>
                               <div className="text-xs text-gray-400">৳{toBn(effectivePrice)} / পিস{mxS < 999 && <span className="ml-1 text-gray-300">· {toBn(mxS)}টি</span>}</div>
                             </div>
                             <div className="font-bold text-base shrink-0" style={{ color }}>
@@ -627,18 +757,20 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                           <div className="flex items-center justify-center gap-3 mt-3 pt-3 border-t border-gray-100">
                             <button type="button" onClick={() => updateQty(p.id, curQ - 1)}
                               disabled={curQ <= 1}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiMinus className="w-3.5 h-3.5" />
                             </button>
                             <span className="w-10 text-center font-bold text-lg">{toBn(curQ)}</span>
                             <button type="button" onClick={() => updateQty(p.id, curQ + 1)}
                               disabled={atMax}
-                              className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed">
+                              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                               <FiPlus className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
                         ); })()}
+                        </div>
+                        )}
                       </div>
                       );
                     })}
@@ -678,7 +810,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                   <div className="flex justify-between text-gray-500"><span>সাবটোটাল</span><span>৳{toBn(subtotal)}</span></div>
                   <div className="flex justify-between text-gray-500">
                     <span>শিপিং {activeZone ? `(${activeZone.name})` : ""}</span>
-                    <span>৳{toBn(shipping)}</span>
+                    <span className={shipping === 0 ? "text-green-600 font-semibold" : ""}>{shipping === 0 ? "ফ্রি" : `৳${toBn(shipping)}`}</span>
                   </div>
                   <div className="flex justify-between font-bold text-xl pt-2 border-t border-gray-200" style={{ color }}>
                     <span>মোট</span><span>৳{toBn(total)}</span>
@@ -715,20 +847,31 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         </div>
       </footer>
 
-      {/* Floating WhatsApp */}
-      {page.whatsapp && (
-        <a
-          href={`https://wa.me/${page.whatsapp.replace(/[^0-9]/g, "").replace(/^0/, "880")}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] rounded-full flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110 transition-all"
-          aria-label="WhatsApp"
-        >
-          <svg viewBox="0 0 32 32" className="w-7 h-7 fill-white">
-            <path d="M16.004 2.003c-7.72 0-13.995 6.275-13.995 13.995 0 2.467.655 4.872 1.898 6.988L2 30l7.213-1.89A13.94 13.94 0 0016.004 30c7.72 0 13.995-6.275 13.995-13.995S23.725 2.003 16.004 2.003zm0 25.59a11.56 11.56 0 01-5.9-1.618l-.424-.252-4.384 1.149 1.17-4.276-.277-.44a11.55 11.55 0 01-1.776-6.158c0-6.395 5.204-11.599 11.599-11.599 6.395 0 11.599 5.204 11.599 11.599-.008 6.395-5.212 11.599-11.607 11.599v-.004zm6.363-8.684c-.35-.174-2.065-1.018-2.385-1.135-.32-.117-.553-.174-.785.174-.233.349-.902 1.135-1.106 1.369-.203.233-.407.262-.757.087-.349-.174-1.474-.543-2.808-1.732-1.038-.924-1.739-2.065-1.943-2.415-.204-.349-.022-.538.153-.712.157-.157.349-.407.524-.611.175-.204.233-.349.349-.582.117-.233.058-.437-.029-.611-.087-.174-.785-1.893-1.076-2.591-.283-.68-.571-.588-.785-.599-.204-.01-.437-.012-.67-.012-.233 0-.611.087-.932.437-.32.349-1.223 1.194-1.223 2.913s1.252 3.378 1.426 3.611c.175.233 2.463 3.76 5.967 5.273.834.36 1.484.575 1.992.736.837.266 1.599.229 2.201.139.671-.1 2.065-.844 2.356-1.66.291-.815.291-1.514.204-1.66-.087-.146-.32-.233-.67-.407z"/>
-          </svg>
-        </a>
-      )}
+      {/* Floating contact bubble — WhatsApp or Phone, controlled by customizer */}
+      {page.whatsapp && (() => {
+        const digits = page.whatsapp.replace(/[^0-9]/g, "");
+        const isPhone = contactMode === "phone";
+        const href = isPhone
+          ? `tel:+${digits.replace(/^0/, "880")}`
+          : `https://wa.me/${digits.replace(/^0/, "880")}`;
+        return (
+          <a
+            href={href}
+            target={isPhone ? undefined : "_blank"}
+            rel={isPhone ? undefined : "noopener noreferrer"}
+            className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] rounded-full flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110 transition-all"
+            aria-label={isPhone ? "Call us" : "WhatsApp"}
+          >
+            {isPhone ? (
+              <FiPhone className="w-7 h-7 text-white" />
+            ) : (
+              <svg viewBox="0 0 32 32" className="w-7 h-7 fill-white">
+                <path d="M16.004 2.003c-7.72 0-13.995 6.275-13.995 13.995 0 2.467.655 4.872 1.898 6.988L2 30l7.213-1.89A13.94 13.94 0 0016.004 30c7.72 0 13.995-6.275 13.995-13.995S23.725 2.003 16.004 2.003zm0 25.59a11.56 11.56 0 01-5.9-1.618l-.424-.252-4.384 1.149 1.17-4.276-.277-.44a11.55 11.55 0 01-1.776-6.158c0-6.395 5.204-11.599 11.599-11.599 6.395 0 11.599 5.204 11.599 11.599-.008 6.395-5.212 11.599-11.607 11.599v-.004zm6.363-8.684c-.35-.174-2.065-1.018-2.385-1.135-.32-.117-.553-.174-.785.174-.233.349-.902 1.135-1.106 1.369-.203.233-.407.262-.757.087-.349-.174-1.474-.543-2.808-1.732-1.038-.924-1.739-2.065-1.943-2.415-.204-.349-.022-.538.153-.712.157-.157.349-.407.524-.611.175-.204.233-.349.349-.582.117-.233.058-.437-.029-.611-.087-.174-.785-1.893-1.076-2.591-.283-.68-.571-.588-.785-.599-.204-.01-.437-.012-.67-.012-.233 0-.611.087-.932.437-.32.349-1.223 1.194-1.223 2.913s1.252 3.378 1.426 3.611c.175.233 2.463 3.76 5.967 5.273.834.36 1.484.575 1.992.736.837.266 1.599.229 2.201.139.671-.1 2.065-.844 2.356-1.66.291-.815.291-1.514.204-1.66-.087-.146-.32-.233-.67-.407z"/>
+              </svg>
+            )}
+          </a>
+        );
+      })()}
     </div>
   );
 }

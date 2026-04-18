@@ -4,30 +4,43 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import { productSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 
 export async function GET(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const { searchParams } = request.nextUrl;
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const perPage = 15;
-  const search = searchParams.get("search");
+  const page    = Math.max(1, Number(searchParams.get("page")) || 1);
+  const perPage = Math.min(50, Math.max(1, Number(searchParams.get("per_page")) || 20));
+  const search     = searchParams.get("search");
   const categoryId = searchParams.get("category_id");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
-  if (search) where.name = { contains: search };
+  if (search)     where.name = { contains: search, mode: "insensitive" };
   if (categoryId) where.categoryId = Number(categoryId);
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      select: {
+        id: true, name: true, slug: true, price: true, originalPrice: true,
+        image: true, badge: true, weight: true, stock: true, unlimitedStock: true,
+        soldCount: true, isActive: true, isFeatured: true,
+        hasVariations: true, variationType: true,
+        customShipping: true, shippingCost: true, description: true,
+        createdAt: true,
+        category: { select: { id: true, name: true } },
+        brand:    { select: { id: true, name: true } },
+        variants: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, label: true, price: true, originalPrice: true, sku: true, stock: true, unlimitedStock: true, image: true, isActive: true, sortOrder: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
       take: perPage,
@@ -40,7 +53,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
     const body = await request.json();

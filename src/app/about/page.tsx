@@ -4,20 +4,20 @@ import { MotionStaggerContainer, MotionStaggerItem } from "@/components/MotionSt
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "আমাদের সম্পর্কে — মা ভেষজ বাণিজ্যালয়",
-  description: "মা ভেষজ বাণিজ্যালয় — বাংলাদেশের একটি বিশ্বস্ত প্রাকৃতিক ভেষজ পণ্যের প্রতিষ্ঠান। প্রকৃতির শক্তিতে সুস্থ থাকুন।",
+  title: "আমাদের সম্পর্কে",
+  description: "শিশুদের ফ্যাশনে বাংলাদেশের একটি বিশ্বস্ত ব্র্যান্ড — নবজাতক থেকে ১২ বছর পর্যন্ত নরম, আরামদায়ক ও স্টাইলিশ পোশাক।",
 };
 
 const whyChooseUs = [
-  { icon: FiShield, title: "১০০% প্রাকৃতিক", description: "আমাদের সকল পণ্য সম্পূর্ণ প্রাকৃতিক উপায়ে তৈরি। কোনো কৃত্রিম রং, সুগন্ধি বা সংরক্ষক ব্যবহার করা হয় না।" },
-  { icon: FiTruck, title: "দ্রুত ডেলিভারি", description: "সারা বাংলাদেশে আমরা দ্রুততম সময়ে পণ্য পৌঁছে দিই। সাধারণত ৩–৫ কার্যদিবসের মধ্যে ডেলিভারি।" },
-  { icon: FiStar, title: "সাশ্রয়ী মূল্য", description: "উচ্চমানের ভেষজ পণ্য সবচেয়ে সাশ্রয়ী মূল্যে পাওয়ার নিশ্চয়তা দিচ্ছি আমরা।" },
-  { icon: FiSmile, title: "গ্রাহক সন্তুষ্টি", description: "আমাদের গ্রাহকদের সন্তুষ্টিই আমাদের সবচেয়ে বড় পুরস্কার। যেকোনো সমস্যায় আমাদের সাপোর্ট টিম সর্বদা আপনার পাশে।" },
+  { icon: FiShield, title: "ত্বক-বান্ধব কাপড়", description: "আমাদের সকল পোশাক যত্নসহকারে নির্বাচিত নরম ও ত্বক-বান্ধব কাপড়ে তৈরি। শিশুদের সংবেদনশীল ত্বকের জন্য সম্পূর্ণ নিরাপদ।" },
+  { icon: FiTruck, title: "দ্রুত ডেলিভারি", description: "সারা বাংলাদেশে দ্রুততম সময়ে ডেলিভারি। সাধারণত ৩–৫ কার্যদিবসের মধ্যে আপনার দোরগোড়ায়।" },
+  { icon: FiStar, title: "সাশ্রয়ী মূল্য", description: "প্রিমিয়াম মানের শিশু পোশাক সবচেয়ে সাশ্রয়ী মূল্যে — কারণ প্রতিটি পরিবারই সেরা পাওয়ার যোগ্য।" },
+  { icon: FiSmile, title: "ফ্রি রিটার্ন", description: "সাইজ মেলেনি? কোনো সমস্যা নেই। সহজ রিটার্ন ও এক্সচেঞ্জ পলিসি — আপনার সম্পূর্ণ সন্তুষ্টি নিশ্চিত।" },
 ];
 
 const teamMembers = [
   { name: "রহিম উদ্দিন", role: "প্রতিষ্ঠাতা ও প্রধান নির্বাহী", initials: "র" },
-  { name: "সুমাইয়া বেগম", role: "ভেষজ বিশেষজ্ঞ", initials: "স" },
+  { name: "সুমাইয়া বেগম", role: "ফ্যাশন ডিজাইনার", initials: "স" },
   { name: "করিম হোসেন", role: "বিক্রয় ও বিপণন প্রধান", initials: "ক" },
   { name: "নাজমা আক্তার", role: "গ্রাহক সেবা প্রধান", initials: "ন" },
 ];
@@ -35,12 +35,12 @@ export default function AboutPage() {
           <MotionFadeIn>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/15 rounded-full text-white/90 text-sm mb-6 backdrop-blur-sm">
               <FiHeart className="w-4 h-4 text-red-300" />
-              প্রকৃতির সেরা উপহার
+              শিশুদের জন্য সেরা
             </span>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5">আমাদের সম্পর্কে</h1>
             <p className="text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-              মা ভেষজ বাণিজ্যালয় — বাংলাদেশের একটি বিশ্বস্ত প্রাকৃতিক ভেষজ পণ্যের প্রতিষ্ঠান।
-              আমরা বিশ্বাস করি প্রকৃতির মধ্যেই লুকিয়ে আছে সুস্বাস্থ্যের চাবিকাঠি।
+              আমরা বাংলাদেশের একটি বিশ্বস্ত শিশু ফ্যাশন ব্র্যান্ড।
+              নবজাতক থেকে ১২ বছর — প্রতিটি বয়সের শিশুর জন্য নরম, আরামদায়ক ও স্টাইলিশ পোশাক।
             </p>
           </MotionFadeIn>
         </div>
@@ -55,13 +55,13 @@ export default function AboutPage() {
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 section-heading">আমাদের লক্ষ্য</h2>
             <p className="text-text-body text-lg leading-relaxed mt-6">
-              প্রকৃতির শক্তিতে সুস্থ থাকুন। আমাদের লক্ষ্য হলো বাংলাদেশের প্রতিটি মানুষের কাছে
-              বিশুদ্ধ ও প্রাকৃতিক ভেষজ পণ্য সহজলভ্য করা।
+              যেখানে স্টাইল মিলিত হয় আনন্দে — শিশুরা ঝলমলিয়ে ওঠে সূর্যের মতো। আমাদের লক্ষ্য
+              বাংলাদেশের প্রতিটি পরিবারের কাছে উন্নত মানের, আরামদায়ক ও সাশ্রয়ী মূল্যের শিশু পোশাক পৌঁছে দেওয়া।
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
               {[
-                { value: "৫০০+", label: "ভেষজ পণ্য" },
-                { value: "১০,০০০+", label: "সন্তুষ্ট গ্রাহক" },
+                { value: "২০০+", label: "ফ্যাশন আইটেম" },
+                { value: "১০,০০০+", label: "সন্তুষ্ট পরিবার" },
                 { value: "৫+", label: "বছরের অভিজ্ঞতা" },
               ].map((stat) => (
                 <div key={stat.label} className="bg-primary/5 border border-primary/10 rounded-2xl p-6">
@@ -85,20 +85,20 @@ export default function AboutPage() {
               </div>
               <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">কীভাবে শুরু হলো আমাদের যাত্রা</h2>
               <div className="space-y-4 text-text-body leading-relaxed">
-                <p>মা ভেষজ বাণিজ্যালয়ের যাত্রা শুরু হয়েছিল একটি সাধারণ স্বপ্ন থেকে — মানুষকে প্রকৃতির কাছাকাছি নিয়ে যাওয়া।</p>
-                <p>প্রতিষ্ঠার পর থেকে আমরা দেশের বিভিন্ন প্রান্ত থেকে বিশুদ্ধ ভেষজ উপাদান সংগ্রহ করে আসছি।</p>
-                <p>আজ আমরা গর্বিত যে হাজার হাজার গ্রাহক আমাদের বিশ্বাস করেন এবং আমাদের পণ্য ব্যবহার করে উপকৃত হচ্ছেন।</p>
+                <p>আমাদের যাত্রা শুরু হয়েছিল একটি সাধারণ স্বপ্ন থেকে — প্রতিটি শিশুকে সেরা পোশাকে সাজানো।</p>
+                <p>প্রতিষ্ঠার পর থেকে আমরা যত্নসহকারে নির্বাচিত নরম, ত্বক-বান্ধব কাপড় ব্যবহার করে আসছি।</p>
+                <p>আজ আমরা গর্বিত যে হাজার হাজার পরিবার আমাদের বিশ্বাস করেন এবং তাদের সোনামণিদের পরাচ্ছেন আমাদের পোশাক।</p>
               </div>
             </MotionFadeIn>
             <MotionFadeIn direction="left" delay={0.15}>
               <div className="bg-linear-to-br from-primary/10 to-primary/5 border border-primary/15 rounded-3xl p-8 md:p-10">
-                <div className="text-center mb-8"><span className="text-7xl">🌿</span></div>
+                <div className="text-center mb-8"><span className="text-7xl">👶</span></div>
                 <div className="space-y-4">
                   {[
-                    { year: "২০১৮", event: "মা ভেষজ বাণিজ্যালয় প্রতিষ্ঠা" },
+                    { year: "২০১৮", event: "আমাদের ব্র্যান্ড প্রতিষ্ঠা" },
                     { year: "২০২০", event: "অনলাইন বিক্রয় শুরু" },
-                    { year: "২০২২", event: "১০,০০০ গ্রাহকের মাইলফলক" },
-                    { year: "২০২৪", event: "৫০০+ পণ্যের বিশাল সংগ্রহ" },
+                    { year: "২০২২", event: "১০,০০০ পরিবারের মাইলফলক" },
+                    { year: "২০২৪", event: "২০০+ ফ্যাশন আইটেমের কালেকশন" },
                   ].map((item, i) => (
                     <div key={i} className="flex items-start gap-4">
                       <span className="px-3 py-1 bg-primary text-white text-xs font-bold rounded-lg shrink-0 mt-0.5">{item.year}</span>
@@ -120,7 +120,7 @@ export default function AboutPage() {
               <FiAward className="w-7 h-7 text-primary" />
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground section-heading">কেন আমাদের বেছে নেবেন?</h2>
-            <p className="text-text-muted mt-6 max-w-xl mx-auto">আমরা শুধু পণ্য বিক্রি করি না — আমরা আপনার সুস্বাস্থ্যের যত্ন নিই।</p>
+            <p className="text-text-muted mt-6 max-w-xl mx-auto">আমরা শুধু পোশাক বিক্রি করি না — আপনার সন্তানের আরাম ও স্টাইলের যত্ন নিই।</p>
           </MotionFadeIn>
           <MotionStaggerContainer staggerDelay={0.12} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {whyChooseUs.map((item) => (

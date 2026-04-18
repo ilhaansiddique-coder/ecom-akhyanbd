@@ -6,7 +6,8 @@ import { FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
 import { FiMapPin, FiPhone, FiMail } from "react-icons/fi";
 import MotionFadeIn from "./MotionFadeIn";
 import T from "./T";
-import { useSiteSettings } from "@/lib/SiteSettingsContext";
+import { useSiteSettings, useOption } from "@/lib/SiteSettingsContext";
+import { useLang } from "@/lib/LanguageContext";
 
 const quickLinkKeys = [
   { key: "nav.home", href: "/" },
@@ -24,8 +25,18 @@ const legalLinkKeys = [
 
 export default function Footer() {
   const settings = useSiteSettings();
+  const { t } = useLang();
+
+  // Customizer-driven layout
+  const layout         = useOption<string>("footer.layout");      // four_col | three_col | minimal
+  const showNewsletter = useOption<boolean>("footer.show_newsletter") && layout === "four_col";
+  const showSocials    = useOption<boolean>("footer.show_socials");
+  const isMinimal      = layout === "minimal";
 
   // Fall back through DB keys: general form fields → contact fields → hardcoded defaults
+  const siteName = settings.site_name || t("footer.companyName");
+  const siteTagline = settings.site_tagline || t("footer.tagline");
+  const siteDescription = settings.site_description || t("footer.description");
   const phone = settings.phone || "";
   const email = settings.email || "";
   const address = settings.address || "";
@@ -39,20 +50,47 @@ export default function Footer() {
     ...(youtube ? [{ icon: FaYoutube, href: youtube, label: "YouTube", color: "hover:bg-youtube" }] : []),
   ];
 
+  // Minimal variant: single row with brand + socials, no columns.
+  if (isMinimal) {
+    return (
+      <footer className="bg-primary-dark text-white">
+        <div className="container mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={32} height={26} className={`h-7 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized />
+            <span className="font-bold text-white text-sm">{siteName}</span>
+          </div>
+          {showSocials && socialLinks.length > 0 && (
+            <div className="flex items-center gap-3">
+              {socialLinks.map((social) => (
+                <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-9 h-9 rounded-lg bg-white/10 ${social.color} flex items-center justify-center text-white transition-colors`} aria-label={social.label}>
+                  <social.icon className="w-4 h-4" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </footer>
+    );
+  }
+
+  const gridCols = layout === "three_col"
+    ? "grid-cols-1 md:grid-cols-3 lg:grid-cols-3"
+    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4";
+
   return (
     <footer className="bg-primary-dark text-white">
       <div className="container mx-auto px-4 py-12 md:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 md:gap-8">
+        <div className={`grid ${gridCols} gap-10 md:gap-8`}>
           <MotionFadeIn>
             <div className="flex items-center gap-2.5 mb-4">
-              <Image src="/logo.svg" alt="Ma Bhesoj" width={40} height={32} className="h-8 w-auto brightness-200" unoptimized />
+              <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={40} height={32} className={`h-8 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized />
               <div>
-                <h3 className="text-base font-bold text-white"><T k="footer.companyName" /></h3>
-                <p className="text-[10px] text-white/60"><T k="footer.tagline" /></p>
+                <h3 className="text-base font-bold text-white">{siteName}</h3>
+                <p className="text-[10px] text-white/60">{siteTagline}</p>
               </div>
             </div>
             <p className="text-white/70 text-sm leading-relaxed mb-4">
-              <T k="footer.description" />
+              {siteDescription}
             </p>
             <div className="space-y-2.5 text-sm text-white/70">
               {address && (
@@ -119,17 +157,34 @@ export default function Footer() {
             </ul>
           </MotionFadeIn>
 
-          <MotionFadeIn delay={0.3}>
-            <h4 className="text-base font-bold mb-5 relative inline-block">
-              <T k="footer.connect" />
-              <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
-            </h4>
-            <p className="text-white/70 text-sm mb-4"><T k="footer.connectDesc" /></p>
-            <div className="flex gap-2 mb-6">
-              <input type="email" placeholder="Email" className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 transition-colors" />
-              <button className="px-4 py-2.5 bg-white text-primary font-bold text-sm rounded-lg hover:bg-white/90 transition-colors shrink-0"><T k="footer.subscribe" /></button>
-            </div>
-            {socialLinks.length > 0 && (
+          {showNewsletter && (
+            <MotionFadeIn delay={0.3}>
+              <h4 className="text-base font-bold mb-5 relative inline-block">
+                <T k="footer.connect" />
+                <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
+              </h4>
+              <p className="text-white/70 text-sm mb-4"><T k="footer.connectDesc" /></p>
+              <div className="flex gap-2 mb-6">
+                <input type="email" placeholder="Email" className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 transition-colors" />
+                <button className="px-4 py-2.5 bg-white text-primary font-bold text-sm rounded-lg hover:bg-white/90 transition-colors shrink-0"><T k="footer.subscribe" /></button>
+              </div>
+              {showSocials && socialLinks.length > 0 && (
+                <div className="flex items-center gap-3">
+                  {socialLinks.map((social) => (
+                    <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-10 h-10 rounded-lg bg-white/10 ${social.color} flex items-center justify-center text-white transition-colors`} aria-label={social.label}>
+                      <social.icon className="w-4 h-4" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </MotionFadeIn>
+          )}
+          {!showNewsletter && showSocials && socialLinks.length > 0 && (
+            <MotionFadeIn delay={0.3}>
+              <h4 className="text-base font-bold mb-5 relative inline-block">
+                <T k="footer.connect" />
+                <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
+              </h4>
               <div className="flex items-center gap-3">
                 {socialLinks.map((social) => (
                   <a key={social.label} href={social.href} target="_blank" rel="noopener noreferrer" className={`w-10 h-10 rounded-lg bg-white/10 ${social.color} flex items-center justify-center text-white transition-colors`} aria-label={social.label}>
@@ -137,8 +192,8 @@ export default function Footer() {
                   </a>
                 ))}
               </div>
-            )}
-          </MotionFadeIn>
+            </MotionFadeIn>
+          )}
         </div>
       </div>
     </footer>
