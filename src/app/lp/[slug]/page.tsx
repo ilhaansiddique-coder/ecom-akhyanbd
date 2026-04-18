@@ -1,12 +1,12 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { prisma } from "@/lib/prisma";
+import { serialize } from "@/lib/serialize";
 import LandingPageClient from "./LandingPageClient";
 
-const API_URL = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/v1`;
-
-// ISR: regenerate every 5 minutes. Landing pages change rarely; the customizer
-// can revalidate on demand if it needs immediate updates.
+// ISR: regenerate every 5 minutes. Landing pages change rarely; admin mutations
+// can call revalidateTag(`landing-page:${slug}`) for instant updates.
 export const revalidate = 300;
 export const dynamicParams = true;
 
@@ -52,18 +52,49 @@ interface LandingPageData {
 }
 
 // React `cache()` dedupes per request: generateMetadata + the page itself
-// would otherwise fire two identical fetches (~150-300ms extra each on a cold
-// edge). `next: { revalidate }` lets the framework cache the response between
-// requests instead of `cache: "no-store"`, which was forcing a live DB hit on
-// every single page view.
+// share one DB read instead of two. We hit Prisma directly (no HTTP hop) so
+// the page works regardless of NEXTAUTH_URL / hosting domain config.
 const getLandingPage = cache(async (slug: string): Promise<LandingPageData | null> => {
   try {
-    const res = await fetch(`${API_URL}/landing-pages/${slug}`, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300, tags: [`landing-page:${slug}`] },
+    const page = await prisma.landingPage.findFirst({
+      where: { slug, isActive: true },
     });
-    if (!res.ok) return null;
-    return res.json();
+    if (!page) return null;
+
+    // Resolve products referenced by ID inside the `products` JSON column.
+    let resolvedProducts: Record<string, unknown>[] = [];
+    if (page.products) {
+      try {
+        const productEntries = JSON.parse(page.products) as { product_id: number; quantity?: number }[];
+        const productIds = productEntries.map((p) => p.product_id);
+        if (productIds.length > 0) {
+          const products = await prisma.product.findMany({
+            where: { id: { in: productIds } },
+            include: {
+              category: true,
+              variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
+            },
+          });
+          resolvedProducts = productEntries
+            .map((entry) => {
+              const product = products.find((p) => p.id === entry.product_id);
+              if (!product) return null;
+              return {
+                ...serialize(product),
+                selected_quantity: entry.quantity || 1,
+              };
+            })
+            .filter(Boolean) as Record<string, unknown>[];
+        }
+      } catch {
+        // Malformed products JSON — render the page without products rather than 404.
+      }
+    }
+
+    return {
+      ...(serialize(page) as Record<string, unknown>),
+      resolved_products: resolvedProducts,
+    } as LandingPageData;
   } catch {
     return null;
   }
