@@ -3,6 +3,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
+import { getUploadDir } from "@/lib/uploads";
 import sharp from "sharp";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tiff"]);
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-zA-Z0-9_\-\u0980-\u09FF]/g, "-")
       .replace(/-+/g, "-");
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
+    const uploadDir = getUploadDir();
     await mkdir(uploadDir, { recursive: true });
 
     let finalExt = ext;

@@ -32,16 +32,19 @@ const nextConfig: NextConfig = {
   },
   // Redirect old Laravel storage paths to new uploads location
   async rewrites() {
-    return [
-      {
-        source: "/storage/uploads/:path*",
-        destination: "/uploads/:path*",
-      },
-      {
-        source: "/storage/:path*",
-        destination: "/uploads/:path*",
-      },
-    ];
+    return {
+      // Legacy Laravel paths → /uploads (these then hit the fallback below).
+      beforeFiles: [
+        { source: "/storage/uploads/:path*", destination: "/uploads/:path*" },
+        { source: "/storage/:path*", destination: "/uploads/:path*" },
+      ],
+      // Runs only if no static file matched. Standalone builds don't always
+      // serve runtime-added files in /public, so we stream them from the
+      // upload dir via the API route. The URL stays `/uploads/<name>`.
+      fallback: [
+        { source: "/uploads/:path*", destination: "/api/uploads/:path*" },
+      ],
+    };
   },
   async headers() {
     return [

@@ -406,6 +406,10 @@ export const bn: Record<string, string> = {
   "empty.users": "কোনো ব্যবহারকারী পাওয়া যায়নি",
 
   /* Confirmations */
+  "confirm.title": "নিশ্চিত করুন",
+  "confirm.yesDelete": "হ্যাঁ, মুছুন",
+  "confirm.cancel": "বাতিল",
+  "confirm.deleting": "মুছছে...",
   "confirm.deleteProduct": "এই পণ্যটি মুছে ফেলতে চান? এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।",
   "confirm.deleteCategory": "এই ক্যাটাগরিটি মুছে ফেলতে চান?",
   "confirm.deleteBrand": "এই ব্র্যান্ডটি মুছে ফেলতে চান?",

@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { FiAlertTriangle } from "react-icons/fi";
+import { useLang } from "@/lib/LanguageContext";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -16,14 +17,20 @@ interface ConfirmDialogProps {
 
 export default function ConfirmDialog({
   open,
-  title = "নিশ্চিত করুন",
+  title,
   message,
   onConfirm,
   onCancel,
-  confirmLabel = "হ্যাঁ, মুছুন",
-  cancelLabel = "বাতিল",
+  confirmLabel,
+  cancelLabel,
   loading = false,
 }: ConfirmDialogProps) {
+  const { t } = useLang();
+  // Defaults pull from i18n so en/bn switch translates the modal too.
+  const resolvedTitle = title ?? t("confirm.title");
+  const resolvedConfirm = confirmLabel ?? t("confirm.yesDelete");
+  const resolvedCancel = cancelLabel ?? t("confirm.cancel");
+  const deletingLabel = t("confirm.deleting");
   return (
     <AnimatePresence>
       {open && (
@@ -45,7 +52,7 @@ export default function ConfirmDialog({
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
                 <FiAlertTriangle className="w-5 h-5 text-red-600" />
               </div>
-              <h3 className="text-base font-bold text-gray-800">{title}</h3>
+              <h3 className="text-base font-bold text-gray-800">{resolvedTitle}</h3>
             </div>
             <p className="text-sm text-gray-600 mb-6">{message}</p>
             <div className="flex gap-3 justify-end">
@@ -53,14 +60,14 @@ export default function ConfirmDialog({
                 onClick={onCancel}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
               >
-                {cancelLabel}
+                {resolvedCancel}
               </button>
               <button
                 onClick={onConfirm}
                 disabled={loading}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {loading ? "মুছছে..." : confirmLabel}
+                {loading ? deletingLabel : resolvedConfirm}
               </button>
             </div>
           </motion.div>

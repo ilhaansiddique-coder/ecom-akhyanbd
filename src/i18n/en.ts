@@ -406,6 +406,10 @@ export const en: Record<string, string> = {
   "empty.users": "No users found",
 
   /* Confirmations */
+  "confirm.title": "Confirm",
+  "confirm.yesDelete": "Yes, delete",
+  "confirm.cancel": "Cancel",
+  "confirm.deleting": "Deleting...",
   "confirm.deleteProduct": "Are you sure you want to delete this product? This action cannot be undone.",
   "confirm.deleteCategory": "Are you sure you want to delete this category?",
   "confirm.deleteBrand": "Are you sure you want to delete this brand?",

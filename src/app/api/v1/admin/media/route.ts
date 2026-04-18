@@ -3,6 +3,7 @@ import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
+import { getUploadDir } from "@/lib/uploads";
 
 /**
  * GET /api/v1/admin/media — List all uploaded files from public/uploads
@@ -12,7 +13,7 @@ export async function GET(_request: NextRequest) {
   try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const uploadsDir = getUploadDir();
     const files = await readdir(uploadsDir).catch(() => []);
 
     const media = await Promise.all(
@@ -65,7 +66,7 @@ export async function DELETE(request: NextRequest) {
 
     // Prevent path traversal
     const safeName = path.basename(filename);
-    const filePath = path.join(process.cwd(), "public", "uploads", safeName);
+    const filePath = path.join(getUploadDir(), safeName);
 
     await unlink(filePath);
     return jsonResponse({ message: "File deleted" });
