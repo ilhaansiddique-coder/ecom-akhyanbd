@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import sharp from "sharp";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tiff"]);
@@ -12,7 +12,7 @@ const QUALITY = 80;
 
 export async function POST(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
     const formData = await request.formData();

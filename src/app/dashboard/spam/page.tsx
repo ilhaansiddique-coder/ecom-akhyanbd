@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { isStaffOrAdmin } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import SpamClient from "./SpamClient";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SpamPage() {
   const user = await getSessionUser();
-  if (!user || user.role !== "admin") redirect("/cdlogin");
+  if (!user || !isStaffOrAdmin(user.role)) redirect("/cdlogin");
 
   try {
     const [flaggedData, flaggedTotal, blockedIpsData] = await Promise.all([

@@ -2,14 +2,14 @@ import { NextRequest } from "next/server";
 import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 
 /**
  * GET /api/v1/admin/media — List all uploaded files from public/uploads
  */
 export async function GET(_request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
     const uploadsDir = path.join(process.cwd(), "public", "uploads");
@@ -55,7 +55,7 @@ export async function GET(_request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
     const { filename } = await request.json();

@@ -64,7 +64,10 @@ interface NavGroup {
 // with the page-level `isStaffOrAdmin` checks in the dashboard route segments.
 const STAFF_ALLOWED_PREFIXES = [
   "/dashboard/products",        // products list + new + [id]/edit
+  "/dashboard/categories",      // taxonomy needed for product creation
+  "/dashboard/brands",          // taxonomy needed for product creation
   "/dashboard/orders",          // orders list + [id]/details
+  "/dashboard/spam",            // spam detection (orders-related)
   "/dashboard/landing-pages",   // landing pages list + create + edit
 ];
 
@@ -78,9 +81,8 @@ export function isStaffAllowedPath(pathname: string): boolean {
 function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
   const isStaffOnly = role === "staff";
 
-  // Staff sees a stripped-down sidebar — only Dashboard + Products + Orders.
-  // Categories/Brands stay admin-only since they affect the whole catalog
-  // taxonomy; staff only manages individual products.
+  // Staff sidebar — Products/Categories/Brands + Orders/Spam + Landing Pages.
+  // Settings, Users, Customizer, Marketing remain admin-only.
   if (isStaffOnly) {
     return [
       {
@@ -88,6 +90,8 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         icon: FiBox,
         items: [
           { label: t("dash.products"), href: "/dashboard/products", icon: FiBox },
+          { label: t("dash.categories"), href: "/dashboard/categories", icon: FiTag },
+          { label: t("dash.brands"), href: "/dashboard/brands", icon: FiAward },
         ],
       },
       {
@@ -95,6 +99,7 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         icon: FiShoppingBag,
         items: [
           { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
+          { label: t("dash.spamDetection") || "Spam Detection", href: "/dashboard/spam", icon: FiShield },
         ],
       },
       {

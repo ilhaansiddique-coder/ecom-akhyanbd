@@ -51,6 +51,18 @@ function parseJSON<T>(str?: string | null): T[] {
   try { return JSON.parse(str); } catch { return []; }
 }
 
+// True for any mp4/webm/mov/mkv/m4v URL — strips query/hash before testing
+// so URLs like "/uploads/x.mp4?v=123" still match.
+function isVideoFile(url?: string | null): boolean {
+  if (!url) return false;
+  const clean = url.split("?")[0].split("#")[0];
+  return /\.(mp4|webm|mov|mkv|m4v|ogv)$/i.test(clean);
+}
+function isYouTube(url?: string | null): boolean {
+  if (!url) return false;
+  return url.includes("youtube.com") || url.includes("youtu.be");
+}
+
 export default function LandingPageClient({ page }: { page: PageData }) {
   const router = useRouter();
   const siteContactMode = useOption<string>("widget.contact_mode"); // "whatsapp" | "phone"
@@ -263,10 +275,10 @@ export default function LandingPageClient({ page }: { page: PageData }) {
               <p className="text-lg md:text-2xl text-gray-500 mb-4 md:mb-6 leading-relaxed max-w-2xl">{page.hero_subheadline}</p>
             )}
             {page.hero_image && (
-              page.hero_image.match(/\.(mp4|webm|mov)$/i) ? (
-                // Native video file → use the rich VideoPlayer (controls, mute,
-                // speed). Autoplay is admin-toggleable; muted is forced when
-                // autoplaying so the browser allows it.
+              isVideoFile(page.hero_image) || isYouTube(page.hero_image) ? (
+                // Native video file OR YouTube → unified VideoPlayer with custom
+                // controls. Autoplay admin-toggleable; muted forced when on so
+                // browser allows it.
                 <div className="w-full mb-4 md:mb-6">
                   <VideoPlayer
                     src={page.hero_image}
@@ -277,16 +289,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                 </div>
               ) : (
                 <div className="relative w-full aspect-video md:aspect-[21/9] mb-4 md:mb-6 rounded-3xl overflow-hidden shadow-2xl group">
-                  {page.hero_image.includes("youtube.com") || page.hero_image.includes("youtu.be") ? (
-                    <iframe
-                      src={`${page.hero_image.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")}${page.hero_video_autoplay ? (page.hero_image.includes("?") ? "&" : "?") + "autoplay=1&mute=1" : ""}`}
-                      className="w-full h-full"
-                      allowFullScreen
-                      allow="autoplay; encrypted-media"
-                    />
-                  ) : (
-                    <SafeNextImage src={page.hero_image} alt={page.hero_headline || ""} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-cover group-hover:scale-105 transition-transform duration-1000" priority />
-                  )}
+                  <SafeNextImage src={page.hero_image} alt={page.hero_headline || ""} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-cover group-hover:scale-105 transition-transform duration-1000" priority />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
                 </div>
               )
@@ -427,12 +430,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                     const src = page.features_image || page.hero_image;
                     if (!src) return null;
                     const auto = !!page.hero_video_autoplay;
-                    if (src.includes("youtube.com") || src.includes("youtu.be")) {
-                      const base = src.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/");
-                      const url = auto ? `${base}${base.includes("?") ? "&" : "?"}autoplay=1&mute=1` : base;
-                      return <iframe src={url} className="w-full aspect-video rounded-[1.8rem]" allowFullScreen allow="autoplay; encrypted-media" />;
-                    }
-                    if (src.match(/\.(mp4|webm|mov)$/i)) {
+                    if (isVideoFile(src) || isYouTube(src)) {
                       return <VideoPlayer src={src} autoPlay={auto} loop={auto} className="rounded-[1.8rem] max-w-none aspect-video" />;
                     }
                     return <SafeNextImage src={src} alt="Feature" width={600} height={600} sizes="(max-width: 768px) 100vw, 50vw" className="rounded-[1.8rem] w-full h-auto" />;

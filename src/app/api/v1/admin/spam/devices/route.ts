@@ -2,10 +2,10 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 
 export async function GET(request: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   const sp = request.nextUrl.searchParams;
   const page = Math.max(1, Number(sp.get("page")) || 1);
