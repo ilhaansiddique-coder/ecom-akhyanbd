@@ -53,6 +53,16 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteName = settings.site_name || "Site";
   const description = settings.site_description || settings.meta_description || "";
   const logo = settings.site_logo || "/logo.svg";
+  // Favicon comes from the dashboard setting; fall back to the site logo, then a default.
+  // Append a short hash so browsers refetch when the admin uploads a new one.
+  const faviconRaw = settings.favicon || settings.site_logo || "/logo.svg";
+  const faviconVersion = (faviconRaw.match(/\d{6,}/)?.[0] ?? "1").slice(-6);
+  const faviconUrl = `${faviconRaw}${faviconRaw.includes("?") ? "&" : "?"}v=${faviconVersion}`;
+  const faviconType = faviconRaw.toLowerCase().endsWith(".svg")
+    ? "image/svg+xml"
+    : faviconRaw.toLowerCase().endsWith(".ico")
+      ? "image/x-icon"
+      : "image/png";
   return {
     title: {
       default: siteName,
@@ -61,11 +71,9 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     metadataBase: new URL(SITE_URL),
     icons: {
-      icon: [
-        { url: "/icon.svg", type: "image/svg+xml" },
-        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      ],
-      apple: "/apple-touch-icon.png",
+      icon: [{ url: faviconUrl, type: faviconType }],
+      shortcut: [{ url: faviconUrl, type: faviconType }],
+      apple: [{ url: faviconUrl }],
     },
     openGraph: {
       type: "website",
