@@ -32,19 +32,21 @@ export async function PUT(
     const updateData: any = { status: data.status };
     if (data.payment_status) updateData.paymentStatus = data.payment_status;
 
-    // Handle deferred Purchase event based on new status
+    // Handle Purchase / OrderCancelled event based on new status
     if (existing.trackingData) {
+      // Get CAPI credentials once for both branches
+      const credRows = await prisma.siteSetting.findMany({
+        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code"] } },
+      });
+      const creds: Record<string, string> = {};
+      for (const r of credRows) if (r.value) creds[r.key] = r.value;
+      const accessToken = creds.fb_capi_access_token;
+
       if (data.status === "confirmed") {
         // Fire the stored Purchase event to Facebook CAPI
         try {
           const stored = JSON.parse(existing.trackingData);
           const { eventData, pixelId, testEventCode } = stored;
-
-          // Get CAPI access token from settings
-          const tokenSetting = await prisma.siteSetting.findUnique({
-            where: { key: "fb_capi_access_token" },
-          });
-          const accessToken = tokenSetting?.value;
 
           if (pixelId && accessToken && eventData) {
             // Update event_time to now (when confirmed, not when ordered)
@@ -57,7 +59,25 @@ export async function PUT(
         // Clear tracking data after sending
         updateData.trackingData = null;
       } else if (data.status === "cancelled" || data.status === "trashed") {
-        // Cancel: discard the stored event — never fire to Facebook
+        // Fire a custom OrderCancelled event with the same custom_data so the
+        // marketer can build retargeting/exclusion audiences. Never fires
+        // Purchase. Pixel page-side has no equivalent — it's CAPI-only.
+        try {
+          const stored = JSON.parse(existing.trackingData);
+          const { eventData, pixelId, testEventCode } = stored;
+          if (pixelId && accessToken && eventData) {
+            const cancelEvent = {
+              ...eventData,
+              event_name: "OrderCancelled",
+              event_id: `cancel-${existing.id}-${Date.now()}`,
+              event_time: Math.floor(Date.now() / 1000),
+            };
+            await sendToFacebookCAPI(pixelId, accessToken, cancelEvent, testEventCode);
+          }
+        } catch (e) {
+          console.error("[FB CAPI] Failed to send OrderCancelled:", e);
+        }
+        // Discard the stored Purchase — never fire to Facebook
         updateData.trackingData = null;
       }
     }

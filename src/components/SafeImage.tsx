@@ -23,6 +23,14 @@ export function SafeNextImage({ src, fallback = PLACEHOLDER, alt, ...props }: Sa
   }, [src, fallback]);
 
   const isSvg = typeof imgSrc === "string" && imgSrc.endsWith(".svg");
+  // Runtime-uploaded files live outside the standalone build's static bundle,
+  // so the Next image optimizer can't read them from disk. Skip optimization
+  // for /uploads/* — browser fetches the URL directly, which the next.config
+  // fallback rewrite serves via /api/uploads/*.
+  const isUpload =
+    typeof imgSrc === "string" &&
+    (imgSrc.startsWith("/uploads/") || imgSrc.startsWith("/storage/"));
+  const skipOptimize = isSvg || isUpload;
 
   return (
     <Image
@@ -35,8 +43,8 @@ export function SafeNextImage({ src, fallback = PLACEHOLDER, alt, ...props }: Sa
           setImgSrc(fallback);
         }
       }}
-      {...(!isSvg ? { placeholder: "blur", blurDataURL: BLUR_DATA_URL } : {})}
-      unoptimized={isSvg}
+      {...(!skipOptimize ? { placeholder: "blur", blurDataURL: BLUR_DATA_URL } : {})}
+      unoptimized={skipOptimize}
     />
   );
 }

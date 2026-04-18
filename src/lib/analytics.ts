@@ -24,10 +24,21 @@ function genEventId(): string {
 
 let _pixelId = "";
 let _userId = "";
+let _deferPurchase = false;
 
 /** Called by FacebookPixel component after init */
 export function setPixelId(id: string) {
   _pixelId = id;
+}
+
+/**
+ * Toggle the deferred-purchase mode. When true, `trackPurchase` skips the
+ * browser pixel fire so Facebook doesn't get the event until the admin
+ * confirms the order from the dashboard. Server-side CAPI is also held back
+ * (the order's tracking payload is just stored to DB).
+ */
+export function setDeferPurchase(defer: boolean) {
+  _deferPurchase = defer;
 }
 
 /** Called when user logs in — enables external_id on all events */
@@ -231,8 +242,11 @@ export function trackPurchase(data: {
     order_id: data.order_id,
   };
 
-  // Browser pixel always fires immediately
-  if (typeof window.fbq === "function") {
+  // Browser pixel: skip the fire when defer mode is on, so Facebook doesn't
+  // hear about the Purchase until admin confirms the order. Server-side
+  // /api/v1/collect still receives the payload below — it stores tracking
+  // data to the order row and waits for confirm to fire CAPI.
+  if (!_deferPurchase && typeof window.fbq === "function") {
     const PIXEL_KEYS = new Set([
       "content_ids", "content_type", "content_name", "content_category",
       "contents", "currency", "value", "search_string", "num_items",
@@ -250,6 +264,7 @@ export function trackPurchase(data: {
     if (userData?.ln) pixelUserData.ln = userData.ln.trim().toLowerCase();
     if (userData?.ct) pixelUserData.ct = userData.ct.trim().toLowerCase();
     if (userData?.country) pixelUserData.country = userData.country.trim().toLowerCase();
+    if (_userId) pixelUserData.external_id = _userId;
     if (Object.keys(pixelUserData).length > 0 && _pixelId) {
       window.fbq("init", _pixelId, pixelUserData);
     }

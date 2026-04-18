@@ -4,43 +4,47 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Script from "next/script";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
-import { setPixelId, trackPageView } from "@/lib/analytics";
+import { setPixelId, setDeferPurchase, trackPageView } from "@/lib/analytics";
 
 export default function FacebookPixel() {
   const settings = useSiteSettings();
   const pixelId = settings.fb_pixel_id || "";
+  const deferPurchase = settings.fb_deferred_purchase === "true";
   const pathname = usePathname();
   const initialized = useRef(false);
 
-  // Track PageView on route change — sends to both browser pixel + server CAPI
+  // Mirror the deferred-purchase setting into the analytics module so
+  // trackPurchase skips the browser pixel fire when ON.
+  useEffect(() => {
+    setDeferPurchase(deferPurchase);
+  }, [deferPurchase]);
+
+  // Fire PageView through analytics on every route change (and on first load
+  // once the pixel script is ready). This keeps browser pixel ↔ server CAPI
+  // sharing the same event_id so Facebook can dedupe both halves.
   useEffect(() => {
     if (!pixelId || typeof window === "undefined") return;
     if (!initialized.current) return;
-    // Use trackPageView() which fires both pixel and CAPI with deduplication
     trackPageView();
   }, [pathname, pixelId]);
 
-  // Store pixel ID + send initial PageView to server CAPI
+  // Store pixel ID — also kicks off the first PageView once the script is
+  // ready (a tiny poll is cheaper than wiring an onLoad chain through Script).
   useEffect(() => {
-    if (pixelId) {
-      setPixelId(pixelId);
-      // Send initial PageView to server (browser pixel already fired via inline script)
-      fetch("/api/v1/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event_name: "PageView",
-          event_id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          event_source_url: window.location.href,
-          custom_data: {},
-          user_data: {
-            fbp: document.cookie.match(/(?:^|; )_fbp=([^;]*)/)?.[1],
-            fbc: document.cookie.match(/(?:^|; )_fbc=([^;]*)/)?.[1],
-          },
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    }
+    if (!pixelId) return;
+    setPixelId(pixelId);
+    let attempts = 0;
+    const id = setInterval(() => {
+      attempts++;
+      if (typeof window !== "undefined" && typeof window.fbq === "function") {
+        initialized.current = true;
+        trackPageView();
+        clearInterval(id);
+      } else if (attempts > 50) {
+        clearInterval(id); // give up after ~5s
+      }
+    }, 100);
+    return () => clearInterval(id);
   }, [pixelId]);
 
   if (!pixelId) return null;
@@ -62,7 +66,8 @@ export default function FacebookPixel() {
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('set', 'autoConfig', false, '${pixelId}');
             fbq('init', '${pixelId}');
-            fbq('track', 'PageView');
+            // PageView is fired by analytics.trackPageView with a shared
+            // event_id so the server CAPI side can dedupe. Don't fire here.
           `,
         }}
       />
