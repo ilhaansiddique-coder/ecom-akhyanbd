@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import ClientLayout from "@/components/ClientLayout";
 import { prisma } from "@/lib/prisma";
@@ -119,19 +118,17 @@ export default async function RootLayout({
           <meta name="facebook-domain-verification" content={fbDomainVerification} />
         )}
         <style id="theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />
-      </head>
-      <body className="min-h-screen bg-background" suppressHydrationWarning>
-        {/* next/script with beforeInteractive bypasses the React 19 "script in JSX"
-            warning. The `js-ready` class gates fade-in animations until hydration. */}
-        <Script id="js-ready" strategy="beforeInteractive">
-          {`document.documentElement.classList.add("js-ready")`}
-        </Script>
-        {/* Organization JSON-LD — type="application/ld+json" is data, not executable;
-            served via next/script for consistency with React 19's script handling. */}
-        <Script
+        {/* Inline scripts in <head> are safe in React 19 (the "script in JSX"
+            warning only fires for scripts rendered into <body>). */}
+        <script
+          id="js-ready"
+          dangerouslySetInnerHTML={{
+            __html: `document.documentElement.classList.add("js-ready")`,
+          }}
+        />
+        <script
           id="org-jsonld"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
@@ -151,6 +148,8 @@ export default async function RootLayout({
             }),
           }}
         />
+      </head>
+      <body className="min-h-screen bg-background" suppressHydrationWarning>
         <ClientLayout initialSettings={settings}>{children}</ClientLayout>
       </body>
     </html>

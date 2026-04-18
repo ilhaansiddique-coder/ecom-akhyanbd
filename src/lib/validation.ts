@@ -305,7 +305,7 @@ export const userSchema = z.object({
   password: z.string().min(8).optional(),
   phone: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
-  role: z.enum(["customer", "admin"]).default("customer"),
+  role: z.enum(["customer", "admin", "staff"]).default("customer"),
 });
 
 // ─── Admin: Orders status ───
