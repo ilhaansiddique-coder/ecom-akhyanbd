@@ -426,11 +426,14 @@ export default function LandingPageClient({ page }: { page: PageData }) {
                   {(() => {
                     const src = page.features_image || page.hero_image;
                     if (!src) return null;
+                    const auto = !!page.hero_video_autoplay;
                     if (src.includes("youtube.com") || src.includes("youtu.be")) {
-                      return <iframe src={src.replace("watch?v=", "embed/")} className="w-full aspect-video rounded-[1.8rem]" allowFullScreen allow="autoplay; encrypted-media" />;
+                      const base = src.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/");
+                      const url = auto ? `${base}${base.includes("?") ? "&" : "?"}autoplay=1&mute=1` : base;
+                      return <iframe src={url} className="w-full aspect-video rounded-[1.8rem]" allowFullScreen allow="autoplay; encrypted-media" />;
                     }
                     if (src.match(/\.(mp4|webm|mov)$/i)) {
-                      return <video src={src} autoPlay muted loop playsInline className="w-full rounded-[1.8rem] object-cover" />;
+                      return <VideoPlayer src={src} autoPlay={auto} loop={auto} className="rounded-[1.8rem] max-w-none aspect-video" />;
                     }
                     return <SafeNextImage src={src} alt="Feature" width={600} height={600} sizes="(max-width: 768px) 100vw, 50vw" className="rounded-[1.8rem] w-full h-auto" />;
                   })()}
