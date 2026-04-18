@@ -34,6 +34,7 @@ export default async function LandingPagesPage() {
       hero_headline: p.heroHeadline ?? "",
       hero_subheadline: p.heroSubheadline ?? "",
       hero_image: p.heroImage ?? "",
+      hero_video_autoplay: p.heroVideoAutoplay ?? false,
       hero_cta: p.heroCta ?? "",
       hero_trust_text: p.heroTrustText ?? "",
       hero_badge: p.heroBadge ?? "",

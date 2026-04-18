@@ -402,6 +402,7 @@ model LandingPage {
   heroHeadline     String?   @map("hero_headline")
   heroSubheadline  String?   @map("hero_subheadline")
   heroImage        String?   @map("hero_image")
+  heroVideoAutoplay Boolean? @default(false) @map("hero_video_autoplay")
   heroCta          String?   @map("hero_cta")
   heroTrustText    String?   @map("hero_trust_text")
   heroBadge        String?   @map("hero_badge")

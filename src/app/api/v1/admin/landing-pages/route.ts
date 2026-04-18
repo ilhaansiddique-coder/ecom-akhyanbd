@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
         heroHeadline: data.hero_headline || null,
         heroSubheadline: data.hero_subheadline || null,
         heroImage: data.hero_image || null,
+        heroVideoAutoplay: data.hero_video_autoplay ?? false,
         heroCta: data.hero_cta || null,
         heroTrustText: data.hero_trust_text || null,
         heroBadge: data.hero_badge || null,

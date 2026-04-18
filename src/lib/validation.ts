@@ -262,6 +262,7 @@ export const landingPageSchema = z.object({
   hero_headline: strOpt,
   hero_subheadline: strOpt,
   hero_image: strOpt,
+  hero_video_autoplay: z.boolean().optional(),
   hero_cta: strOpt,
   hero_trust_text: strOpt,
   hero_badge: strOpt,

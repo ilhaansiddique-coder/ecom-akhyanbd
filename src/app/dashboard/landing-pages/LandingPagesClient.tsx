@@ -32,6 +32,7 @@ interface LandingPage {
   hero_headline: string;
   hero_subheadline: string;
   hero_image: string;
+  hero_video_autoplay?: boolean;
   hero_cta: string;
   hero_trust_text: string;
   hero_badge: string;
@@ -90,6 +91,7 @@ const emptyForm = {
   hero_headline: "",
   hero_subheadline: "",
   hero_image: "",
+  hero_video_autoplay: false,
   hero_cta: "",
   hero_trust_text: "",
   hero_badge: "",
@@ -255,6 +257,7 @@ export default function LandingPagesClient({ initialData }: { initialData?: Init
       hero_headline: item.hero_headline || "",
       hero_subheadline: item.hero_subheadline || "",
       hero_image: item.hero_image || "",
+      hero_video_autoplay: !!item.hero_video_autoplay,
       hero_cta: item.hero_cta || "",
       hero_trust_text: item.hero_trust_text || "",
       hero_badge: item.hero_badge || "",
@@ -405,6 +408,7 @@ export default function LandingPagesClient({ initialData }: { initialData?: Init
       hero_headline: form.hero_headline || undefined,
       hero_subheadline: form.hero_subheadline || undefined,
       hero_image: form.hero_image || undefined,
+      hero_video_autoplay: !!form.hero_video_autoplay,
       hero_cta: form.hero_cta || undefined,
       hero_trust_text: form.hero_trust_text || undefined,
       hero_badge: form.hero_badge || undefined,
@@ -773,6 +777,24 @@ export default function LandingPagesClient({ initialData }: { initialData?: Init
                   {uploading ? "..." : `⬆️ ${t("landingPages.upload")}`}
                 </label>
               </div>
+              {/* Autoplay toggle — only relevant when the hero asset is a video.
+                  Browsers require muted-autoplay; the player starts muted. */}
+              {form.hero_image && (form.hero_image.match(/\.(mp4|webm|mov)$/i) || form.hero_image.includes("youtube.com") || form.hero_image.includes("youtu.be")) && (
+                <label className="mt-3 flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50 cursor-pointer">
+                  <div>
+                    <div className="text-sm font-medium text-gray-700">Autoplay video</div>
+                    <div className="text-[11px] text-gray-500">Plays automatically (muted) when visitors land on the page.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, hero_video_autoplay: !form.hero_video_autoplay })}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${form.hero_video_autoplay ? "bg-[var(--primary)]" : "bg-gray-300"}`}
+                    aria-pressed={form.hero_video_autoplay}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${form.hero_video_autoplay ? "translate-x-5" : "translate-x-0.5"}`} />
+                  </button>
+                </label>
+              )}
             </div>
           </Section>
 

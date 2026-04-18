@@ -17,6 +17,7 @@ interface LandingPageData {
   hero_headline?: string;
   hero_subheadline?: string;
   hero_image?: string;
+  hero_video_autoplay?: boolean;
   hero_cta?: string;
   hero_trust_text?: string;
   problem_title?: string;

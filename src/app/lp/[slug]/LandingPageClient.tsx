@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FiCheck, FiStar, FiChevronDown, FiMinus, FiPlus, FiPhone, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { SafeImg, SafeNextImage } from "@/components/SafeImage";
+import VideoPlayer from "@/components/ui/video-player";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination, Navigation } from "swiper/modules";
 import "swiper/css";
@@ -27,7 +28,7 @@ interface Product {
 
 interface PageData {
   id: number; slug: string; title: string;
-  hero_headline?: string; hero_subheadline?: string; hero_image?: string;
+  hero_headline?: string; hero_subheadline?: string; hero_image?: string; hero_video_autoplay?: boolean;
   hero_cta?: string; hero_trust_text?: string; hero_badge?: string;
   problem_title?: string; problem_points?: string;
   features?: string; testimonials?: string; how_it_works?: string; faq?: string;
@@ -262,17 +263,33 @@ export default function LandingPageClient({ page }: { page: PageData }) {
               <p className="text-lg md:text-2xl text-gray-500 mb-4 md:mb-6 leading-relaxed max-w-2xl">{page.hero_subheadline}</p>
             )}
             {page.hero_image && (
-              <div className="relative w-full aspect-video md:aspect-[21/9] mb-4 md:mb-6 rounded-3xl overflow-hidden shadow-2xl group">
-                {page.hero_image.includes("youtube.com") || page.hero_image.includes("youtu.be") ? (
-                  <iframe src={page.hero_image.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")}
-                    className="w-full h-full" allowFullScreen allow="autoplay; encrypted-media" />
-                ) : page.hero_image.match(/\.(mp4|webm|mov)$/i) ? (
-                  <video src={page.hero_image} autoPlay muted loop playsInline className="w-full h-full object-cover" />
-                ) : (
-                  <SafeNextImage src={page.hero_image} alt={page.hero_headline || ""} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-cover group-hover:scale-105 transition-transform duration-1000" priority />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
-              </div>
+              page.hero_image.match(/\.(mp4|webm|mov)$/i) ? (
+                // Native video file → use the rich VideoPlayer (controls, mute,
+                // speed). Autoplay is admin-toggleable; muted is forced when
+                // autoplaying so the browser allows it.
+                <div className="w-full mb-4 md:mb-6">
+                  <VideoPlayer
+                    src={page.hero_image}
+                    autoPlay={!!page.hero_video_autoplay}
+                    loop={!!page.hero_video_autoplay}
+                    className="aspect-video md:aspect-[21/9] max-w-none"
+                  />
+                </div>
+              ) : (
+                <div className="relative w-full aspect-video md:aspect-[21/9] mb-4 md:mb-6 rounded-3xl overflow-hidden shadow-2xl group">
+                  {page.hero_image.includes("youtube.com") || page.hero_image.includes("youtu.be") ? (
+                    <iframe
+                      src={`${page.hero_image.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")}${page.hero_video_autoplay ? (page.hero_image.includes("?") ? "&" : "?") + "autoplay=1&mute=1" : ""}`}
+                      className="w-full h-full"
+                      allowFullScreen
+                      allow="autoplay; encrypted-media"
+                    />
+                  ) : (
+                    <SafeNextImage src={page.hero_image} alt={page.hero_headline || ""} fill sizes="(max-width: 768px) 100vw, 80vw" className="object-cover group-hover:scale-105 transition-transform duration-1000" priority />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
+                </div>
+              )
             )}
             <div className="mb-4 md:mb-6">
               <a href="#checkout" className="inline-block px-10 py-5 rounded-full text-white text-lg font-bold shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95" style={{ backgroundColor: color }}>
