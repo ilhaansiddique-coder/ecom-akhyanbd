@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
@@ -56,5 +57,9 @@ export default async function ShopPage() {
     // DB unavailable at build time — revalidated on first request
   }
 
-  return <ShopClient initialProducts={products} apiCategories={categories} />;
+  return (
+    <Suspense fallback={null}>
+      <ShopClient initialProducts={products} apiCategories={categories} />
+    </Suspense>
+  );
 }
