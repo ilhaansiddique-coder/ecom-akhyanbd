@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, lazy, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 // PreviewBridge mount is split out + wrapped in Suspense below because
@@ -49,20 +49,6 @@ function PreviewBridgeGate() {
   return isPreview ? <PreviewBridge /> : null;
 }
 
-/**
- * Auto-open the AuthModal when the URL has ?login=1 — used by the dashboard
- * route's redirect for unauthenticated visitors (and by the Capacitor mobile
- * app, which lands on /dashboard cold). After successful login the modal
- * itself navigates to /dashboard.
- */
-function LoginQueryGate({ onOpen }: { onOpen: () => void }) {
-  const sp = useSearchParams();
-  useEffect(() => {
-    if (sp?.get("login") === "1") onOpen();
-  }, [sp, onOpen]);
-  return null;
-}
-
 export default function ClientLayout({
   children,
   initialSettings,
@@ -86,7 +72,6 @@ export default function ClientLayout({
     {!isDashboard && <RoutePrewarmer />}
     {!isDashboard && <NavigationProgress />}
     <Suspense fallback={null}><PreviewBridgeGate /></Suspense>
-    <Suspense fallback={null}><LoginQueryGate onOpen={() => setAuthOpen(true)} /></Suspense>
     {/* Analytics — storefront only. Skip dashboard so admin clicks don't pollute
         Pixel/GTM events or trigger PageView spam in the merchant's data. */}
     {!isDashboard && <FacebookPixel />}

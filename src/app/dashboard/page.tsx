@@ -11,16 +11,9 @@ export default async function DashboardServerPage() {
   // Staff have no dashboard home — bounce them to their first allowed page.
   if (user?.role === "staff") redirect("/dashboard/products");
 
-  // Unauthenticated → bounce to home with ?login=1 so the storefront opens
-  // the AuthModal automatically. After successful login the modal pushes
-  // back to /dashboard. Critical for the Capacitor Android app, which has
-  // no in-app way to "find the login button" otherwise.
-  if (!user) {
-    redirect("/?login=1&next=/dashboard");
-  }
-
-  // Customers without admin role get the customer-view fallback.
-  if (user.role !== "admin") {
+  // Customers + unauthenticated users get the customer-view fallback (the
+  // client decides what to render). Only admin sees the full analytics block.
+  if (!user || user.role !== "admin") {
     return <DashboardPage />;
   }
 
