@@ -33,15 +33,15 @@ const nextConfig: NextConfig = {
   // Redirect old Laravel storage paths to new uploads location
   async rewrites() {
     return {
-      // Legacy Laravel paths → /uploads (these then hit the fallback below).
+      // Always route /uploads/* through the API handler. Standalone builds on
+      // Hostinger don't reliably serve runtime-added files in /public, and the
+      // `fallback` rewrite only fires when static serving returns 404 — which
+      // isn't consistent across hosts. `beforeFiles` guarantees the route is
+      // hit regardless. The API handler reads from UPLOAD_DIR (defaults to
+      // public/uploads) so local dev still works unchanged.
       beforeFiles: [
-        { source: "/storage/uploads/:path*", destination: "/uploads/:path*" },
-        { source: "/storage/:path*", destination: "/uploads/:path*" },
-      ],
-      // Runs only if no static file matched. Standalone builds don't always
-      // serve runtime-added files in /public, so we stream them from the
-      // upload dir via the API route. The URL stays `/uploads/<name>`.
-      fallback: [
+        { source: "/storage/uploads/:path*", destination: "/api/uploads/:path*" },
+        { source: "/storage/:path*", destination: "/api/uploads/:path*" },
         { source: "/uploads/:path*", destination: "/api/uploads/:path*" },
       ],
     };
