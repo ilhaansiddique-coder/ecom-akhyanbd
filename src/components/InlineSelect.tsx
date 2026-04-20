@@ -16,9 +16,10 @@ interface InlineSelectProps {
   fullWidth?: boolean;
   placeholder?: string;
   absolute?: boolean; // use relative/absolute positioning instead of fixed (for non-dashboard pages)
+  variant?: "default" | "input"; // "input" matches storefront form input height/border
 }
 
-export default function InlineSelect({ value, options, onChange, fullWidth, placeholder, absolute }: InlineSelectProps) {
+export default function InlineSelect({ value, options, onChange, fullWidth, placeholder, absolute, variant = "default" }: InlineSelectProps) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -75,16 +76,21 @@ export default function InlineSelect({ value, options, onChange, fullWidth, plac
 
   const selected = options.find((o) => o.value === value);
 
+  const isInput = variant === "input";
+  const triggerClass = isInput
+    ? `flex items-center gap-2 px-4 py-3 border border-border rounded-xl text-sm text-foreground bg-white hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all ${fullWidth ? "w-full" : "min-w-32"}`
+    : `flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white hover:border-gray-300 focus:border-[#0f5931] focus:outline-none transition-colors ${fullWidth ? "w-full" : "min-w-32"}`;
+
   const trigger = (
     <button
       type="button"
       ref={btnRef}
       onClick={handleToggle}
-      className={`flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white hover:border-gray-300 focus:border-[#0f5931] focus:outline-none transition-colors ${fullWidth ? "w-full" : "min-w-32"}`}
+      className={triggerClass}
     >
       {selected?.color && <span className={`w-2 h-2 rounded-full shrink-0 ${selected.color}`} />}
-      <span className="flex-1 text-left text-gray-700">{selected?.label || placeholder || "—"}</span>
-      <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      <span className={`flex-1 text-left ${isInput ? (selected ? "text-foreground" : "text-text-light") : "text-gray-700"}`}>{selected?.label || placeholder || "—"}</span>
+      <FiChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
     </button>
   );
 

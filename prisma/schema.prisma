@@ -28,14 +28,38 @@ model User {
   createdAt       DateTime? @default(now()) @map("created_at")
   updatedAt       DateTime? @updatedAt @map("updated_at")
 
-  orders    Order[]
-  wishlists Wishlist[]
-  addresses Address[]
-  reviews   Review[]
-  blogPosts BlogPost[]
+  orders            Order[]
+  wishlists         Wishlist[]
+  addresses         Address[]
+  reviews           Review[]
+  blogPosts         BlogPost[]
+  pushSubscriptions PushSubscription[]
 
   @@index([role])
   @@map("users")
+}
+
+/**
+ * One row per admin device that opted in to push notifications.
+ * - platform = "android" | "ios" | "web"
+ * - token    = FCM device token (android/ios) or web-push endpoint URL
+ * - p256dh / auth = web-push only (VAPID crypto keys), null for FCM
+ */
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  platform  String
+  token     String   @unique
+  p256dh    String?
+  auth      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+  @@map("push_subscriptions")
 }
 
 model PasswordResetToken {

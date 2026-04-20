@@ -88,6 +88,7 @@ export default function ContactForm() {
           <InlineSelect
             fullWidth
             absolute
+            variant="input"
             value={formData.subject}
             options={subjectOptions}
             placeholder={en ? "Select subject" : "বিষয় নির্বাচন করুন"}

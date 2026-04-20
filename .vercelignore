@@ -1,0 +1,3 @@
+# Keep the Android/Capacitor project out of Vercel builds.
+# Vercel only needs the Next.js root — mobile/ is for GitHub Actions.
+mobile/
