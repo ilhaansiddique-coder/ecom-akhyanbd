@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from "react";
 
 export interface CartItem {
   id: number;
@@ -60,6 +60,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("cart_items", JSON.stringify(items));
     }
   }, [items, hydrated]);
+
+  // Image re-hydration. Persisted cart items can carry empty / stale image
+  // refs (item added before product image existed, or admin re-uploaded).
+  // After hydration, look up any item whose image is missing or pointing at
+  // the placeholder, batch-fetch from /api/v1/products/by-ids, and patch the
+  // image (variant image first, then product image). Runs once per missing
+  // set so it doesn't loop.
+  const patchedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!hydrated || items.length === 0) return;
+    const needsImg = items.filter((i) => {
+      const key = `${i.id}-${i.variantId ?? "x"}`;
+      if (patchedRef.current.has(key)) return false;
+      const img = (i.image || "").trim();
+      return !img || img === "/placeholder.svg" || img.endsWith("/placeholder.svg");
+    });
+    if (needsImg.length === 0) return;
+    const ids = Array.from(new Set(needsImg.map((i) => i.id)));
+    needsImg.forEach((i) => patchedRef.current.add(`${i.id}-${i.variantId ?? "x"}`));
+    fetch(`/api/v1/products/by-ids?ids=${ids.join(",")}`)
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((data: { items: Array<{ id: number; image: string; variants?: Array<{ id: number; image?: string }> }> }) => {
+        const byId = new Map(data.items.map((p) => [p.id, p]));
+        setItems((prev) => prev.map((it) => {
+          const img = (it.image || "").trim();
+          if (img && img !== "/placeholder.svg" && !img.endsWith("/placeholder.svg")) return it;
+          const p = byId.get(it.id);
+          if (!p) return it;
+          const variantImg = it.variantId
+            ? p.variants?.find((v) => v.id === it.variantId)?.image
+            : undefined;
+          const fresh = variantImg || p.image;
+          if (!fresh) return it;
+          return { ...it, image: fresh };
+        }));
+      })
+      .catch(() => {});
+  }, [hydrated, items]);
 
   // Cart key: same product + same variant = same cart item
   const cartKey = (id: number, variantId?: number) => `${id}-${variantId != null ? variantId : "x"}`;

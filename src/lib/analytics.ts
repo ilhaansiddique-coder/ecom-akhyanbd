@@ -20,6 +20,41 @@ function genEventId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+/**
+ * Defense-in-depth: even if a tracker function gets called from inside the
+ * dashboard (race, leaked import, future regression), no-op. Components are
+ * already gated in ClientLayout, but this guarantees admin clicks never
+ * reach Facebook.
+ */
+function isExcludedPath(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.location.pathname.startsWith("/dashboard");
+}
+
+/**
+ * Reliable POST to /api/v1/collect that survives page navigation.
+ * sendBeacon is the spec-blessed primary; keepalive fetch is the fallback
+ * when Beacon is unavailable (older Safari) or rejects the payload size.
+ */
+function postCollect(body: unknown) {
+  try {
+    const json = JSON.stringify(body);
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const blob = new Blob([json], { type: "application/json" });
+      const ok = navigator.sendBeacon("/api/v1/collect", blob);
+      if (ok) return;
+    }
+    fetch("/api/v1/collect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // never throw from analytics
+  }
+}
+
 // --------------- pixel ID + user store ---------------
 
 let _pixelId = "";
@@ -83,6 +118,7 @@ function sendEvent(
   sourceUrl?: string,
 ) {
   if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
 
   const eventId = genEventId();
 
@@ -130,27 +166,18 @@ function sendEvent(
   // 2. Server-side CAPI (skip for PageView — browser handles it fine)
   if (!clientOnly) {
     const eventUrl = sourceUrl || window.location.href;
-    setTimeout(() => {
-      const body = {
-        event_name: eventName,
-        event_id: eventId,
-        event_source_url: eventUrl,
-        custom_data: dataWithCurrency,
-        user_data: {
-          fbp: getCookie("_fbp"),
-          fbc: getCookie("_fbc"),
-          ...(_userId ? { external_id: _userId } : {}),
-          ...userData,
-        },
-      };
-
-      fetch("/api/v1/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        keepalive: true,
-      }).catch(() => {});
-    }, 0);
+    postCollect({
+      event_name: eventName,
+      event_id: eventId,
+      event_source_url: eventUrl,
+      custom_data: dataWithCurrency,
+      user_data: {
+        fbp: getCookie("_fbp"),
+        fbc: getCookie("_fbc"),
+        ...(_userId ? { external_id: _userId } : {}),
+        ...userData,
+      },
+    });
   }
 }
 
@@ -229,6 +256,7 @@ export function trackPurchase(data: {
   shipping?: number;
 }, userData?: UserData) {
   if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
 
   const eventId = genEventId();
   const customData: CustomData = {
@@ -272,30 +300,23 @@ export function trackPurchase(data: {
     window.fbq("track", "Purchase", pixelData, { eventID: eventId });
   }
 
-  // Server CAPI — always send to collect with order_id
-  // Server decides whether to fire immediately or defer based on fb_deferred_purchase setting
-  setTimeout(() => {
-    const body = {
-      event_name: "Purchase",
-      event_id: eventId,
-      event_source_url: window.location.href,
-      custom_data: customData,
-      user_data: {
-        fbp: getCookie("_fbp"),
-        fbc: getCookie("_fbc"),
-        ...(_userId ? { external_id: _userId } : {}),
-        ...userData,
-      },
-      order_id: data.order_id,
-    };
-
-    fetch("/api/v1/collect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      keepalive: true,
-    }).catch(() => {});
-  }, 0);
+  // Server CAPI — always send to collect with order_id.
+  // Server decides whether to fire immediately or defer based on fb_deferred_purchase setting.
+  // Uses sendBeacon so the request survives the post-checkout router.push navigation
+  // that previously raced with setTimeout(0) + fetch.
+  postCollect({
+    event_name: "Purchase",
+    event_id: eventId,
+    event_source_url: window.location.href,
+    custom_data: customData,
+    user_data: {
+      fbp: getCookie("_fbp"),
+      fbc: getCookie("_fbc"),
+      ...(_userId ? { external_id: _userId } : {}),
+      ...userData,
+    },
+    order_id: data.order_id,
+  });
 }
 
 /** Search performed */

@@ -65,10 +65,15 @@ export async function PUT(
     if (body.items && Array.isArray(body.items)) {
       await prisma.orderItem.deleteMany({ where: { orderId: Number(id) } });
       await prisma.orderItem.createMany({
+        // variantId/variantLabel must persist on edit too — without these the
+        // saved order silently reverts to the parent product on reload, and
+        // the courier description loses the variant label.
         data: body.items.map((i: any) => ({
           orderId: Number(id),
           productId: i.product_id || null,
           productName: i.product_name || "",
+          variantId: i.variant_id ? Number(i.variant_id) : null,
+          variantLabel: i.variant_label || null,
           price: Number(i.price),
           quantity: Number(i.quantity),
         })),

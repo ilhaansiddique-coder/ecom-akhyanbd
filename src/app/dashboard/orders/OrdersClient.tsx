@@ -10,6 +10,24 @@ import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, F
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import Modal from "@/components/Modal";
 import PathaoSendModal from "@/components/PathaoSendModal";
+import PathaoBulkReviewModal from "@/components/PathaoBulkReviewModal";
+
+// Resolve courier from stored type, falling back to consignment-ID prefix sniff
+// (Pathao IDs always start with "DA") for older orders sent before courier_type
+// was tracked.
+function resolveCourier(provider: string | undefined, id: string): "pathao" | "steadfast" {
+  if (provider === "pathao") return "pathao";
+  if (provider === "steadfast") return "steadfast";
+  return /^DA/i.test(id) ? "pathao" : "steadfast";
+}
+
+// Build the courier-specific tracking URL for a consignment.
+function consignmentUrl(provider: string | undefined, id: string): string {
+  if (resolveCourier(provider, id) === "pathao") {
+    return `https://merchant.pathao.com/courier/orders/${id}?isShowingActive=1`;
+  }
+  return `https://steadfast.com.bd/user/consignment/${id}`;
+}
 import DateRangePicker from "@/components/DateRangePicker";
 import StatusFilter from "@/components/StatusFilter";
 import InlineSelect from "@/components/InlineSelect";
@@ -136,9 +154,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [editingCN, setEditingCN] = useState<{ orderId: number; value: string } | null>(null);
   const [courierLoading, setCourierLoading] = useState<number | null>(null);
-  const [courierBalance, setCourierBalance] = useState<number | null>(null);
   // Active courier provider for send actions ("steadfast" | "pathao")
-  // Used as default for balance/status; sending uses dynamic chooser based on configured couriers.
+  // Used as fallback for status checks; sending uses dynamic chooser based on configured couriers.
   const [activeCourier, setActiveCourier] = useState<"steadfast" | "pathao">(
     () => (typeof window !== "undefined" && (localStorage.getItem("active_courier") as "steadfast" | "pathao")) || "steadfast"
   );
@@ -168,6 +185,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     total_delivered: number;
     total_cancelled?: number;
     success_ratio: string;
+    providers?: Array<{
+      provider: "steadfast" | "pathao";
+      ok: boolean;
+      total_parcels: number;
+      total_delivered: number;
+      total_cancelled: number;
+      success_ratio: string;
+      rating?: string;
+      error?: string;
+    }>;
   } | null>(null);
 
   // Bulk courier refresh
@@ -186,7 +213,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
   // Create order modal
   const [createOpen, setCreateOpen] = useState(false);
-  interface CreateItem { product_id: number; product_name: string; price: number; stock: number; quantity: number; image?: string }
+  // variant_id + variant_label flow through into both create + edit submissions
+  // and back out via the API → see PUT /admin/orders/[id] which now persists them.
+  interface CreateItem { product_id: number; product_name: string; price: number; stock: number; quantity: number; image?: string; variant_id?: number; variant_label?: string }
+  interface PickerVariant { id: number; label: string; price: number; stock?: number; image?: string; unlimited_stock?: boolean; is_active?: boolean }
+  interface PickerProduct { id: number; name: string; slug?: string; price: number; stock: number; image?: string; has_variations?: boolean; variants?: PickerVariant[] }
   const [createForm, setCreateForm] = useState({
     customer_name: "", customer_phone: "", customer_email: "",
     customer_address: "", city: "", zip_code: "",
@@ -194,7 +225,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     items: [] as CreateItem[],
   });
   const [createSaving, setCreateSaving] = useState(false);
-  const [allProducts, setAllProducts] = useState<{ id: number; name: string; slug?: string; price: number; stock: number; image?: string }[]>([]);
+  const [allProducts, setAllProducts] = useState<PickerProduct[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState<{ id?: number; name: string; phone: string; email?: string; address?: string; city?: string; zip_code?: string; source: string }[]>([]);
@@ -216,8 +247,10 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const autoCheckedRef = useRef(new Set<number>());
 
   useEffect(() => {
-    api.admin.courierBalance()
-      .then(() => setCourierConnected(true))
+    // Treat "connected" as: at least one courier configured (any provider).
+    // Score endpoint walks all enabled providers, so we don't need to ping balance.
+    api.admin.listActiveCouriers()
+      .then((r) => setCourierConnected((r.couriers?.length || 0) > 0))
       .catch(() => setCourierConnected(false));
   }, []);
 
@@ -256,6 +289,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, [statusFilter]);
+
+  // Re-fetch whenever the status filter changes. SSR seeded the initial list
+  // with the unfiltered view; without this, switching to "Trash" (or any other
+  // filter) would keep showing the SSR list because nothing triggered fetchAll.
+  // Skip the very first render when initialData is present so we don't double-load.
+  const skipFirstFetchRef = useRef(!!initialData?.items);
+  useEffect(() => {
+    if (skipFirstFetchRef.current) { skipFirstFetchRef.current = false; return; }
+    fetchAll();
+  }, [statusFilter, fetchAll]);
 
   // Close bulk status dropdown on outside click
   useEffect(() => {
@@ -305,6 +348,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
           stock: 9999,
           quantity: Number(i.quantity),
           image: i.product?.image || "",
+          // Carry variant identity through edit so the saved order keeps it.
+          variant_id: i.variant_id || i.variantId || undefined,
+          variant_label: i.variant_label || i.variantLabel || undefined,
         })),
       });
       setEditProductSearch("");
@@ -319,6 +365,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
             price: Number(p.price) || 0,
             stock: Number(p.stock) || 0,
             image: (p.image as string) || "",
+            has_variations: Boolean(p.has_variations),
+            variants: Array.isArray(p.variants) ? (p.variants as Record<string, unknown>[]).map((v) => ({
+              id: v.id as number,
+              label: (v.label as string) || "",
+              price: Number(v.price) || 0,
+              stock: Number(v.stock) || 0,
+              image: (v.image as string) || "",
+              unlimited_stock: Boolean(v.unlimited_stock),
+              is_active: v.is_active !== false,
+            })) : [],
           })) : []);
         }).catch(() => {});
       }
@@ -350,7 +406,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         subtotal,
         discount,
         total: Math.max(0, subtotal + shipping - discount),
-        items: editForm.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, price: i.price, quantity: i.quantity })),
+        items: editForm.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, price: i.price, quantity: i.quantity, variant_id: i.variant_id, variant_label: i.variant_label })),
       });
       const updated = res.data || res;
       setOrders((prev) => prev.map((o) => (o.id === editOrder.id ? { ...o, ...updated } : o)));
@@ -366,9 +422,13 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const handleTrashOrder = async (orderId: number) => {
     if (!confirm(lang === "en" ? "Move this order to trash?" : "এই অর্ডারটি ট্র্যাশে পাঠাতে চান?")) return;
     try {
-      await api.admin.updateOrder(orderId, { status: "trashed" });
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      // Use the validated /status endpoint (orderStatusSchema accepts "trashed")
+      // and re-fetch from server so the list reflects the persisted state — not
+      // just an optimistic local filter that can hide a failed write.
+      await api.admin.updateOrderStatus(orderId, { status: "trashed" });
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: "trashed" } : o));
       showToast(lang === "en" ? "Moved to trash" : "ট্র্যাশে পাঠানো হয়েছে");
+      fetchAll(true);
     } catch {
       showToast(lang === "en" ? "Failed to trash" : "ট্র্যাশে পাঠাতে সমস্যা", "error");
     }
@@ -418,8 +478,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   // Execute bulk send to a specific provider. Each provider's API builds its own payload format.
   const executeBulkSend = async (provider: "steadfast" | "pathao", orderIds: number[]) => {
     const courierLabel = provider === "pathao" ? "Pathao" : "Steadfast";
-    if (!confirm(lang === "en" ? `Send ${orderIds.length} orders to ${courierLabel}?` : `${orderIds.length}টি অর্ডার ${courierLabel}-এ পাঠাবেন?`)) return;
+    const confirmMsg = provider === "pathao"
+      ? (lang === "en"
+          ? `Send ${orderIds.length} orders to Pathao?\n\nAddresses will be auto-matched to Pathao city/zone/area. Orders that can't be matched fall back to your default location.`
+          : `${orderIds.length}টি অর্ডার Pathao-এ পাঠাবেন?\n\nঠিকানা স্বয়ংক্রিয়ভাবে Pathao city/zone/area তে ম্যাচ হবে। ম্যাচ না হলে ডিফল্ট লোকেশনে যাবে।`)
+      : (lang === "en" ? `Send ${orderIds.length} orders to ${courierLabel}?` : `${orderIds.length}টি অর্ডার ${courierLabel}-এ পাঠাবেন?`);
+    if (!confirm(confirmMsg)) return;
     setBulkSending(true);
+    if (provider === "pathao") {
+      showToast(lang === "en" ? `Matching ${orderIds.length} addresses…` : `${orderIds.length}টি ঠিকানা ম্যাচ হচ্ছে…`);
+    }
     try {
       const url = provider === "pathao" ? "/api/v1/admin/courier/pathao" : "/api/v1/admin/courier";
       const res = await fetch(url, {
@@ -430,6 +498,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
       const sent = res.results?.filter((r: any) => r.status === "success").length || 0;
       const failed = res.results?.filter((r: any) => r.status === "error").length || 0;
+      const autoMatched: number | undefined = res.auto_matched;
+      const fallback: number | undefined = res.fallback;
 
       if (res.results) {
         for (const r of res.results) {
@@ -441,7 +511,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
       setSelectedOrders(new Set());
       setActiveCourier(provider); // remember last-used for balance/UI
-      showToast(`${sent} sent to ${courierLabel}${failed > 0 ? `, ${failed} failed` : ""}`);
+      let msg = `${sent} sent to ${courierLabel}${failed > 0 ? `, ${failed} failed` : ""}`;
+      if (provider === "pathao" && typeof autoMatched === "number") {
+        msg += ` · ${autoMatched} auto-matched${fallback ? `, ${fallback} used defaults` : ""}`;
+      }
+      showToast(msg, failed > 0 ? "error" : "success");
     } catch {
       showToast(lang === "en" ? "Bulk send failed" : "বাল্ক সেন্ড ব্যর্থ", "error");
     } finally {
@@ -458,7 +532,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }
     const ids = Array.from(selectedOrders);
     if (availableCouriers.length === 1) {
-      executeBulkSend(availableCouriers[0].id, ids);
+      const provider = availableCouriers[0].id;
+      if (provider === "pathao") setPathaoBulkReviewIds(ids);
+      else executeBulkSend(provider, ids);
     } else {
       setChooserPending({ kind: "bulk", orderIds: ids });
     }
@@ -469,12 +545,17 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     setBulkStatusOpen(false);
     setBulkStatusLoading(true);
     try {
-      await Promise.all(
-        Array.from(selectedOrders).map((id) =>
-          api.admin.updateOrderStatus(id, { status })
-        )
-      );
-      setOrders((prev) => prev.map((o) => selectedOrders.has(o.id) ? { ...o, status } : o));
+      // Per-order payload so payment_status syncs based on each order's payment method.
+      const updates = Array.from(selectedOrders).map((id) => {
+        const cur = orders.find((o) => o.id === id);
+        const ps = derivePaymentStatus(status, cur?.payment_method);
+        return { id, payload: { status, ...(ps ? { payment_status: ps } : {}) } as Record<string, string> };
+      });
+      await Promise.all(updates.map((u) => api.admin.updateOrderStatus(u.id, u.payload)));
+      setOrders((prev) => prev.map((o) => {
+        const u = updates.find((x) => x.id === o.id);
+        return u ? { ...o, ...u.payload } : o;
+      }));
       setSelectedOrders(new Set());
       showToast(lang === "en" ? `${selectedOrders.size} orders updated to ${status}` : `${selectedOrders.size}টি অর্ডার আপডেট হয়েছে`);
     } catch {
@@ -506,6 +587,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
   // Pathao prefill modal state — opened for single Pathao sends so user can pick city/zone/area.
   const [pathaoModalOrder, setPathaoModalOrder] = useState<Order | null>(null);
+  const [pathaoBulkReviewIds, setPathaoBulkReviewIds] = useState<number[] | null>(null);
 
   // Execute single send to specific provider. Each provider's route uses its own payload format.
   // Pathao single sends route through the prefill modal first (city/zone/area required by Pathao API).
@@ -556,6 +638,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     setChooserPending(null);
     if (!pending) return;
     if (pending.kind === "single") executeSendToCourier(provider, pending.orderId);
+    else if (provider === "pathao") setPathaoBulkReviewIds(pending.orderIds);
     else executeBulkSend(provider, pending.orderIds);
   };
 
@@ -641,23 +724,6 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       : `${eligible.length}টি স্কোর চেক হয়েছে`);
   };
 
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const handleCheckBalance = async () => {
-    setBalanceLoading(true);
-    try {
-      const res = await api.admin.courierBalance(activeCourier);
-      // Steadfast returns { balance }, Pathao returns { info }
-      setCourierBalance(res.balance ?? null);
-      if (activeCourier === "pathao" && !res.balance) {
-        showToast(lang === "en" ? "Pathao connected" : "Pathao সংযুক্ত");
-      }
-    } catch {
-      showToast("ব্যালেন্স চেক করতে সমস্যা হয়েছে — কুরিয়ার API কী চেক করুন", "error");
-    } finally {
-      setBalanceLoading(false);
-    }
-  };
-
   const handleCustomerSearch = (q: string) => {
     setCustomerSearch(q);
     if (customerSearchTimer) clearTimeout(customerSearchTimer);
@@ -706,24 +772,61 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }).catch(() => {});
   };
 
-  const addProductToOrder = (product: typeof allProducts[0]) => {
-    // Check if already added
-    if (createForm.items.some((i) => i.product_id === product.id)) {
+  // ── Picker helpers (shared by Create + Edit dropdowns) ──
+  // normalizeQ: strip leading/trailing/internal multi-space so "  red   xl  "
+  // matches "Red XL". Also lowercases.
+  const normalizeQ = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const matchesPicker = (p: PickerProduct, q: string) => {
+    const nq = normalizeQ(q);
+    if (!nq) return true;
+    if (normalizeQ(p.name).includes(nq)) return true;
+    if ((p.slug || "").toLowerCase().includes(nq)) return true;
+    if (String(p.price).includes(nq)) return true;
+    // Match against variant labels too — searching "red" should surface a
+    // parent product whose Red variant is the only match.
+    if (p.variants?.some((v) => normalizeQ(v.label).includes(nq))) return true;
+    return false;
+  };
+  const filterPicker = (items: CreateItem[], q: string) =>
+    allProducts.filter((p) => {
+      if (!matchesPicker(p, q)) return false;
+      if (p.has_variations && p.variants?.length) {
+        // Keep parent visible while at least one variant is still pickable.
+        return p.variants.some((v) => v.is_active !== false && !items.some((it) => it.product_id === p.id && (it.variant_id || 0) === v.id));
+      }
+      // Simple product — hide entirely once added.
+      return !items.some((it) => it.product_id === p.id && !it.variant_id);
+    });
+
+  const buildItem = (product: PickerProduct, variant?: PickerVariant): CreateItem => ({
+    product_id: product.id,
+    product_name: product.name,
+    price: variant?.price ?? product.price,
+    stock: variant?.stock ?? product.stock,
+    quantity: 1,
+    image: variant?.image || product.image,
+    variant_id: variant?.id,
+    variant_label: variant?.label,
+  });
+
+  const addProductToOrder = (product: PickerProduct, variant?: PickerVariant) => {
+    const vid = variant?.id || 0;
+    if (createForm.items.some((i) => i.product_id === product.id && (i.variant_id || 0) === vid)) {
       showToast("পণ্যটি ইতিমধ্যে যোগ করা হয়েছে", "error");
       return;
     }
-    setCreateForm((prev) => ({
-      ...prev,
-      items: [...prev.items, {
-        product_id: product.id,
-        product_name: product.name,
-        price: product.price,
-        stock: product.stock,
-        quantity: 1,
-        image: product.image,
-      }],
-    }));
+    setCreateForm((prev) => ({ ...prev, items: [...prev.items, buildItem(product, variant)] }));
     setProductSearch("");
+  };
+
+  const addProductToEdit = (product: PickerProduct, variant?: PickerVariant) => {
+    const vid = variant?.id || 0;
+    if (editForm.items.some((i) => i.product_id === product.id && (i.variant_id || 0) === vid)) {
+      showToast("পণ্যটি ইতিমধ্যে যোগ করা হয়েছে", "error");
+      return;
+    }
+    setEditForm((prev) => ({ ...prev, items: [...prev.items, buildItem(product, variant)] }));
+    setEditProductSearch("");
   };
 
   const handleCreateOrder = async (e: React.FormEvent) => {
@@ -737,6 +840,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         product_name: i.product_name,
         quantity: i.quantity,
         price: i.price,
+        variant_id: i.variant_id,
+        variant_label: i.variant_label,
       }));
 
       const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -790,25 +895,45 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       const res = await api.admin.checkCourierScore(orderId);
       const totalParcels = res.total_parcels || 0;
       const totalDelivered = res.total_delivered || 0;
-      const totalCancelled = totalParcels - totalDelivered;
+      const totalCancelled = res.total_cancelled ?? Math.max(0, totalParcels - totalDelivered);
       const ratio = res.success_ratio || (totalParcels > 0 ? `${((totalDelivered / totalParcels) * 100).toFixed(1)}%` : "0%");
 
-      // Update order in list
+      // If every provider failed, surface their reasons
+      if (res.success === false) {
+        showToast(res.message || "Score check failed", "error");
+        return;
+      }
+
+      // Update order in list with combined ratio
       setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_score: ratio } : o));
 
-      // Show popup
+      // Show popup with combined + per-courier breakdown
       setScorePopup({
         orderId,
         total_parcels: totalParcels,
         total_delivered: totalDelivered,
         total_cancelled: totalCancelled,
         success_ratio: ratio,
+        providers: res.providers,
       });
-    } catch {
-      showToast("স্কোর চেক করতে সমস্যা হয়েছে", "error");
+    } catch (err) {
+      const e = err as { message?: string };
+      showToast(e.message || "Score check failed", "error");
     } finally {
       setScoreLoading(null);
     }
+  };
+
+  // Derive payment_status from a new order status.
+  // Rules:
+  //  - delivered  → paid (always; collected on delivery or already prepaid)
+  //  - any other  → unpaid for COD orders (money not yet collected),
+  //                 leave untouched for online prepaid (bkash/nagad/bank) since payment already received.
+  // Returns undefined when no auto-change should happen.
+  const derivePaymentStatus = (newStatus: string, paymentMethod?: string): string | undefined => {
+    if (newStatus === "delivered") return "paid";
+    if (paymentMethod === "cod" || !paymentMethod) return "unpaid";
+    return undefined;
   };
 
   const handleStatusUpdate = async (orderId: number) => {
@@ -817,9 +942,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     setUpdatingId(orderId);
     try {
       const payload: Record<string, string> = { status: newStatus };
-      // Auto-set payment: delivered → paid, cancelled → unpaid
-      if (newStatus === "delivered") payload.payment_status = "paid";
-      if (newStatus === "cancelled") payload.payment_status = "unpaid";
+      const cur = orders.find((o) => o.id === orderId);
+      const ps = derivePaymentStatus(newStatus, cur?.payment_method);
+      if (ps) payload.payment_status = ps;
       await api.admin.updateOrderStatus(orderId, payload);
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...payload } : o)));
       if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, ...payload } : prev);
@@ -833,6 +958,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   };
 
   const filtered = orders.filter((o) => {
+    // Status filter — also enforced client-side so an order changed inline
+    // (optimistic setOrders) immediately leaves the current filtered view
+    // instead of waiting for a re-fetch.
+    if (statusFilter && o.status !== statusFilter) return false;
+    if (!statusFilter && o.status === "trashed") return false;
+
     const q = search.toLowerCase();
     const matchesSearch =
       o.customer_name?.toLowerCase().includes(q) ||
@@ -865,43 +996,38 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         <div className="space-y-3">
           {/* Row 1: Filters + actions */}
           <div className="flex flex-wrap gap-2 md:gap-3 items-center">
-            <DateRangePicker
-              from={dateFrom}
-              to={dateTo}
-              onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
-            />
-            <StatusFilter
-              value={statusFilter}
-              options={STATUS_OPTIONS}
-              onChange={setStatusFilter}
-              placeholder={t("filter.allStatus")}
-            />
-            {/* Courier provider picker — controls balance display only.
-                Send actions auto-detect from configured couriers (chooser modal if 2+). */}
-            {availableCouriers.length > 1 && (
-              <select
-                value={activeCourier}
-                onChange={(e) => { setActiveCourier(e.target.value as "steadfast" | "pathao"); setCourierBalance(null); }}
-                className="hidden sm:block px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:border-[var(--primary)]"
-                title="Courier for balance check"
-              >
-                {availableCouriers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
-                ))}
-              </select>
-            )}
-            {/* Courier balance — fetch on click only */}
-            <button type="button" onClick={handleCheckBalance} disabled={balanceLoading}
-              className="hidden sm:flex items-center gap-2 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-gray-300 hover:shadow-sm transition-all whitespace-nowrap disabled:opacity-50" title="Check Courier Balance">
-              <FiTruck className="w-4 h-4" />
-              {balanceLoading ? "..." : courierBalance !== null ? `৳${courierBalance}` : lang === "en" ? "Balance" : "ব্যালেন্স"}
-            </button>
+            <div className="flex gap-2 items-center w-full md:w-auto md:contents">
+              <div className="flex-1 md:flex-none min-w-0">
+                <DateRangePicker
+                  from={dateFrom}
+                  to={dateTo}
+                  onChange={(from, to) => { setDateFrom(from); setDateTo(to); }}
+                />
+              </div>
+              <div className="flex-1 md:flex-none min-w-0">
+                <StatusFilter
+                  value={statusFilter}
+                  options={STATUS_OPTIONS}
+                  onChange={setStatusFilter}
+                  placeholder={t("filter.allStatus")}
+                />
+              </div>
+              {/* Add Order button — inline on mobile, normal flow on desktop */}
+              <button type="button" onClick={openCreateOrder}
+                className="md:hidden shrink-0 flex items-center justify-center p-2.5 bg-[var(--primary)] text-white rounded-xl hover:bg-[var(--primary-light)] transition-colors"
+                title={`${t("btn.add")} ${t("dash.orders")}`}>
+                <FiPlus className="w-4 h-4" />
+              </button>
+            </div>
             {/* Bulk actions — shown when orders are selected */}
             {selectedOrders.size > 0 && (
               <>
                 {/* Send to Courier */}
                 <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading}
-                  className="flex items-center gap-2 px-3.5 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 whitespace-nowrap">
+                  style={{ backgroundColor: "var(--primary, #0f5931)", color: "#fff" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 85%, black)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; }}
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap">
                   <FiTruck className="w-4 h-4" />
                   <span className="hidden sm:inline">{bulkSending ? "Sending..." : (availableCouriers.length === 1 ? `Send ${selectedOrders.size} to ${availableCouriers[0].label}` : `Send ${selectedOrders.size} to Courier`)}</span>
                   <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
@@ -962,11 +1088,14 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none"
               />
             </div>
-            {/* Add Order button */}
+            {/* Add Order button — desktop only (mobile version is inline above) */}
             <button type="button" onClick={openCreateOrder}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors whitespace-nowrap ml-auto">
+              style={{ backgroundColor: "var(--primary, #0f5931)", color: "#fff" }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 85%, black)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; }}
+              className="hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ml-auto">
               <FiPlus className="w-4 h-4" />
-              <span className="hidden sm:inline">{t("btn.add")} {t("dash.orders")}</span>
+              <span>{t("btn.add")} {t("dash.orders")}</span>
             </button>
           </div>
           {/* Row 2: Search bar on mobile/tablet (full width below) */}
@@ -1009,35 +1138,94 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                   <p className="text-lg font-bold text-[var(--primary)] shrink-0">৳{toBn(o.total)}</p>
                 </div>
               </div>
-              {/* Badges row */}
-              <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
-                <InlineSelect
-                  value={o.status}
-                  options={STATUS_OPTIONS.filter((s) => s.value)}
-                  onChange={async (v) => {
-                    try {
-                      const paymentStatus = v === "delivered" ? "paid" : v === "cancelled" ? "unpaid" : undefined;
-                      await api.admin.updateOrderStatus(o.id, { status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) });
-                      setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) } : x)));
-                      showToast(t("toast.updated"));
-                    } catch { showToast(t("toast.error"), "error"); }
-                  }}
-                />
-                <button type="button" onClick={() => handleCheckScore(o.id)} disabled={scoreLoading === o.id}
-                  className={`text-xs px-2 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
-                    o.courier_score
-                      ? parseFloat(o.courier_score) >= 70 ? "bg-green-100 text-green-700 hover:bg-green-200"
-                      : parseFloat(o.courier_score) >= 40 ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                      : "bg-red-100 text-red-700 hover:bg-red-200"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  }`}>
-                  {scoreLoading === o.id ? "..." : o.courier_score || "Score"}
-                </button>
-                {o.consignment_id && (
-                  <a href={`https://steadfast.com.bd/user/consignment/${o.consignment_id}`} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded-full inline-flex items-center gap-1 hover:bg-blue-100 transition-colors">
-                    {o.consignment_id} <FiExternalLink className="w-3 h-3" />
-                  </a>
+              {/* Inline details — compact */}
+              <div className="px-4 pb-3 space-y-1.5 text-[11px]">
+                {/* Payment row */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className={`px-1.5 py-0.5 rounded font-medium ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                    {o.payment_status === "paid" ? t("status.paid") : t("status.unpaid")}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 inline-flex items-center gap-1">
+                    <FiCreditCard className="w-3 h-3" />{PAYMENT_LABELS[o.payment_method] || o.payment_method}
+                  </span>
+                  {o.transaction_id && (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono">{o.transaction_id}</span>
+                  )}
+                  <button type="button" onClick={() => handleCheckScore(o.id)} disabled={scoreLoading === o.id}
+                    className={`px-1.5 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                      o.courier_score
+                        ? parseFloat(o.courier_score) >= 70 ? "bg-green-100 text-green-700 hover:bg-green-200"
+                        : parseFloat(o.courier_score) >= 40 ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                        : "bg-red-100 text-red-700 hover:bg-red-200"
+                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    }`}>
+                    {scoreLoading === o.id ? "..." : o.courier_score || "Score"}
+                  </button>
+                </div>
+                {/* Address */}
+                {o.customer_address && (
+                  <div className="flex items-start gap-1 text-gray-600">
+                    <FiMapPin className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
+                    <span className="break-words leading-snug">
+                      {o.customer_address}{o.city ? `, ${o.city}` : ""}{o.zip_code ? ` — ${o.zip_code}` : ""}
+                    </span>
+                  </div>
+                )}
+                {/* Items */}
+                {o.items && o.items.length > 0 && (
+                  <div className="space-y-1 pt-1.5 mt-1 border-t border-gray-100">
+                    {o.items.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-md overflow-hidden bg-gray-100 shrink-0 relative">
+                          {item.product?.image ? (
+                            <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="32px" className="object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300"><FiPackage className="w-3.5 h-3.5" /></div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-700 break-words leading-tight">
+                            {item.product_name}
+                            {item.variant_label && <span className="text-gray-400 font-normal"> — {item.variant_label}</span>}
+                          </p>
+                          <p className="text-gray-400 leading-tight">৳{toBn(item.price)} × {toBn(item.quantity)}</p>
+                        </div>
+                        <p className="font-semibold text-[var(--primary)] shrink-0">৳{toBn(item.price * item.quantity)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Status + Score + Totals */}
+                <div className="flex items-center justify-between gap-2 pt-1.5 mt-1 border-t border-gray-100">
+                  <div className="flex items-center gap-1 min-w-0 flex-wrap">
+                    <InlineSelect
+                      value={o.status}
+                      options={STATUS_OPTIONS.filter((s) => s.value)}
+                      onChange={async (v) => {
+                        try {
+                          const paymentStatus = derivePaymentStatus(v, o.payment_method);
+                          await api.admin.updateOrderStatus(o.id, { status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) });
+                          setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) } : x)));
+                          showToast(t("toast.updated"));
+                        } catch { showToast(t("toast.error"), "error"); }
+                      }}
+                    />
+                    {o.consignment_id && (
+                      <a href={consignmentUrl(o.courier_type, o.consignment_id)} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 hover:bg-blue-100 transition-colors"
+                        title={`Track on ${resolveCourier(o.courier_type, o.consignment_id) === "pathao" ? "Pathao" : "Steadfast"}`}>
+                        {o.consignment_id} <FiExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-500 shrink-0">
+                    <span>{t("form.subtotal")}: <b className="text-gray-700">৳{toBn(o.subtotal)}</b></span>
+                    {o.shipping_cost > 0 && <span>+ <b className="text-gray-700">৳{toBn(o.shipping_cost)}</b></span>}
+                  </div>
+                </div>
+                {/* Notes */}
+                {o.notes && (
+                  <p className="text-gray-500 italic break-words leading-snug">&ldquo;{o.notes}&rdquo;</p>
                 )}
               </div>
               {/* Footer: courier + actions */}
@@ -1057,7 +1245,10 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                     </div>
                   ) : (
                     <button type="button" onClick={() => handleSendToCourier(o.id)} disabled={courierLoading === o.id}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-lg font-medium hover:bg-[var(--primary)] hover:text-white transition-colors disabled:opacity-50">
+                      style={{ backgroundColor: "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)", color: "var(--primary, #0f5931)" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; e.currentTarget.style.color = "#fff"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)"; e.currentTarget.style.color = "var(--primary, #0f5931)"; }}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
                       <FiTruck className="w-3 h-3" /> {courierLoading === o.id ? "..." : "Send"}
                     </button>
                   )}
@@ -1136,7 +1327,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                               options={STATUS_OPTIONS.filter((s) => s.value)}
                               onChange={async (v) => {
                                 try {
-                                  const paymentStatus = v === "delivered" ? "paid" : v === "cancelled" ? "unpaid" : undefined;
+                                  const paymentStatus = derivePaymentStatus(v, o.payment_method);
                                   await api.admin.updateOrderStatus(o.id, { status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) });
                                   setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, status: v, ...(paymentStatus ? { payment_status: paymentStatus } : {}) } : x)));
                                   showToast(t("toast.updated"));
@@ -1162,7 +1353,10 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                               </div>
                             ) : (
                               <button type="button" onClick={() => handleSendToCourier(o.id)} disabled={courierLoading === o.id}
-                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-[var(--primary)]/10 text-[var(--primary)] rounded-lg font-medium hover:bg-[var(--primary)] hover:text-white transition-colors disabled:opacity-50">
+                                style={{ backgroundColor: "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)", color: "var(--primary, #0f5931)" }}
+                                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; e.currentTarget.style.color = "#fff"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)"; e.currentTarget.style.color = "var(--primary, #0f5931)"; }}
+                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
                                 <FiTruck className="w-3 h-3" />
                                 {courierLoading === o.id ? "..." : "Send"}
                               </button>
@@ -1184,8 +1378,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             {o.consignment_id ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono text-gray-600">{o.consignment_id}</span>
-                                <a href={`https://steadfast.com.bd/user/consignment/${o.consignment_id}`} target="_blank" rel="noopener noreferrer"
-                                  className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors" title="Track on Steadfast">
+                                <a href={consignmentUrl(o.courier_type, o.consignment_id)} target="_blank" rel="noopener noreferrer"
+                                  className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                                  title={`Track on ${resolveCourier(o.courier_type, o.consignment_id) === "pathao" ? "Pathao" : "Steadfast"}`}>
                                   <FiExternalLink className="w-3 h-3" />
                                 </a>
                               </div>
@@ -1246,8 +1441,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                               )}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                              <p className="text-sm font-semibold text-gray-800 truncate">{item.product_name}</p>
-                                              {item.variant_label && <p className="text-[11px] text-gray-400">{item.variant_label}</p>}
+                                              <p className="text-sm font-semibold text-gray-800 break-words">{item.product_name}</p>
+                                              {item.variant_label && <p className="text-[11px] text-gray-400 break-words">{item.variant_label}</p>}
                                               <p className="text-xs text-gray-400">৳{toBn(item.price)} × {toBn(item.quantity)}</p>
                                             </div>
                                             <p className="text-sm font-bold text-[var(--primary)] shrink-0">৳{toBn(item.price * item.quantity)}</p>
@@ -1288,7 +1483,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                     <div className="p-6 space-y-5">
                       <p className="text-xs text-gray-400">
                         <FiCalendar className="inline w-3 h-3 mr-1" />
-                        {new Date(o.created_at).toLocaleString("bn-BD")}
+                        {new Date(o.created_at).toLocaleString(lang === "en" ? "en-US" : "bn-BD")}
                       </p>
                       {/* Status badges */}
                       <div className="flex flex-wrap gap-2">
@@ -1371,7 +1566,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 truncate">
+                                <p className="text-sm font-medium text-gray-800 break-words">
                                   {item.product_name}
                                   {item.variant_label && <span className="text-gray-400 font-normal"> — {item.variant_label}</span>}
                                 </p>
@@ -1570,69 +1765,104 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                     <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input type="text" value={editProductSearch} onChange={(e) => setEditProductSearch(e.target.value)}
                       placeholder={t("search.products")} className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none" />
-                    {editProductSearch.trim() && (
-                      <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                        {allProducts
-                          .filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(editProductSearch.toLowerCase()) && !editForm.items.some((i) => i.product_id === p.id))
-                          .slice(0, 8)
-                          .map((p) => (
-                            <button type="button" key={p.id} onClick={() => {
-                              setEditForm(f => ({ ...f, items: [...f.items, { product_id: p.id, product_name: p.name, price: p.price, stock: p.stock, quantity: 1, image: p.image }] }));
-                              setEditProductSearch("");
-                            }}
-                              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors">
-                              <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
-                                onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
-                                onMouseLeave={() => setHoverPreview(null)}
-                                onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
-                                {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                    {editProductSearch.trim() && (() => {
+                      const matched = filterPicker(editForm.items, editProductSearch).slice(0, 8);
+                      return (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                          {matched.map((p) => (
+                            p.has_variations && p.variants?.length ? (
+                              // Variable product → render as a card with parent header (not clickable)
+                              // and indented variant rows. Each variant carries its own price + image.
+                              <div key={`p-${p.id}`} className="border-b border-gray-50 last:border-b-0">
+                                <div className="flex items-center gap-3 px-3 py-2 bg-gradient-to-r from-[var(--primary)]/5 to-transparent">
+                                  <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                                    {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                                    <p className="text-[10px] text-gray-400">{lang === "en" ? "Pick a variant" : "ভ্যারিয়েন্ট নির্বাচন করুন"}</p>
+                                  </div>
+                                </div>
+                                {p.variants.filter((v) => v.is_active !== false).map((v) => {
+                                  const added = editForm.items.some((i) => i.product_id === p.id && (i.variant_id || 0) === v.id);
+                                  return (
+                                    <button type="button" key={`v-${v.id}`} disabled={added} onClick={() => addProductToEdit(p, v)}
+                                      className={`w-full flex items-center gap-3 pl-10 pr-3 py-1.5 text-sm text-left transition-colors ${added ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"}`}>
+                                      <div className="w-7 h-7 rounded-md overflow-hidden bg-gray-100 shrink-0 relative">
+                                        {(v.image || p.image) ? <SafeNextImage src={v.image || p.image || ""} alt={v.label} fill sizes="28px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-3 h-3 text-gray-300" /></div>}
+                                      </div>
+                                      <span className="flex-1 truncate text-[var(--primary)] font-medium">{v.label}</span>
+                                      <span className="text-[var(--primary)] font-semibold shrink-0">৳{v.price}</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
-                              <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
-                              <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
-                            </button>
+                            ) : (
+                              <button type="button" key={p.id} onClick={() => addProductToEdit(p)}
+                                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors cursor-pointer">
+                                <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                                  onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
+                                  onMouseLeave={() => setHoverPreview(null)}
+                                  onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
+                                  {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                                </div>
+                                <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
+                                <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
+                              </button>
+                            )
                           ))}
-                        {allProducts.filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(editProductSearch.toLowerCase()) && !editForm.items.some((i) => i.product_id === p.id)).length === 0 && (
-                          <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
-                        )}
-                      </div>
-                    )}
+                          {matched.length === 0 && (
+                            <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   {editForm.items.length === 0 ? (
                     <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">{t("search.products")}</div>
                   ) : (
                     <div className="space-y-2">
                       {editForm.items.map((item, idx) => (
-                        <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
-                            onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
-                            onMouseLeave={() => setHoverPreview(null)}
-                            onClick={() => item.image && setPreviewImage(item.image)}>
-                            {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="40px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{item.product_name}</p>
-                            <p className="text-xs text-gray-400">৳{item.price} × {item.quantity} = ৳{item.price * item.quantity}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5">
+                        <div key={item.product_id} className="bg-gray-50 rounded-xl px-2.5 py-2 border border-gray-100">
+                          {/* Top row: image + name + remove */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                              onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
+                              onMouseLeave={() => setHoverPreview(null)}
+                              onClick={() => item.image && setPreviewImage(item.image)}>
+                              {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="36px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 break-words leading-tight">
+                                {item.product_name}
+                                {item.variant_label && <span className="text-[var(--primary)] font-normal"> — {item.variant_label}</span>}
+                              </p>
+                              <p className="text-[11px] text-gray-400">৳{item.price} × {item.quantity}</p>
+                            </div>
                             <button type="button" onClick={() => {
-                              const items = [...editForm.items];
-                              if (items[idx].quantity <= 1) items.splice(idx, 1);
-                              else items[idx] = { ...items[idx], quantity: items[idx].quantity - 1 };
-                              setEditForm({ ...editForm, items });
-                            }} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
-                            <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
-                            <button type="button" onClick={() => {
-                              const items = [...editForm.items];
-                              items[idx] = { ...items[idx], quantity: items[idx].quantity + 1 };
-                              setEditForm({ ...editForm, items });
-                            }} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                              const items = [...editForm.items]; items.splice(idx, 1); setEditForm({ ...editForm, items });
+                            }} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0">
+                              <FiX className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                          <span className="text-sm font-bold text-[var(--primary)] w-16 text-right">৳{item.price * item.quantity}</span>
-                          <button type="button" onClick={() => {
-                            const items = [...editForm.items]; items.splice(idx, 1); setEditForm({ ...editForm, items });
-                          }} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                            <FiX className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Bottom row: qty controls + total */}
+                          <div className="flex items-center justify-between gap-2 mt-1.5 pl-11">
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => {
+                                const items = [...editForm.items];
+                                if (items[idx].quantity <= 1) items.splice(idx, 1);
+                                else items[idx] = { ...items[idx], quantity: items[idx].quantity - 1 };
+                                setEditForm({ ...editForm, items });
+                              }} className="w-7 h-7 flex items-center justify-center border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
+                              <span className="w-7 text-center text-sm font-semibold">{item.quantity}</span>
+                              <button type="button" onClick={() => {
+                                const items = [...editForm.items];
+                                items[idx] = { ...items[idx], quantity: items[idx].quantity + 1 };
+                                setEditForm({ ...editForm, items });
+                              }} className="w-7 h-7 flex items-center justify-center border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">+</button>
+                            </div>
+                            <span className="text-sm font-bold text-[var(--primary)]">৳{item.price * item.quantity}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1641,23 +1871,25 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
                 {/* Payment & Shipping */}
                 <div className="space-y-3">
-                  <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
-                      <InlineSelect fullWidth value={editForm.payment_method} options={[
-                        { value: "cod", label: t("payment.cod") },
-                        { value: "bkash", label: t("payment.bkash") },
-                        { value: "nagad", label: t("payment.nagad") },
-                        { value: "bank", label: t("payment.bank") },
-                      ]} onChange={(v) => setEditForm({ ...editForm, payment_method: v })} />
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
+                        <InlineSelect fullWidth value={editForm.payment_method} options={[
+                          { value: "cod", label: t("payment.cod") },
+                          { value: "bkash", label: t("payment.bkash") },
+                          { value: "nagad", label: t("payment.nagad") },
+                          { value: "bank", label: t("payment.bank") },
+                        ]} onChange={(v) => setEditForm({ ...editForm, payment_method: v })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
+                        <input type="number" min="0" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} className={inputCls} />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.shippingCost")}</label>
                       <InlineSelect fullWidth value={editForm.shipping_cost} options={shippingZones.map(z => ({ value: String(z.rate), label: `${z.name} — ৳${z.rate}` }))} onChange={(v) => setEditForm({ ...editForm, shipping_cost: v })} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
-                      <input type="number" min="0" value={editForm.discount} onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })} className={inputCls} />
                     </div>
                   </div>
                 </div>
@@ -1700,7 +1932,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       </Modal>
 
       {/* Score Detail Popup */}
-      <Modal open={!!scorePopup} onClose={() => setScorePopup(null)} title="Steadfast Success Rate" size="sm">
+      <Modal open={!!scorePopup} onClose={() => setScorePopup(null)} title="Customer Success Rate" size="sm">
         {scorePopup && (
           <div className="p-6 space-y-4">
             {/* Score circle */}
@@ -1753,11 +1985,39 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                   <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
                     <FiTruck className="w-4 h-4 text-[var(--primary)]" />
                   </div>
-                  <span className="text-sm font-medium text-[var(--primary)]">Success Ratio</span>
+                  <span className="text-sm font-medium text-[var(--primary)]">Combined Ratio</span>
                 </div>
                 <span className="text-lg font-bold text-[var(--primary)]">{scorePopup.success_ratio}</span>
               </div>
             </div>
+
+            {/* Per-courier breakdown */}
+            {scorePopup.providers && scorePopup.providers.length > 0 && (
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">By courier</div>
+                {scorePopup.providers.map((p) => (
+                  <div key={p.provider} className={`flex items-center justify-between p-2.5 rounded-lg border ${p.ok ? "bg-white border-gray-200" : "bg-amber-50 border-amber-200"}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-semibold text-gray-800 capitalize">{p.provider}</span>
+                      {p.ok ? (
+                        <span className="text-xs text-gray-500">{p.total_delivered}/{p.total_parcels} delivered</span>
+                      ) : (
+                        <span className="text-xs text-amber-700 truncate" title={p.error}>{p.error}</span>
+                      )}
+                      {p.rating && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">{p.rating.replace(/_/g, " ")}</span>
+                      )}
+                    </div>
+                    {p.ok && (
+                      <span className={`text-sm font-bold ${
+                        parseFloat(p.success_ratio) >= 70 ? "text-green-600" :
+                        parseFloat(p.success_ratio) >= 40 ? "text-yellow-600" : "text-red-600"
+                      }`}>{p.success_ratio}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1774,6 +2034,23 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
           if (detailOrder?.id === oid) setDetailOrder((prev) => prev ? { ...prev, courier_sent: true, courier_type: "pathao", consignment_id: cid, courier_status: "pending" } : prev);
           setActiveCourier("pathao");
           showToast("Pathao-এ পাঠানো হয়েছে!");
+        }}
+      />
+
+      {/* Pathao bulk review modal — Option B: review/edit each order's matched location before bulk send */}
+      <PathaoBulkReviewModal
+        open={!!pathaoBulkReviewIds}
+        orderIds={pathaoBulkReviewIds || []}
+        onClose={() => setPathaoBulkReviewIds(null)}
+        onDone={({ sent, failed, results }) => {
+          for (const r of results) {
+            if (r.status === "success" && r.consignment_id) {
+              setOrders((prev) => prev.map((o) => o.id === r.order_id ? { ...o, courier_sent: true, courier_type: "pathao", consignment_id: r.consignment_id, courier_status: "pending" } : o));
+            }
+          }
+          setSelectedOrders(new Set());
+          setActiveCourier("pathao");
+          showToast(`${sent} sent to Pathao${failed > 0 ? `, ${failed} failed` : ""}`, failed > 0 ? "error" : "success");
         }}
       />
 
@@ -1991,29 +2268,56 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-[var(--primary)] focus:outline-none"
               />
               {/* Dropdown results */}
-              {productSearch.trim() && (
-                <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                  {allProducts
-                    .filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(productSearch.toLowerCase()) && !createForm.items.some((i) => i.product_id === p.id))
-                    .slice(0, 8)
-                    .map((p) => (
-                      <button type="button" key={p.id} onClick={() => addProductToOrder(p)}
-                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors">
-                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
-                          onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
-                          onMouseLeave={() => setHoverPreview(null)}
-                          onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
-                          {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+              {productSearch.trim() && (() => {
+                const matched = filterPicker(createForm.items, productSearch).slice(0, 8);
+                return (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                    {matched.map((p) => (
+                      p.has_variations && p.variants?.length ? (
+                        <div key={`p-${p.id}`} className="border-b border-gray-50 last:border-b-0">
+                          <div className="flex items-center gap-3 px-3 py-2 bg-gradient-to-r from-[var(--primary)]/5 to-transparent">
+                            <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative">
+                              {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                              <p className="text-[10px] text-gray-400">{lang === "en" ? "Pick a variant" : "ভ্যারিয়েন্ট নির্বাচন করুন"}</p>
+                            </div>
+                          </div>
+                          {p.variants.filter((v) => v.is_active !== false).map((v) => {
+                            const added = createForm.items.some((i) => i.product_id === p.id && (i.variant_id || 0) === v.id);
+                            return (
+                              <button type="button" key={`v-${v.id}`} disabled={added} onClick={() => addProductToOrder(p, v)}
+                                className={`w-full flex items-center gap-3 pl-10 pr-3 py-1.5 text-sm text-left transition-colors ${added ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"}`}>
+                                <div className="w-7 h-7 rounded-md overflow-hidden bg-gray-100 shrink-0 relative">
+                                  {(v.image || p.image) ? <SafeNextImage src={v.image || p.image || ""} alt={v.label} fill sizes="28px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-3 h-3 text-gray-300" /></div>}
+                                </div>
+                                <span className="flex-1 truncate text-[var(--primary)] font-medium">{v.label}</span>
+                                <span className="text-[var(--primary)] font-semibold shrink-0">৳{v.price}</span>
+                              </button>
+                            );
+                          })}
                         </div>
-                        <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
-                        <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
-                      </button>
+                      ) : (
+                        <button type="button" key={p.id} onClick={() => addProductToOrder(p)}
+                          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-sm text-left transition-colors cursor-pointer">
+                          <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                            onMouseEnter={(e) => { if (!p.image) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: p.image, x: r.left + r.width / 2, y: r.top }); }}
+                            onMouseLeave={() => setHoverPreview(null)}
+                            onClick={(e) => { if (p.image) { e.stopPropagation(); e.preventDefault(); setPreviewImage(p.image); } }}>
+                            {p.image ? <SafeNextImage src={p.image} alt={p.name} fill sizes="32px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                          </div>
+                          <span className="font-medium text-gray-800 flex-1 truncate">{p.name}</span>
+                          <span className="text-[var(--primary)] font-semibold shrink-0">৳{p.price}</span>
+                        </button>
+                      )
                     ))}
-                  {allProducts.filter((p) => ((q) => p.name.toLowerCase().includes(q) || (p.slug || "").toLowerCase().includes(q) || String(p.price).includes(q))(productSearch.toLowerCase()) && !createForm.items.some((i) => i.product_id === p.id)).length === 0 && (
-                    <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
-                  )}
-                </div>
-              )}
+                    {matched.length === 0 && (
+                      <div className="px-3 py-4 text-center text-xs text-gray-400">{t("empty.products")}</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Selected items */}
@@ -2022,54 +2326,65 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
             ) : (
               <div className="space-y-2">
                 {createForm.items.map((item, idx) => (
-                  <div key={item.product_id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
-                      onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
-                      onMouseLeave={() => setHoverPreview(null)}
-                      onClick={() => item.image && setPreviewImage(item.image)}>
-                      {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="40px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                  <div key={item.product_id} className="bg-gray-50 rounded-xl px-2.5 py-2 border border-gray-100">
+                    {/* Top row: image + name + remove */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-lg overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                        onMouseEnter={(e) => { if (!item.image) return; const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: item.image, x: r.left + r.width / 2, y: r.top }); }}
+                        onMouseLeave={() => setHoverPreview(null)}
+                        onClick={() => item.image && setPreviewImage(item.image)}>
+                        {item.image ? <SafeNextImage src={item.image} alt={item.product_name} fill sizes="36px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><FiPackage className="w-4 h-4 text-gray-300" /></div>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 break-words leading-tight">
+                          {item.product_name}
+                          {item.variant_label && <span className="text-[var(--primary)] font-normal"> — {item.variant_label}</span>}
+                        </p>
+                        <p className="text-[11px] text-gray-400">৳{item.price} × {item.quantity}</p>
+                      </div>
+                      <button type="button" onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg shrink-0">
+                        <FiX className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.product_name}</p>
-                      <p className="text-xs text-gray-400">৳{item.price} × {item.quantity} = ৳{item.price * item.quantity}</p>
+                    {/* Bottom row: qty controls + total */}
+                    <div className="flex items-center justify-between gap-2 mt-1.5 pl-11">
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => updateItemQty(idx, item.quantity - 1)}
+                          className="w-7 h-7 flex items-center justify-center border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
+                        <span className="w-7 text-center text-sm font-semibold">{item.quantity}</span>
+                        <button type="button" onClick={() => updateItemQty(idx, item.quantity + 1)}
+                          disabled={item.quantity >= item.stock}
+                          className="w-7 h-7 flex items-center justify-center border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold disabled:opacity-30">+</button>
+                      </div>
+                      <span className="text-sm font-bold text-[var(--primary)]">৳{item.price * item.quantity}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => updateItemQty(idx, item.quantity - 1)}
-                        className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold">−</button>
-                      <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
-                      <button type="button" onClick={() => updateItemQty(idx, item.quantity + 1)}
-                        disabled={item.quantity >= item.stock}
-                        className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-bold disabled:opacity-30">+</button>
-                    </div>
-                    <span className="text-sm font-bold text-[var(--primary)] w-16 text-right">৳{item.price * item.quantity}</span>
-                    <button type="button" onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                      <FiX className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Payment, Shipping, Discount */}
-          <div className="grid gap-3" style={{ gridTemplateColumns: "1.3fr 1.6fr 0.6fr" }}>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
-              <InlineSelect fullWidth value={createForm.payment_method} options={[
-                { value: "cod", label: t("payment.cod") },
-                { value: "bkash", label: t("payment.bkash") },
-                { value: "nagad", label: t("payment.nagad") },
-                { value: "bank", label: t("payment.bank") },
-              ]} onChange={(v) => setCreateForm({ ...createForm, payment_method: v })} />
+          {/* Payment, Discount, Shipping */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.paymentMethod")}</label>
+                <InlineSelect fullWidth value={createForm.payment_method} options={[
+                  { value: "cod", label: t("payment.cod") },
+                  { value: "bkash", label: t("payment.bkash") },
+                  { value: "nagad", label: t("payment.nagad") },
+                  { value: "bank", label: t("payment.bank") },
+                ]} onChange={(v) => setCreateForm({ ...createForm, payment_method: v })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
+                <input type="number" min="0" value={createForm.discount} onChange={(e) => setCreateForm({ ...createForm, discount: e.target.value })}
+                  className={inputCls} />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.shippingCost")}</label>
               <InlineSelect fullWidth value={createForm.shipping_cost} options={shippingZones.map(z => ({ value: String(z.rate), label: `${z.name} — ৳${z.rate}` }))} onChange={(v) => setCreateForm({ ...createForm, shipping_cost: v })} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Discount (৳)</label>
-              <input type="number" min="0" value={createForm.discount} onChange={(e) => setCreateForm({ ...createForm, discount: e.target.value })}
-                className={inputCls} />
             </div>
           </div>
 

@@ -40,6 +40,11 @@ interface ProductDetailClientProps {
   onVariantImageChange?: (image: string | undefined) => void;
 }
 
+export function TText({ en, bn }: { en: string; bn: string }) {
+  const { lang } = useLang();
+  return <>{lang === "en" ? en : bn}</>;
+}
+
 export function AddToCartSection({ productId, productName, price, image, hasVariations, variationType, variants, onVariantImageChange, productStock, productUnlimitedStock }: ProductDetailClientProps & { productStock?: number; productUnlimitedStock?: boolean }) {
   const { addItem } = useCart();
   const { lang } = useLang();
@@ -331,6 +336,7 @@ export function ProductGalleryWithVariants({
 
 export function ReviewsSection({ productId }: { productId: number }) {
   const { user } = useAuth();
+  const { lang } = useLang();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewName, setReviewName] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -354,11 +360,11 @@ export function ReviewsSection({ productId }: { productId: number }) {
     setMsg("");
     try {
       await api.submitReview({ product_id: productId, customer_name: reviewName, rating: reviewRating, review: reviewText });
-      setMsg("আপনার রিভিউ জমা হয়েছে। অনুমোদনের পর প্রকাশিত হবে।");
+      setMsg(lang === "en" ? "Your review has been submitted. It will be published after approval." : "আপনার রিভিউ জমা হয়েছে। অনুমোদনের পর প্রকাশিত হবে।");
       setReviewText("");
       setReviewRating(5);
     } catch {
-      setMsg("রিভিউ জমা দিতে সমস্যা হয়েছে।");
+      setMsg(lang === "en" ? "Failed to submit review." : "রিভিউ জমা দিতে সমস্যা হয়েছে।");
     } finally {
       setSubmitting(false);
     }
@@ -376,11 +382,11 @@ export function ReviewsSection({ productId }: { productId: number }) {
               <FiStar key={i} className={`w-4 h-4 ${i < Math.round(avgRating) ? "text-amber-400 fill-amber-400" : "text-gray-200"}`} />
             ))}
           </div>
-          <span className="text-sm text-text-muted" suppressHydrationWarning>({toBn(reviews.length)}টি রিভিউ)</span>
+          <span className="text-sm text-text-muted" suppressHydrationWarning>({lang === "en" ? `${reviews.length} reviews` : `${toBn(reviews.length)}টি রিভিউ`})</span>
         </div>
       )}
 
-      <h2 className="text-xl font-bold text-foreground mb-6">গ্রাহকদের মতামত</h2>
+      <h2 className="text-xl font-bold text-foreground mb-6">{lang === "en" ? "Customer Reviews" : "গ্রাহকদের মতামত"}</h2>
 
       {reviews.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -404,20 +410,20 @@ export function ReviewsSection({ productId }: { productId: number }) {
           ))}
         </div>
       ) : (
-        <p className="text-text-muted text-sm mb-8">এই পণ্যে এখনো কোনো রিভিউ নেই। প্রথম রিভিউ দিন!</p>
+        <p className="text-text-muted text-sm mb-8">{lang === "en" ? "No reviews yet for this product. Be the first to review!" : "এই পণ্যে এখনো কোনো রিভিউ নেই। প্রথম রিভিউ দিন!"}</p>
       )}
 
       {/* Review Form */}
       <div className="bg-white rounded-2xl border border-border p-6 max-w-lg">
-        <h3 className="text-base font-bold text-foreground mb-4">আপনার মতামত দিন</h3>
+        <h3 className="text-base font-bold text-foreground mb-4">{lang === "en" ? "Leave your review" : "আপনার মতামত দিন"}</h3>
         {msg && <div className="p-3 mb-4 bg-primary/10 text-primary text-sm rounded-lg">{msg}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">আপনার নাম</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{lang === "en" ? "Your name" : "আপনার নাম"}</label>
             <input type="text" value={reviewName} onChange={(e) => setReviewName(e.target.value)} required className="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:border-primary focus:outline-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">রেটিং</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">{lang === "en" ? "Rating" : "রেটিং"}</label>
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button key={star} type="button" onClick={() => setReviewRating(star)} className="p-1">
@@ -427,11 +433,11 @@ export function ReviewsSection({ productId }: { productId: number }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">আপনার মতামত</label>
-            <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} required rows={3} className="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none" placeholder="এই পণ্য সম্পর্কে আপনার অভিজ্ঞতা লিখুন..." />
+            <label className="block text-sm font-medium text-foreground mb-1.5">{lang === "en" ? "Your review" : "আপনার মতামত"}</label>
+            <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)} required rows={3} className="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:border-primary focus:outline-none resize-none" placeholder={lang === "en" ? "Share your experience with this product..." : "এই পণ্য সম্পর্কে আপনার অভিজ্ঞতা লিখুন..."} />
           </div>
           <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors disabled:opacity-50">
-            {submitting ? "জমা হচ্ছে..." : "রিভিউ জমা দিন"}
+            {submitting ? (lang === "en" ? "Submitting..." : "জমা হচ্ছে...") : (lang === "en" ? "Submit Review" : "রিভিউ জমা দিন")}
           </button>
         </form>
       </div>

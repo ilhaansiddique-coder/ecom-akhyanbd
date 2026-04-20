@@ -447,6 +447,59 @@ export async function listPathaoStores(): Promise<PathaoStore[]> {
   return j?.data?.data || [];
 }
 
+// ─── Address parser (uses merchant panel session token) ───
+
+export interface PathaoParsedAddress {
+  district_id?: number;   // = recipient_city in Aladdin order API
+  district_name?: string;
+  zone_id?: number;
+  zone_name?: string;
+  area_id?: number | null;
+  area_name?: string | null;
+  hub_id?: number;
+  hub_name?: string;
+  score?: number;
+  source?: string;
+  is_implicit?: boolean;
+}
+
+/**
+ * Parse a free-text Bangladesh address into Pathao city/zone/area IDs by
+ * proxying merchant.pathao.com/api/v1/address-parser. Requires the merchant
+ * panel session token (settings: pathao_web_token) — the OAuth2 Aladdin
+ * token doesn't work on this endpoint.
+ *
+ * Returns null when token is missing, upstream errors, or the address
+ * can't be matched to a district+zone.
+ */
+export async function parsePathaoAddress(address: string, phone: string): Promise<PathaoParsedAddress | null> {
+  const tokenRow = await prisma.siteSetting.findUnique({ where: { key: "pathao_web_token" } });
+  const token = tokenRow?.value?.trim();
+  if (!token || !address.trim()) return null;
+
+  try {
+    const res = await fetch("https://merchant.pathao.com/api/v1/address-parser", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Origin": "https://merchant.pathao.com",
+        "Referer": "https://merchant.pathao.com/courier/orders/create",
+      },
+      body: JSON.stringify({ address: address.trim(), recipient_identifier: phone.trim() }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const d = j?.data;
+    if (!d?.district_id || !d?.zone_id) return null;
+    return d as PathaoParsedAddress;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Helpers (re-exported from steadfast for parity) ───
 
 export function generatePathaoMerchantOrderId(orderId: number): string {

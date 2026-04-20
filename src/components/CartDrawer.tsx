@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiShoppingBag, FiTrash2, FiMinus, FiPlus } from "react-icons/fi";
 import Link from "next/link";
 import { useCart } from "@/lib/CartContext";
+import { useLang } from "@/lib/LanguageContext";
 import { toBn } from "@/utils/toBn";
 import { SafeNextImage } from "@/components/SafeImage";
 
@@ -15,6 +16,7 @@ interface CartDrawerProps {
 
 export default function CartDrawer({ open, onClose }: CartDrawerProps) {
   const { items, removeItem, updateQuantity, totalPrice } = useCart();
+  const { lang } = useLang();
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -31,9 +33,9 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <FiShoppingBag className="w-5 h-5 text-primary" />
-                <h2 className="text-lg font-bold text-foreground">শপিং কার্ট</h2>
+                <h2 className="text-lg font-bold text-foreground">{lang === "en" ? "Shopping Cart" : "শপিং কার্ট"}</h2>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-background-alt rounded-full transition-colors" aria-label="বন্ধ করুন">
+              <button onClick={onClose} className="p-2 hover:bg-background-alt rounded-full transition-colors" aria-label={lang === "en" ? "Close" : "বন্ধ করুন"}>
                 <FiX className="w-5 h-5" />
               </button>
             </div>
@@ -43,9 +45,9 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-text-muted">
                   <FiShoppingBag className="w-16 h-16" />
-                  <p className="text-lg">আপনার কার্ট খালি</p>
+                  <p className="text-lg">{lang === "en" ? "Your cart is empty" : "আপনার কার্ট খালি"}</p>
                   <button onClick={onClose} className="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
-                    শপিং করুন
+                    {lang === "en" ? "Start Shopping" : "শপিং করুন"}
                   </button>
                 </div>
               ) : (
@@ -83,16 +85,16 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
             {items.length > 0 && (
               <div className="border-t border-border px-6 py-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-text-body font-medium">সাবটোটাল</span>
+                  <span className="text-text-body font-medium">{lang === "en" ? "Subtotal" : "সাবটোটাল"}</span>
                   <span className="text-xl font-bold text-primary">৳{toBn(totalPrice)}</span>
                 </div>
-                <p className="text-xs text-text-muted">শিপিং চার্জ চেকআউটে যোগ হবে</p>
+                <p className="text-xs text-text-muted">{lang === "en" ? "Shipping charge added at checkout" : "শিপিং চার্জ চেকআউটে যোগ হবে"}</p>
                 <div className="space-y-2">
                   <Link href="/checkout" className="block w-full py-3.5 bg-primary text-white text-center rounded-xl font-semibold hover:bg-primary-light transition-colors shadow-md" onClick={onClose}>
-                    চেকআউট
+                    {lang === "en" ? "Checkout" : "চেকআউট"}
                   </Link>
                   <button onClick={onClose} className="block w-full py-3 text-center text-primary font-medium hover:bg-primary/5 rounded-xl transition-colors">
-                    শপিং চালিয়ে যান
+                    {lang === "en" ? "Continue Shopping" : "শপিং চালিয়ে যান"}
                   </button>
                 </div>
               </div>

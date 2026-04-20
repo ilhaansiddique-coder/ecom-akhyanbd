@@ -72,8 +72,10 @@ export default function ClientLayout({
     {!isDashboard && <RoutePrewarmer />}
     {!isDashboard && <NavigationProgress />}
     <Suspense fallback={null}><PreviewBridgeGate /></Suspense>
-    <FacebookPixel />
-    <GoogleTagManager />
+    {/* Analytics — storefront only. Skip dashboard so admin clicks don't pollute
+        Pixel/GTM events or trigger PageView spam in the merchant's data. */}
+    {!isDashboard && <FacebookPixel />}
+    {!isDashboard && <GoogleTagManager />}
     <FingerprintCollector />
     <AuthProvider>
     <CartProvider>

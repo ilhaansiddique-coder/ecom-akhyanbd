@@ -123,11 +123,17 @@ export async function DELETE(
   const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Product not found");
 
-  // Hard delete only when explicitly forced OR already in trash.
+  // Hard delete requires BOTH explicit force=1 AND the product to already be
+  // in trash. This prevents any accidental hard-delete when the client
+  // happens to send force=1 (or a stale build does). Single-step deletes from
+  // the main list always soft-delete; the Trash view sends force=1 to convert
+  // the second-stage click into permanent removal.
   const force = request.nextUrl.searchParams.get("force") === "1";
   const alreadyTrashed = !!existing.deletedAt;
 
-  if (force || alreadyTrashed) {
+  console.log(`[products DELETE] id=${id} force=${force} alreadyTrashed=${alreadyTrashed}`);
+
+  if (force && alreadyTrashed) {
     await prisma.product.delete({ where: { id: Number(id) } });
     revalidateAll("products");
     bumpVersion("products");
@@ -135,6 +141,7 @@ export async function DELETE(
   }
 
   // Soft delete — also deactivate so it disappears from storefront immediately.
+  // Reaches here for: first delete from any view, OR force=1 on a not-yet-trashed product.
   try {
     await prisma.product.update({
       where: { id: Number(id) },

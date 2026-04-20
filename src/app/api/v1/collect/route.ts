@@ -68,13 +68,20 @@ export async function POST(request: NextRequest) {
         // Deferred ON: stored, will fire when admin confirms order
         return jsonResponse({ success: true, deferred: true });
       }
-      // Deferred OFF: stored AND fire immediately to Facebook
-      await sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code);
+      // Deferred OFF: stored AND fire immediately to Facebook.
+      // Fire-and-forget so we return 200 to the browser before the FB call
+      // finishes. Previously this awaited the FB roundtrip, racing with the
+      // post-checkout router.push and dropping the event.
+      sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code).catch((err) => {
+        console.error("[FB CAPI] Purchase send failed:", err);
+      });
       return jsonResponse({ success: true, deferred: false });
     }
 
-    // All other events: fire immediately to Facebook CAPI
-    await sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code);
+    // All other events: fire immediately to Facebook CAPI (fire-and-forget).
+    sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code).catch((err) => {
+      console.error(`[FB CAPI] ${event_name} send failed:`, err);
+    });
     return jsonResponse({ success: true });
   } catch (error) {
     console.error("[FB CAPI] Server error:", error);

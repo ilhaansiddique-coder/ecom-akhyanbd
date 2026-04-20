@@ -239,15 +239,69 @@ export const api = {
     sendToPathaoWithPayload: (orderId: number, payload: Record<string, unknown>) =>
       fetchAPI("/admin/courier/pathao",
         { method: "POST", body: JSON.stringify({ order_id: orderId, payload }) }),
+    pathaoBulkPreview: (orderIds: number[]) =>
+      fetchAPI("/admin/courier/pathao", { method: "POST", body: JSON.stringify({ action: "bulk_preview", order_ids: orderIds }) }) as Promise<{
+        items: Array<{
+          order_id: number;
+          customer_name: string;
+          customer_phone: string;
+          valid_phone: boolean;
+          address: string;
+          amount: number;
+          item_quantity: number;
+          item_description: string;
+          special_instruction: string;
+          matched: { city_id: number; city_name: string; zone_id: number; zone_name: string; area_id: number | null; area_name: string | null; score?: number } | null;
+        }>;
+      }>,
+    pathaoBulkSendWithOverrides: (orderIds: number[], overrides: Record<number, { recipient_city: number; recipient_zone: number; recipient_area?: number }>) =>
+      fetchAPI("/admin/courier/pathao", { method: "POST", body: JSON.stringify({ action: "bulk_send", order_ids: orderIds, overrides }) }),
     pathaoCities: () => fetchAPI("/admin/courier/pathao?action=cities") as Promise<{ items: { city_id: number; city_name: string }[] }>,
     pathaoZones: (cityId: number) => fetchAPI(`/admin/courier/pathao?action=zones&city_id=${cityId}`) as Promise<{ items: { zone_id: number; zone_name: string }[] }>,
     pathaoAreas: (zoneId: number) => fetchAPI(`/admin/courier/pathao?action=areas&zone_id=${zoneId}`) as Promise<{ items: { area_id: number; area_name: string }[] }>,
+    pathaoParseAddress: (address: string, phone: string) =>
+      fetchAPI("/admin/courier/pathao/parse", { method: "POST", body: JSON.stringify({ address, phone }) }) as Promise<{
+        data?: { area_id?: number | null; area_name?: string | null; zone_id?: number; zone_name?: string;
+                 district_id?: number; district_name?: string; hub_id?: number; hub_name?: string;
+                 score?: number; source?: string; is_implicit?: boolean };
+      }>,
+    pathaoCustomerHistory: (phone: string) =>
+      fetchAPI("/admin/courier/pathao/customer-history", { method: "POST", body: JSON.stringify({ phone }) }) as Promise<{
+        data?: {
+          address_book?: Array<{
+            customer_name?: string; customer_address?: string;
+            customer_city_id?: number; customer_city_name?: string;
+            customer_zone_id?: number; customer_zone_name?: string;
+            customer_area_id?: number | null; customer_area_name?: string | null;
+          }>;
+          customer_rating?: string;
+          customer?: { total_delivery?: number; successful_delivery?: number };
+        };
+      }>,
     bulkSendToCourier: (orderIds: number[], provider: "steadfast" | "pathao" = "steadfast") =>
       fetchAPI(provider === "pathao" ? "/admin/courier/pathao" : "/admin/courier",
         { method: "POST", body: JSON.stringify({ order_ids: orderIds }) }),
     checkCourierStatus: (orderId: number, provider?: "steadfast" | "pathao") =>
       fetchAPI(provider === "pathao" ? "/admin/courier/pathao" : "/admin/courier",
         { method: "POST", body: JSON.stringify({ action: "check_status", order_id: orderId }) }),
-    checkCourierScore: (orderId: number) => fetchAPI("/admin/courier", { method: "POST", body: JSON.stringify({ action: "check_score", order_id: orderId }) }),
+    // Unified score check — calls every enabled courier and returns combined + per-provider breakdown.
+    checkCourierScore: (orderId: number) => fetchAPI("/admin/courier/score", { method: "POST", body: JSON.stringify({ order_id: orderId }) }) as Promise<{
+      success: boolean;
+      message?: string;
+      total_parcels: number;
+      total_delivered: number;
+      total_cancelled: number;
+      success_ratio: string;
+      providers: Array<{
+        provider: "steadfast" | "pathao";
+        ok: boolean;
+        total_parcels: number;
+        total_delivered: number;
+        total_cancelled: number;
+        success_ratio: string;
+        rating?: string;
+        error?: string;
+      }>;
+    }>,
   },
 };

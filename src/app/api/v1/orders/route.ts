@@ -214,30 +214,39 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
   }
 
-  // Save guest customer info (non-blocking) — uses random password, not phone number
+  // Save guest customer info (non-blocking) — phone is the primary identifier.
+  // Email is optional; we never inject a dummy `@guest.local` because that
+  // would (a) pollute the User table with fake data and (b) leak into any
+  // future tracking/email flow that reads user.email. Phone-only users still
+  // get a row so the merchant can see them in customers list; they just
+  // can't log in via email until they set one through password-reset.
   if (customerPhone && !user) {
     prisma.user.findFirst({ where: { phone: customerPhone } }).then(async (existing) => {
       if (!existing) {
         const bcrypt = await import("bcryptjs");
-        // Generate random password — guest must use "forgot password" to set their own
+        // Random password — guest must use "forgot password" to set their own
         const randomPass = randomBytes(16).toString("hex");
+        const customerEmail = (data.customer_email || data.email || "").trim() || null;
         await prisma.user.create({
           data: {
             name: customerName,
-            email: (data.customer_email || data.email || `${customerPhone}@guest.local`),
+            email: customerEmail, // null when guest didn't supply one
             password: await bcrypt.hash(randomPass, 10),
             phone: customerPhone,
             address: customerAddress || null,
             role: "customer",
           },
-        }).catch(() => {}); // Silently fail if email exists
+        }).catch(() => {}); // Silently fail on unique-email collision
       } else {
-        // Update existing guest's address + name if they placed another order
+        // Update existing guest's address + name if they placed another order.
+        // Backfill email if previously null and they supplied one this time.
+        const newEmail = (data.customer_email || data.email || "").trim();
         await prisma.user.update({
           where: { id: existing.id },
           data: {
             name: customerName,
             address: customerAddress || existing.address,
+            ...(newEmail && !existing.email ? { email: newEmail } : {}),
           },
         }).catch(() => {});
       }

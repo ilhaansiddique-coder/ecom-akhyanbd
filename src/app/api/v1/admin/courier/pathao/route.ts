@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import {
   sendToPathao,
   sendBulkToPathao,
+  parsePathaoAddress,
   checkPathaoStatus,
   checkPathaoBalance,
   isPathaoConfigured,
@@ -105,15 +106,19 @@ export async function GET(request: NextRequest) {
 
 // Build Pathao payload from order
 function buildPathaoPayload(order: any): PathaoOrder {
-  const skipCityWords = ["সারা দেশ", "সারাদেশ", "all over", "nationwide"];
-  const cityClean = order.city && !skipCityWords.some((w: string) => order.city.toLowerCase().includes(w.toLowerCase())) ? order.city : "";
-  const address = [order.customerAddress, cityClean, order.zipCode].filter(Boolean).join(", ");
+  // Address: customer-typed address only. `order.city` is the shipping zone
+  // label (e.g. "ঢাকার ভিতরে" / "ঢাকার বাহিরে") not a real city — appending
+  // it muddies the courier address. Pathao resolves city/zone via its own
+  // selectors below; the address parser also works better without the label.
+  const address = order.customerAddress || "";
 
+  // Item description sent to Pathao. Format: "Name – Variant x Qty",
+  // simple products skip variant. Joined with " / ". No price.
   const items = (order.items || []).map((i: any) => {
     const name = i.productName || i.product_name;
     const variant = i.variantLabel || i.variant_label;
-    const label = variant ? `${name} (${variant})` : name;
-    return `${label} x${i.quantity}`;
+    const label = variant ? `${name} – ${variant}` : name;
+    return `${label} x ${i.quantity}`;
   });
   const itemsDesc = items.join(" / ");
   const totalQty = (order.items || []).reduce((s: number, i: any) => s + Number(i.quantity || 1), 0) || 1;
@@ -160,6 +165,47 @@ export async function POST(request: NextRequest) {
     } catch { return errorResponse("Failed to check status", 500); }
   }
 
+  // Bulk preview — returns each order's base payload + auto-matched city/zone/area
+  // for the review modal. No DB writes, no Pathao bulk call.
+  if (body.action === "bulk_preview" && Array.isArray(body.order_ids)) {
+    const orders = await prisma.order.findMany({
+      where: { id: { in: body.order_ids.map(Number) }, courierSent: false },
+      include: { items: true },
+    });
+    const items = await Promise.all(orders.map(async (o) => {
+      const base = buildPathaoPayload(o);
+      const validPhone = isValidBDPhone(o.customerPhone);
+      let matched: any = null;
+      if (validPhone) {
+        const parsed = await parsePathaoAddress(base.recipient_address, base.recipient_phone);
+        if (parsed?.district_id && parsed?.zone_id) {
+          matched = {
+            city_id: parsed.district_id,
+            city_name: parsed.district_name,
+            zone_id: parsed.zone_id,
+            zone_name: parsed.zone_name,
+            area_id: parsed.area_id || null,
+            area_name: parsed.area_name || null,
+            score: parsed.score,
+          };
+        }
+      }
+      return {
+        order_id: o.id,
+        customer_name: o.customerName,
+        customer_phone: o.customerPhone,
+        valid_phone: validPhone,
+        address: base.recipient_address,
+        amount: base.amount_to_collect,
+        item_quantity: base.item_quantity,
+        item_description: base.item_description,
+        special_instruction: base.special_instruction,
+        matched,
+      };
+    }));
+    return jsonResponse({ items });
+  }
+
   // Bulk send via Pathao bulk API
   if (body.action === "bulk_send" && Array.isArray(body.order_ids)) {
     const orders = await prisma.order.findMany({
@@ -169,8 +215,44 @@ export async function POST(request: NextRequest) {
     const validOrders = orders.filter(o => isValidBDPhone(o.customerPhone));
     if (validOrders.length === 0) return errorResponse("No valid orders to send", 400);
 
-    const payloads = validOrders.map(buildPathaoPayload);
-    const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+    // Per-order overrides from review modal: { [orderId]: { recipient_city, recipient_zone, recipient_area, ... } }
+    const overrides: Record<string, Partial<PathaoOrder>> = body.overrides || {};
+    // Auto-match per-order city/zone/area from address (only if web token configured).
+    // Without this every bulk order falls back to the same default location.
+    // Default ON; client can pass auto_match: false to skip. Skipped per-order when override given.
+    const autoMatch = body.auto_match !== false;
+    const matchInfo: { order_id: number; matched: boolean; city?: string; zone?: string; area?: string; override?: boolean }[] = [];
+    const payloads = await Promise.all(validOrders.map(async (o) => {
+      const base = buildPathaoPayload(o);
+      const ov = overrides[String(o.id)];
+      if (ov && ov.recipient_city && ov.recipient_zone) {
+        matchInfo.push({ order_id: o.id, matched: true, override: true });
+        return { ...base, ...ov, merchant_order_id: base.merchant_order_id };
+      }
+      if (!autoMatch) {
+        matchInfo.push({ order_id: o.id, matched: false });
+        return base;
+      }
+      const parsed = await parsePathaoAddress(base.recipient_address, base.recipient_phone);
+      if (parsed?.district_id && parsed?.zone_id) {
+        matchInfo.push({
+          order_id: o.id,
+          matched: true,
+          city: parsed.district_name,
+          zone: parsed.zone_name,
+          area: parsed.area_name || undefined,
+        });
+        return {
+          ...base,
+          recipient_city: parsed.district_id,
+          recipient_zone: parsed.zone_id,
+          ...(parsed.area_id ? { recipient_area: parsed.area_id } : {}),
+        };
+      }
+      matchInfo.push({ order_id: o.id, matched: false });
+      return base; // falls back to defaults inside sendBulkToPathao
+    }));
+    const results: { order_id: number; status: string; consignment_id?: string; error?: string; matched?: boolean }[] = [];
 
     try {
       const res = await sendBulkToPathao(payloads);
@@ -184,10 +266,12 @@ export async function POST(request: NextRequest) {
             where: { id: order.id },
             data: { courierSent: true, courierType: "pathao", consignmentId: String(item.consignment_id), courierStatus: item.order_status || "pending" },
           });
-          results.push({ order_id: order.id, status: "success", consignment_id: String(item.consignment_id) });
+          const m = matchInfo.find(x => x.order_id === order.id);
+          results.push({ order_id: order.id, status: "success", consignment_id: String(item.consignment_id), matched: m?.matched });
         } else {
           const err = item?.errors ? Object.values(item.errors).flat().join(", ") : "Failed";
-          results.push({ order_id: order.id, status: "error", error: err });
+          const m = matchInfo.find(x => x.order_id === order.id);
+          results.push({ order_id: order.id, status: "error", error: err, matched: m?.matched });
         }
       }
     } catch (err) {
@@ -211,7 +295,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return jsonResponse({ results, total: validOrders.length, sent: results.filter(r => r.status === "success").length });
+    const auto_matched = matchInfo.filter(m => m.matched).length;
+    const fallback = matchInfo.length - auto_matched;
+    return jsonResponse({
+      results,
+      total: validOrders.length,
+      sent: results.filter(r => r.status === "success").length,
+      auto_matched,
+      fallback,
+      match_info: matchInfo,
+    });
   }
 
   // Multiple order_ids — sequential send

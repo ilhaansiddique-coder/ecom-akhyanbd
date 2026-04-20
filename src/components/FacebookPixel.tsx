@@ -28,6 +28,32 @@ export default function FacebookPixel() {
     trackPageView();
   }, [pathname, pixelId]);
 
+  // Cleanup on unmount — same reason as GTM. Storefront → /dashboard nav
+  // unmounts this component, but the fbevents.js <script> + window.fbq
+  // global persist and keep firing PageView on route changes. Strip them.
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") return;
+      document
+        .querySelectorAll('script[src*="connect.facebook.net"]')
+        .forEach((s) => s.remove());
+      document.getElementById("fb-pixel")?.remove();
+      document.getElementById("fb-pixel-ready")?.remove();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).fbq;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any)._fbq;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).__fbPixelReady;
+      } catch {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).fbq = undefined;
+      }
+      initialized.current = false;
+    };
+  }, []);
+
   // Store pixel ID — also kicks off the first PageView once the script is
   // ready (a tiny poll is cheaper than wiring an onLoad chain through Script).
   useEffect(() => {

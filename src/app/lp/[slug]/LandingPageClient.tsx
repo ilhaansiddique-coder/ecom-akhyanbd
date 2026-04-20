@@ -11,6 +11,7 @@ import "swiper/css";
 import "swiper/css/pagination";
 import { api } from "@/lib/api";
 import { useOption } from "@/lib/SiteSettingsContext";
+import { trackViewContent, trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
 
 interface ProductVariant {
   id: number; label: string; price: number; original_price?: number; stock: number; image?: string;
@@ -115,6 +116,63 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       if (zones.length > 0) setSelectedZone(zones[0].id);
     }).catch(() => {});
   }, []);
+
+  // ── Tracking ──
+  // ViewContent — once per LP load. Mirrors product page behavior so FB sees
+  // the LP visit as a product view (one event per product on the page).
+  const viewContentFired = useRef(false);
+  useEffect(() => {
+    if (viewContentFired.current) return;
+    if (products.length === 0) return;
+    viewContentFired.current = true;
+    // One ViewContent per product. For a single-product LP, mirrors PDP exactly.
+    // For multi-product LP, FB still gets distinct content_ids per product.
+    for (const p of products) {
+      trackViewContent({
+        content_ids: [p.id],
+        content_name: p.name,
+        value: p.price,
+        content_category: "landing-page",
+        sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
+      });
+    }
+  }, [products]);
+
+  // InitiateCheckout — fire once when the checkout section scrolls into view.
+  // The whole LP is a single page; the user "enters checkout" by reaching the
+  // form, not by navigating. IntersectionObserver matches that intent better
+  // than a timer-on-mount.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (products.length === 0) return;
+    const el = document.getElementById("checkout");
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting && !checkoutTracked.current) {
+          checkoutTracked.current = true;
+          trackInitiateCheckout({
+            content_ids: products.map((p) => p.id),
+            content_name: products.map((p) => p.name).join(", "),
+            contents: products.map((p) => ({
+              id: String(p.id),
+              quantity: quantities[p.id] || 1,
+              item_price: getProductPrice(p),
+            })),
+            num_items: products.reduce((s, p) => s + (quantities[p.id] || 1), 0),
+            value: subtotal,
+          });
+          obs.disconnect();
+          break;
+        }
+      }
+    }, { threshold: 0.25 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  // Re-arm only when the product set itself changes (effectively never on a
+  // mounted LP). subtotal/quantities are read inside the handler at fire time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products.length]);
 
   const problemPointsRaw = parseJSON<any>(page.problem_points);
   const problemPoints = problemPointsRaw.map((p: any) => typeof p === "string" ? { text: p, icon: "" } : { text: p.text || "", icon: p.icon || "" });
@@ -244,12 +302,31 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         payment_method: "cod", items,
         notes: `Landing page: ${page.slug}`,
       });
+      // Purchase — fire BEFORE router.push so sendBeacon flushes to /api/v1/collect
+      // before the navigation aborts in-flight fetches. Mirrors checkout/page.tsx.
+      const orderIdNum = res.id || res.data?.id;
+      trackPurchase({
+        content_ids: items.map((i) => i.product_id),
+        content_name: items.map((i) => i.product_name).join(", "),
+        contents: items.map((i) => ({ id: i.product_id, quantity: i.quantity, item_price: i.price })),
+        num_items: items.reduce((s, i) => s + i.quantity, 0),
+        value: res.total || total,
+        order_id: String(orderIdNum || ""),
+        shipping,
+      }, {
+        em: form.email || undefined,
+        ph: form.phone || undefined,
+        fn: form.name || undefined,
+        ln: form.name?.includes(" ") ? form.name.split(" ").slice(1).join(" ") : undefined,
+        ct: form.city || undefined,
+        country: "bd",
+      });
+
       const token = res.order_token;
       if (token) {
         router.push(`/order/${token}`);
       } else {
-        const orderId = res.id || res.data?.id;
-        router.push(`/lp/${page.slug}/thank-you?order=${orderId}`);
+        router.push(`/lp/${page.slug}/thank-you?order=${orderIdNum}`);
       }
     } catch (err) {
       setError((err as { message?: string }).message || "অর্ডার করতে সমস্যা হয়েছে");

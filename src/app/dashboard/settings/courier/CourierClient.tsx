@@ -33,6 +33,7 @@ interface CourierSettings {
   pathao_default_item_type?: string;
   pathao_auto_send?: string;
   pathao_include_notes?: string;
+  pathao_web_token?: string;
 }
 
 const defaults: CourierSettings = {
@@ -55,6 +56,7 @@ const defaults: CourierSettings = {
   pathao_default_item_type: "2",
   pathao_auto_send: "false",
   pathao_include_notes: "true",
+  pathao_web_token: "",
 };
 
 interface PathaoListItem {
@@ -268,6 +270,25 @@ export default function CourierClient({ initialData }: { initialData?: Record<st
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Merchant panel session token — used for the auto address-parser
+                  on the order send modal. Different from OAuth client_secret.
+                  Get it from merchant.pathao.com → DevTools → Network →
+                  any request → Authorization header (after "Bearer "). */}
+              <div>
+                <label className={labelCls}>
+                  Merchant Panel Token
+                  <span className="ml-2 text-xs font-normal text-gray-400">(for auto address matching — paste from merchant.pathao.com session)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.pathao_web_token || ""}
+                  onChange={(e) => setForm(p => ({ ...p, pathao_web_token: e.target.value }))}
+                  className={inputCls + " font-mono text-xs"}
+                  placeholder="eyJhbGciOiJSUzI1NiIs..."
+                />
+                <p className="mt-1 text-xs text-gray-400">Expires every ~3 months — re-paste when auto-match stops working.</p>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4">

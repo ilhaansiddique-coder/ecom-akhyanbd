@@ -188,8 +188,10 @@ interface DashboardLayoutProps {
   title: string;
 }
 
-// Read collapsed state synchronously to prevent flash on navigation
-function getInitialCollapsed(): boolean {
+// Read collapsed state from localStorage. Used in a post-mount effect so SSR
+// markup (always expanded) matches first client render — preventing hydration
+// mismatch — and the real preference is applied immediately after.
+function readCollapsed(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem("sidebar_collapsed") === "true";
 }
@@ -219,7 +221,10 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
   const settings = useSiteSettings();
   const siteLogo = settings.site_logo || "/logo.svg";
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
+  // Start expanded on both SSR + first client render to avoid hydration mismatch,
+  // then sync to the persisted preference in a layout effect (runs before paint).
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { setCollapsed(readCollapsed()); }, []);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const navGroups = buildNavGroups(t, user?.role ?? "");
 
@@ -482,9 +487,14 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
   return (
     <DashboardShellContext.Provider value={{ setTitle }}>
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Desktop Sidebar — no width transition to prevent flash on navigation */}
+      {/* Desktop Sidebar — no width transition to prevent flash on navigation.
+          Inline style mirrors the Tailwind class but also gives a hard fallback
+          (#0f5931) so the sidebar still renders themed even if the
+          <style id="theme-tokens"> block is missing/empty during a fast HMR
+          reload or before the SiteSettingsProvider has hydrated. */}
       <aside
-        className={`hidden lg:flex flex-col flex-shrink-0 bg-[var(--primary)] relative ${
+        style={{ backgroundColor: "var(--primary, #0f5931)" }}
+        className={`hidden lg:flex flex-col flex-shrink-0 relative ${
           collapsed ? "w-[68px] overflow-visible" : "w-[260px]"
         }`}
       >
@@ -492,7 +502,8 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
         {/* Collapse toggle button */}
         <button
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-8 w-6 h-6 bg-[var(--primary)] border-2 border-gray-200 rounded-full flex items-center justify-center text-white hover:bg-[var(--primary-light)] transition-colors z-10 shadow-sm"
+          style={{ backgroundColor: "var(--primary, #0f5931)" }}
+          className="absolute -right-3 top-8 w-6 h-6 border-2 border-gray-200 rounded-full flex items-center justify-center text-white hover:opacity-90 transition-opacity z-10 shadow-sm"
         >
           {collapsed ? (
             <FiChevronRight className="w-3 h-3" />
@@ -518,7 +529,8 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
               animate={{ x: 0 }}
               exit={{ x: -260 }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed left-0 top-0 bottom-0 w-[260px] bg-[var(--primary)] z-50 lg:hidden flex flex-col"
+              style={{ backgroundColor: "var(--primary, #0f5931)" }}
+              className="fixed left-0 top-0 bottom-0 w-[260px] z-50 lg:hidden flex flex-col"
             >
               {/* Close button floating top-right */}
               <button
@@ -554,7 +566,7 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
               <FiHome className="w-4 h-4" />
               <span className="hidden sm:block">{t("dash.homepage")}</span>
             </Link>
-            <span className="hidden sm:block text-sm text-gray-600 font-medium">{user?.name}</span>
+            <span className="hidden sm:block text-sm text-gray-600 font-medium" suppressHydrationWarning>{user?.name}</span>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"

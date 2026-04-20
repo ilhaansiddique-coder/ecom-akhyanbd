@@ -1,11 +1,35 @@
 "use client";
 
+import { useEffect } from "react";
 import Script from "next/script";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
 
 export default function GoogleTagManager() {
   const settings = useSiteSettings();
   const gtmId = settings.gtm_id?.trim();
+
+  // Cleanup on unmount — when user navigates from storefront into /dashboard,
+  // ClientLayout stops rendering this component, but the script tag injected
+  // by the inline IIFE (and the `dataLayer` global) persist and keep firing.
+  // Strip them so admin clicks don't pollute GTM events.
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") return;
+      document
+        .querySelectorAll('script[src*="googletagmanager.com/gtm.js"]')
+        .forEach((s) => s.remove());
+      document.getElementById("gtm-script")?.remove();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).dataLayer;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).google_tag_manager;
+      } catch {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).dataLayer = undefined;
+      }
+    };
+  }, []);
 
   if (!gtmId) return null;
 

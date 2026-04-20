@@ -72,7 +72,7 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
 
   // Build category list from API categories
   const categoryButtons = [
-    { name: "সকল পণ্য", slug: "all" },
+    { name: lang === "en" ? "All Products" : "সকল পণ্য", slug: "all" },
     ...apiCategories.map((c) => ({ name: c.name, slug: c.slug })),
   ];
 
@@ -113,8 +113,10 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-8">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">সকল পণ্য</h1>
-              <p className="text-text-muted text-sm mt-1" suppressHydrationWarning>{toBn(filtered.length)}টি পণ্য পাওয়া গেছে</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{lang === "en" ? "All Products" : "সকল পণ্য"}</h1>
+              <p className="text-text-muted text-sm mt-1" suppressHydrationWarning>
+                {lang === "en" ? `${filtered.length} products found` : `${toBn(filtered.length)}টি পণ্য পাওয়া গেছে`}
+              </p>
             </div>
             {/* Search */}
             <div className="relative w-full md:w-72">
@@ -123,7 +125,7 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="পণ্য খুঁজুন..."
+                placeholder={lang === "en" ? "Search products..." : "পণ্য খুঁজুন..."}
                 className="w-full pl-10 pr-4 py-2.5 border border-border rounded-xl text-sm bg-white focus:border-primary focus:outline-none transition-colors"
               />
             </div>
@@ -162,9 +164,9 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
 
           {filtered.length === 0 && (
             <div className="text-center py-16 text-text-muted">
-              <p className="text-lg">কোনো পণ্য পাওয়া যায়নি</p>
+              <p className="text-lg">{lang === "en" ? "No products found" : "কোনো পণ্য পাওয়া যায়নি"}</p>
               <button onClick={() => { setActiveCategory("all"); setSearch(""); }} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
-                সব পণ্য দেখুন
+                {lang === "en" ? "View All Products" : "সব পণ্য দেখুন"}
               </button>
             </div>
           )}

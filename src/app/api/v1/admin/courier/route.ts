@@ -98,17 +98,19 @@ export async function GET(request: NextRequest) {
 
 // Helper: build clean Steadfast payload from order
 function buildSteadfastPayload(order: any) {
-  const skipCityWords = ["সারা দেশ", "সারাদেশ", "all over", "nationwide"];
-  const cityClean = order.city && !skipCityWords.some((w: string) => order.city.toLowerCase().includes(w.toLowerCase())) ? order.city : "";
-  const address = [order.customerAddress, cityClean, order.zipCode].filter(Boolean).join(", ");
+  // Address: customer-typed address only. `order.city` is the shipping zone
+  // label (e.g. "ঢাকার ভিতরে" / "ঢাকার বাহিরে") not a real city — appending
+  // it muddies the courier address.
+  const address = order.customerAddress || "";
 
-  // Product names × quantities × prices (1 line per item)
+  // Item description sent to courier. Format: "Name – Variant x Qty",
+  // simple products skip the variant part. Multiple items joined with " / ".
+  // Price intentionally omitted — riders only need name + variant + qty.
   const items = (order.items || []).map((i: any) => {
     const name = i.productName || i.product_name;
     const variant = i.variantLabel || i.variant_label;
-    const label = variant ? `${name} (${variant})` : name;
-    const price = Number(i.price) * Number(i.quantity);
-    return `${label} x${i.quantity} = ৳${price}`;
+    const label = variant ? `${name} – ${variant}` : name;
+    return `${label} x ${i.quantity}`;
   });
   const itemsDescription = items.join(" / ");
   const note = [itemsDescription, order.notes].filter(Boolean).join(" | ");

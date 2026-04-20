@@ -10,10 +10,12 @@ interface ModalProps {
   title: string;
   size?: "sm" | "md" | "lg" | "xl";
   persistent?: boolean; // Don't close on backdrop click
+  /** Rendered between the title and the X close button — e.g. a compact toggle. */
+  headerAction?: ReactNode;
   children: ReactNode;
 }
 
-export default function Modal({ open, onClose, title, size = "md", persistent, children }: ModalProps) {
+export default function Modal({ open, onClose, title, size = "md", persistent, headerAction, children }: ModalProps) {
   const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-2xl" };
 
   return (
@@ -37,11 +39,14 @@ export default function Modal({ open, onClose, title, size = "md", persistent, c
             className={`relative z-10 bg-white rounded-2xl shadow-xl w-full ${widths[size]} max-h-[90vh] flex flex-col overflow-hidden`}
           >
             {/* Header — fixed at top */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-              <h2 className="text-base font-bold text-gray-800">{title}</h2>
-              <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 transition-colors">
-                <FiX className="w-5 h-5" />
-              </button>
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 shrink-0">
+              <h2 className="text-base font-bold text-gray-800 truncate">{title}</h2>
+              <div className="flex items-center gap-2 shrink-0">
+                {headerAction}
+                <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 transition-colors">
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable body — scrollbar inside rounded corners */}

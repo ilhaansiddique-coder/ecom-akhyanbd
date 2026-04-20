@@ -2,6 +2,7 @@ import { FiMail } from "react-icons/fi";
 import MotionFadeIn from "@/components/MotionFadeIn";
 import ContactForm from "@/components/ContactForm";
 import ContactInfo from "@/components/ContactInfo";
+import { TText } from "@/components/ProductDetailClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -22,11 +23,11 @@ export default function ContactPage() {
           <MotionFadeIn>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/15 rounded-full text-white/90 text-sm mb-6 backdrop-blur-sm">
               <FiMail className="w-4 h-4" />
-              আমাদের সাথে কথা বলুন
+              <TText en="Talk to us" bn="আমাদের সাথে কথা বলুন" />
             </span>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">যোগাযোগ</h1>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4"><TText en="Contact" bn="যোগাযোগ" /></h1>
             <p className="text-white/80 text-lg max-w-xl mx-auto leading-relaxed">
-              যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন।
+              <TText en="Reach out for any question, suggestion or order-related matter." bn="যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন।" />
             </p>
           </MotionFadeIn>
         </div>
@@ -39,7 +40,7 @@ export default function ContactPage() {
             {/* Form */}
             <MotionFadeIn className="lg:col-span-2">
               <div className="bg-white border border-border rounded-2xl p-6 md:p-8 shadow-sm">
-                <h2 className="text-2xl font-bold text-foreground mb-6">বার্তা পাঠান</h2>
+                <h2 className="text-2xl font-bold text-foreground mb-6"><TText en="Send Message" bn="বার্তা পাঠান" /></h2>
                 <ContactForm />
               </div>
             </MotionFadeIn>

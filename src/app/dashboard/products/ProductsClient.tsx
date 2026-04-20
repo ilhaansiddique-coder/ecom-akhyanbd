@@ -678,7 +678,21 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       </motion.div>
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("modal.editProduct") : t("modal.newProduct")} size="xl" persistent>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t("modal.editProduct") : t("modal.newProduct")} size="xl" persistent
+        headerAction={
+          // Variable toggle lives in the modal header so it's always visible
+          // even when scrolled deep into the form, and so the Price/Stock
+          // fields below can be cleanly conditionally rendered.
+          <button type="button" onClick={() => setForm(prev => ({ ...prev, has_variations: !prev.has_variations }))}
+            className={`flex items-center gap-1.5 px-2.5 h-7 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
+              form.has_variations ? "border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+            }`}>
+            <span>{lang === "en" ? "Variable" : "ভ্যারিয়েবল"}</span>
+            <div className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${form.has_variations ? "bg-[var(--primary)]" : "bg-gray-300"}`}>
+              <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform ${form.has_variations ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+            </div>
+          </button>
+        }>
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
@@ -697,7 +711,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                     <label className={labelCls}>{t("form.brand")}</label>
                     <InlineSelect fullWidth value={form.brand_id} options={[{ value: "", label: t("form.select") }, ...brands.map(b => ({ value: String(b.id), label: b.name }))]} onChange={(v) => { setForm(prev => ({ ...prev, brand_id: v })); }} placeholder={t("form.select")} />
                   </div>
-                  {/* Row: Price | Original Price | Stock — 33% each */}
+                  {/* Row: Price | Original Price | Stock — only for simple products.
+                      Variable products derive these from per-variant rows below. */}
+                  {!form.has_variations && (
                   <div className="grid grid-cols-3 gap-3 col-span-2">
                     <div>
                       <label className={labelCls}>{t("form.price")} *</label>
@@ -717,7 +733,10 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                       {form.has_variations && <p className="text-[10px] text-gray-400 mt-0.5">{lang === "en" ? "Auto from variants" : "ভ্যারিয়েশন থেকে"}</p>}
                     </div>
                   </div>
-                  {/* Row: Unlimited toggle | Badge — 2 cols on mobile, 3 on desktop */}
+                  )}
+                  {/* Row: Unlimited toggle | Badge | Weight — hidden for variable products
+                      since stock + badge + weight are per-variant concerns there. */}
+                  {!form.has_variations && (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 col-span-2">
                     <div>
                       <label className={labelCls}>&nbsp;</label>
@@ -764,6 +783,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                       <input name="weight" value={form.weight} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, weight: v })); }} className={inputCls} placeholder="যেমন: ১০০গ্রাম" />
                     </div>
                   </div>
+                  )}
                   {/* Custom Shipping */}
                   <div className="grid grid-cols-2 gap-3 col-span-2">
                     <div>
@@ -831,18 +851,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                     )}
                   </div>
                 </div>
-                {/* Has Variations — full width row */}
-                <div className="col-span-2">
-                  <button type="button" onClick={() => setForm(prev => ({ ...prev, has_variations: !prev.has_variations }))}
-                    className={`w-full h-[42px] flex items-center justify-between gap-2 px-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                      form.has_variations ? "border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)]" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
-                    }`}>
-                    <span>{lang === "en" ? "Has Variations" : "ভ্যারিয়েশন আছে"}</span>
-                    <div className={`relative w-9 h-5 rounded-full transition-colors ${form.has_variations ? "bg-[var(--primary)]" : "bg-gray-300"}`}>
-                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${form.has_variations ? "translate-x-4" : "translate-x-0.5"}`} />
-                    </div>
-                  </button>
-                </div>
+                {/* Variable toggle moved to modal header (see Modal headerAction prop above). */}
                 {/* Variations Detail (shown when toggle is on) */}
                 {form.has_variations && (
                   <div className="border border-[var(--primary)]/20 bg-[var(--primary)]/[0.02] rounded-xl p-4 space-y-3">
@@ -870,8 +879,16 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-400">{lang === "en" ? "Stock" : "স্টক"}</label>
-                            <input type="number" min="0" value={v.stock} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], stock: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
-                              className={inputCls} placeholder="0" disabled={v.unlimited_stock} />
+                            {v.unlimited_stock ? (
+                              // Auto-collapse Stock to a green badge when Unlimited is on —
+                              // typing a number here would be discarded anyway.
+                              <div className={inputCls + " flex items-center justify-center text-[11px] font-medium text-emerald-600 bg-emerald-50 border-emerald-200"}>
+                                {lang === "en" ? "Unlimited" : "আনলিমিটেড"}
+                              </div>
+                            ) : (
+                              <input type="number" min="0" value={v.stock} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], stock: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
+                                className={inputCls} placeholder="0" />
+                            )}
                           </div>
                           <div className="flex items-end pb-0.5">
                             {v.image ? (

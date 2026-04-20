@@ -133,7 +133,9 @@ export const contactSchema = z.object({
 export const productSchema = z.object({
   // ── Required ──
   name: z.string().min(1, "পণ্যের নাম দিন"),
-  price: z.coerce.number().min(1, "দাম দিন"),
+  // Variable products derive price from variants; superRefine below enforces
+  // price >= 1 for simple products and variants.length >= 1 for variable ones.
+  price: z.coerce.number().optional().default(0),
   // ── Optional ──
   slug: strOpt,
   category_id: numOpt,
@@ -166,6 +168,24 @@ export const productSchema = z.object({
     is_active: z.boolean().optional(),
   })).optional(),
   sort_order: intDef(0),
+}).superRefine((val, ctx) => {
+  if (val.has_variations) {
+    if (!val.variants || val.variants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["variants"],
+        message: "অন্তত একটি ভ্যারিয়েন্ট দিন",
+      });
+    }
+  } else {
+    if (!val.price || val.price < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["price"],
+        message: "দাম দিন",
+      });
+    }
+  }
 });
 
 // ─── Admin: Categories ───

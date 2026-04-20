@@ -22,6 +22,7 @@ export async function GET(_request: NextRequest) {
     "pathao_password",
     "pathao_access_token",
     "pathao_refresh_token",
+    "pathao_web_token",
   ]);
 
   // Convert to key-value object, masking sensitive values

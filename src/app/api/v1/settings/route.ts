@@ -14,6 +14,7 @@ const PRIVATE_KEYS = new Set([
   "pathao_access_token",
   "pathao_refresh_token",
   "pathao_token_expires_at",
+  "pathao_web_token",
 ]);
 
 export async function GET() {

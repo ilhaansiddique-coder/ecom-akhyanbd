@@ -7,7 +7,7 @@ import { serialize } from "@/lib/serialize";
 import { mapApiProduct, type Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import ProductCard from "@/components/ProductCard";
-import { ProductGalleryWithVariants, ReviewsSection } from "@/components/ProductDetailClient";
+import { ProductGalleryWithVariants, ReviewsSection, TText } from "@/components/ProductDetailClient";
 import type { Metadata } from "next";
 
 // ISR: regenerate every 5 minutes (was 60s — too aggressive, kills static cache).
@@ -140,9 +140,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
       <div className="container mx-auto px-4">
         <div className="flex items-center gap-2 text-sm text-text-muted mb-6">
-          <Link href="/" className="hover:text-primary transition-colors">হোম</Link>
+          <Link href="/" className="hover:text-primary transition-colors"><TText en="Home" bn="হোম" /></Link>
           <span>/</span>
-          <Link href="/shop" className="hover:text-primary transition-colors">শপ</Link>
+          <Link href="/shop" className="hover:text-primary transition-colors"><TText en="Shop" bn="শপ" /></Link>
           <span>/</span>
           <span className="text-foreground truncate max-w-48">{displayName}</span>
         </div>
@@ -182,7 +182,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                     <span className="text-xl text-text-light line-through" suppressHydrationWarning>৳{toBn(product.originalPrice)}</span>
                   )}
                   {discount > 0 && (
-                    <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>{toBn(discount)}% ছাড়</span>
+                    <span className="text-sm font-bold text-sale-red bg-sale-red/10 px-2.5 py-1 rounded-lg" suppressHydrationWarning>{toBn(discount)}% <TText en="off" bn="ছাড়" /></span>
                   )}
                 </div>
               )}
@@ -190,13 +190,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             detailsBottom={
               <div className="mt-6 grid grid-cols-3 gap-3">
                 {[
-                  { icon: FiTruck, text: "দ্রুত ডেলিভারি" },
-                  { icon: FiShield, text: "ত্বক-বান্ধব" },
-                  { icon: FiStar, text: "প্রিমিয়াম মান" },
+                  { icon: FiTruck, en: "Fast Delivery", bn: "দ্রুত ডেলিভারি" },
+                  { icon: FiShield, en: "Skin Friendly", bn: "ত্বক-বান্ধব" },
+                  { icon: FiStar, en: "Premium Quality", bn: "প্রিমিয়াম মান" },
                 ].map((b) => (
-                  <div key={b.text} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-border">
+                  <div key={b.bn} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-border">
                     <b.icon className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-xs font-medium text-text-body">{b.text}</span>
+                    <span className="text-xs font-medium text-text-body"><TText en={b.en} bn={b.bn} /></span>
                   </div>
                 ))}
               </div>
@@ -206,7 +206,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         {product.descriptionBn && (
           <div className="mt-10 bg-white rounded-2xl border border-border p-6 md:p-8">
-            <h2 className="text-xl font-bold text-foreground mb-4">পণ্যের বিবরণ</h2>
+            <h2 className="text-xl font-bold text-foreground mb-4"><TText en="Product Description" bn="পণ্যের বিবরণ" /></h2>
             <div className="text-text-body leading-relaxed whitespace-pre-line">{product.descriptionBn}</div>
           </div>
         )}
@@ -245,7 +245,7 @@ async function RelatedProducts({ categoryId, excludeId }: { categoryId: number; 
 
   return (
     <div className="mt-12">
-      <h2 className="text-xl font-bold text-foreground mb-6">সম্পর্কিত পণ্য</h2>
+      <h2 className="text-xl font-bold text-foreground mb-6"><TText en="Related Products" bn="সম্পর্কিত পণ্য" /></h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
         {related.map((p) => (
           <ProductCard key={p.id} product={p} />

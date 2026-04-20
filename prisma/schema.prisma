@@ -11,7 +11,11 @@ datasource db {
 model User {
   id              Int       @id @default(autoincrement())
   name            String
-  email           String    @unique
+  // Optional + unique: nullable lets guests place orders without an email.
+  // Postgres allows multiple NULLs under a UNIQUE constraint, so phone-only
+  // guest users never collide. Email-based login still works for users who
+  // do supply one; phone-only users can register later.
+  email           String?   @unique
   emailVerifiedAt DateTime? @map("email_verified_at")
   password        String
   phone           String?

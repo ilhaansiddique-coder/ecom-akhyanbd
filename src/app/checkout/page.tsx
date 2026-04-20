@@ -7,6 +7,7 @@ import { FiShoppingBag, FiCheck, FiPrinter, FiDownload, FiMinus, FiPlus, FiTrash
 import { useCart, CartItem } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
+import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
 import { trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
 import { useFingerprint } from "@/hooks/useFingerprint";
@@ -42,6 +43,7 @@ export default function CheckoutPage() {
   const { items, hydrated, totalPrice, clearCart, updateQuantity, removeItem } = useCart();
   const { user } = useAuth();
   const siteSettings = useSiteSettings();
+  const { lang } = useLang();
   const siteName = siteSettings.site_name || "Site";
   const siteEmail = siteSettings.email || "";
   const sitePhone = siteSettings.phone || "";
@@ -69,9 +71,13 @@ export default function CheckoutPage() {
   const validatePhone = (val: string): string => {
     const digits = val.replace(/\D/g, "");
     if (!digits) return "";
-    if (digits.length !== 11) return `ফোন নম্বর অবশ্যই ১১ সংখ্যার হতে হবে (আপনি দিয়েছেন ${digits.length}টি)`;
+    if (digits.length !== 11) return lang === "en"
+      ? `Phone number must be 11 digits (you entered ${digits.length})`
+      : `ফোন নম্বর অবশ্যই ১১ সংখ্যার হতে হবে (আপনি দিয়েছেন ${digits.length}টি)`;
     const validPrefixes = ["013","014","015","016","017","018","019"];
-    if (!validPrefixes.some(p => digits.startsWith(p))) return "অবৈধ নম্বর — ০১৩/০১৪/০১৫/০১৬/০১৭/০১৮/০১৯ দিয়ে শুরু হতে হবে";
+    if (!validPrefixes.some(p => digits.startsWith(p))) return lang === "en"
+      ? "Invalid number — must start with 013/014/015/016/017/018/019"
+      : "অবৈধ নম্বর — ০১৩/০১৪/০১৫/০১৬/০১৭/০১৮/০১৯ দিয়ে শুরু হতে হবে";
     return "";
   };
 
@@ -218,13 +224,13 @@ export default function CheckoutPage() {
       }).then(r => r.json());
       if (res.discount) {
         setCouponDiscount(Number(res.discount));
-        setCouponMsg(`কুপন প্রয়োগ হয়েছে! ৳${res.discount} ছাড়`);
+        setCouponMsg(lang === "en" ? `Coupon applied! ৳${res.discount} off` : `কুপন প্রয়োগ হয়েছে! ৳${res.discount} ছাড়`);
       } else {
-        setCouponMsg(res.message || "কুপন কোড সঠিক নয়।");
+        setCouponMsg(res.message || (lang === "en" ? "Coupon code is invalid." : "কুপন কোড সঠিক নয়।"));
         setCouponDiscount(0);
       }
     } catch {
-      setCouponMsg("কুপন প্রয়োগ করতে সমস্যা হয়েছে।");
+      setCouponMsg(lang === "en" ? "Failed to apply coupon." : "কুপন প্রয়োগ করতে সমস্যা হয়েছে।");
     } finally {
       setCouponLoading(false);
     }
@@ -312,7 +318,7 @@ export default function CheckoutPage() {
       if (error.errors) {
         setError(Object.values(error.errors).flat().join(", "));
       } else {
-        setError(error.message || "অর্ডার দিতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+        setError(error.message || (lang === "en" ? "Failed to place order. Please try again." : "অর্ডার দিতে সমস্যা হয়েছে। আবার চেষ্টা করুন।"));
       }
     } finally {
       setLoading(false);
@@ -325,7 +331,7 @@ export default function CheckoutPage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
     printWindow.document.write(`
-      <html><head><title>ইনভয়েস #${order?.id}</title>
+      <html><head><title>${lang === "en" ? "Invoice" : "ইনভয়েস"} #${order?.id}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -368,16 +374,16 @@ export default function CheckoutPage() {
             ${siteEmail ? `<p>${siteEmail}</p>` : ""}
           </div>
           <div class="invoice-meta">
-            <h2>ইনভয়েস</h2>
+            <h2>${lang === "en" ? "Invoice" : "ইনভয়েস"}</h2>
             <p>#${toBn(order!.id)}</p>
-            <p>${new Date(order!.created_at).toLocaleDateString("bn-BD", { year: "numeric", month: "long", day: "numeric" })}</p>
-            <div style="margin-top:8px"><span class="badge">${order!.status === "pending" ? "অপেক্ষমাণ" : order!.status}</span></div>
+            <p>${new Date(order!.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD", { year: "numeric", month: "long", day: "numeric" })}</p>
+            <div style="margin-top:8px"><span class="badge">${order!.status === "pending" ? (lang === "en" ? "Pending" : "অপেক্ষমাণ") : order!.status}</span></div>
           </div>
         </div>
 
         <div class="info-grid">
           <div class="section">
-            <h3>গ্রাহকের তথ্য</h3>
+            <h3>${lang === "en" ? "Customer Info" : "গ্রাহকের তথ্য"}</h3>
             <p>
               <strong>${order!.customer_name}</strong><br>
               ${order!.customer_phone}<br>
@@ -387,10 +393,10 @@ export default function CheckoutPage() {
             </p>
           </div>
           <div class="section">
-            <h3>পেমেন্ট তথ্য</h3>
+            <h3>${lang === "en" ? "Payment Info" : "পেমেন্ট তথ্য"}</h3>
             <p>
-              মেথড: ${paymentLabels[order!.payment_method] || order!.payment_method}<br>
-              স্ট্যাটাস: পেমেন্ট বাকি
+              ${lang === "en" ? "Method" : "মেথড"}: ${paymentLabels[order!.payment_method] || order!.payment_method}<br>
+              ${lang === "en" ? "Status" : "স্ট্যাটাস"}: ${lang === "en" ? "Payment due" : "পেমেন্ট বাকি"}
             </p>
           </div>
         </div>
@@ -398,10 +404,10 @@ export default function CheckoutPage() {
         <table>
           <thead>
             <tr>
-              <th>পণ্য</th>
-              <th>পরিমাণ</th>
-              <th>দাম</th>
-              <th>মোট</th>
+              <th>${lang === "en" ? "Product" : "পণ্য"}</th>
+              <th>${lang === "en" ? "Qty" : "পরিমাণ"}</th>
+              <th>${lang === "en" ? "Price" : "দাম"}</th>
+              <th>${lang === "en" ? "Total" : "মোট"}</th>
             </tr>
           </thead>
           <tbody>
@@ -419,14 +425,14 @@ export default function CheckoutPage() {
 
         <div class="totals-wrap">
           <div class="totals">
-            <div class="row"><span>সাবটোটাল</span><span>৳${toBn(order!.subtotal)}</span></div>
-            <div class="row"><span>শিপিং চার্জ</span><span>${order!.shipping_cost === 0 ? "ফ্রি" : `৳${toBn(order!.shipping_cost)}`}</span></div>
-            <div class="row total-row"><span>সর্বমোট</span><span>৳${toBn(order!.total)}</span></div>
+            <div class="row"><span>${lang === "en" ? "Subtotal" : "সাবটোটাল"}</span><span>৳${toBn(order!.subtotal)}</span></div>
+            <div class="row"><span>${lang === "en" ? "Shipping" : "শিপিং চার্জ"}</span><span>${order!.shipping_cost === 0 ? (lang === "en" ? "Free" : "ফ্রি") : `৳${toBn(order!.shipping_cost)}`}</span></div>
+            <div class="row total-row"><span>${lang === "en" ? "Grand Total" : "সর্বমোট"}</span><span>৳${toBn(order!.total)}</span></div>
           </div>
         </div>
 
         <div class="footer">
-          <p>ধন্যবাদ আপনার অর্ডারের জন্য! — ${siteName}</p>
+          <p>${lang === "en" ? "Thank you for your order!" : "ধন্যবাদ আপনার অর্ডারের জন্য!"} — ${siteName}</p>
           ${(siteEmail || sitePhone) ? `<p style="margin-top:4px">${[siteEmail, sitePhone].filter(Boolean).join(" | ")}</p>` : ""}
         </div>
       </div>
@@ -451,12 +457,19 @@ export default function CheckoutPage() {
     pdf.save(`invoice-${order?.id || "order"}.pdf`);
   };
 
-  const paymentLabels: Record<string, string> = {
-    cod: "ক্যাশ অন ডেলিভারি",
-    bkash: "বিকাশ",
-    nagad: "নগদ",
-    bank: "ব্যাংক ট্রান্সফার",
-  };
+  const paymentLabels: Record<string, string> = lang === "en"
+    ? {
+        cod: "Cash on Delivery",
+        bkash: "bKash",
+        nagad: "Nagad",
+        bank: "Bank Transfer",
+      }
+    : {
+        cod: "ক্যাশ অন ডেলিভারি",
+        bkash: "বিকাশ",
+        nagad: "নগদ",
+        bank: "ব্যাংক ট্রান্সফার",
+      };
 
   // === INVOICE VIEW ===
   if (order) {
@@ -477,8 +490,8 @@ export default function CheckoutPage() {
                 <FiCheck className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">অর্ডার সফল হয়েছে!</h1>
-                <p className="text-text-muted text-sm mt-1">আপনার অর্ডার গ্রহণ করা হয়েছে। শীঘ্রই আমরা যোগাযোগ করব।</p>
+                <h1 className="text-xl font-bold text-foreground">{lang === "en" ? "Order Successful!" : "অর্ডার সফল হয়েছে!"}</h1>
+                <p className="text-text-muted text-sm mt-1">{lang === "en" ? "Your order has been received. We'll contact you soon." : "আপনার অর্ডার গ্রহণ করা হয়েছে। শীঘ্রই আমরা যোগাযোগ করব।"}</p>
               </div>
             </div>
 
@@ -486,17 +499,17 @@ export default function CheckoutPage() {
             <div className="flex flex-wrap gap-3 mb-6">
               <button onClick={handlePrint} className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl font-semibold hover:bg-primary-light transition-colors shadow-sm">
                 <FiPrinter className="w-4 h-4" />
-                প্রিন্ট করুন
+                {lang === "en" ? "Print" : "প্রিন্ট করুন"}
               </button>
               <button onClick={handleDownload} className="inline-flex items-center gap-2 px-5 py-2.5 border-2 border-primary text-primary rounded-xl font-semibold hover:bg-primary hover:text-white transition-colors">
                 <FiDownload className="w-4 h-4" />
-                ডাউনলোড PDF
+                {lang === "en" ? "Download PDF" : "ডাউনলোড PDF"}
               </button>
               <button onClick={() => router.push("/dashboard")} className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-foreground rounded-xl font-medium hover:bg-background-alt transition-colors">
-                অর্ডার ট্র্যাক করুন
+                {lang === "en" ? "Track Order" : "অর্ডার ট্র্যাক করুন"}
               </button>
               <button onClick={() => router.push("/shop")} className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-foreground rounded-xl font-medium hover:bg-background-alt transition-colors">
-                আরও শপিং করুন
+                {lang === "en" ? "Continue Shopping" : "আরও শপিং করুন"}
               </button>
             </div>
 
@@ -511,11 +524,11 @@ export default function CheckoutPage() {
                     {siteEmail && <p className="text-text-muted text-xs">{siteEmail}</p>}
                   </div>
                   <div className="invoice-meta text-right">
-                    <h2 className="text-lg font-bold text-primary">ইনভয়েস</h2>
+                    <h2 className="text-lg font-bold text-primary">{lang === "en" ? "Invoice" : "ইনভয়েস"}</h2>
                     <p className="text-sm text-text-body mt-1">#{toBn(order.id)}</p>
-                    <p className="text-xs text-text-muted mt-1">{new Date(order.created_at).toLocaleDateString("bn-BD", { year: "numeric", month: "long", day: "numeric" })}</p>
+                    <p className="text-xs text-text-muted mt-1">{new Date(order.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD", { year: "numeric", month: "long", day: "numeric" })}</p>
                     <span className="inline-block mt-2 bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">
-                      {order.status === "pending" ? "অপেক্ষমাণ" : order.status}
+                      {order.status === "pending" ? (lang === "en" ? "Pending" : "অপেক্ষমাণ") : order.status}
                     </span>
                   </div>
                 </div>
@@ -523,7 +536,7 @@ export default function CheckoutPage() {
                 {/* Customer Info */}
                 <div className="p-6 md:px-8 grid md:grid-cols-2 gap-6">
                   <div className="section">
-                    <h3 className="text-sm font-bold text-primary mb-2">গ্রাহকের তথ্য</h3>
+                    <h3 className="text-sm font-bold text-primary mb-2">{lang === "en" ? "Customer Info" : "গ্রাহকের তথ্য"}</h3>
                     <p className="text-sm text-text-body leading-relaxed">
                       <strong>{order.customer_name}</strong><br />
                       {order.customer_phone}<br />
@@ -533,10 +546,10 @@ export default function CheckoutPage() {
                     </p>
                   </div>
                   <div className="section">
-                    <h3 className="text-sm font-bold text-primary mb-2">পেমেন্ট তথ্য</h3>
+                    <h3 className="text-sm font-bold text-primary mb-2">{lang === "en" ? "Payment Info" : "পেমেন্ট তথ্য"}</h3>
                     <p className="text-sm text-text-body leading-relaxed">
-                      মেথড: {paymentLabels[order.payment_method] || order.payment_method}<br />
-                      স্ট্যাটাস: পেমেন্ট বাকি
+                      {lang === "en" ? "Method" : "মেথড"}: {paymentLabels[order.payment_method] || order.payment_method}<br />
+                      {lang === "en" ? "Status" : "স্ট্যাটাস"}: {lang === "en" ? "Payment due" : "পেমেন্ট বাকি"}
                     </p>
                   </div>
                 </div>
@@ -546,10 +559,10 @@ export default function CheckoutPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="bg-primary text-white">
-                        <th className="py-3 px-4 text-left text-sm font-semibold rounded-tl-xl">পণ্য</th>
-                        <th className="py-3 px-4 text-center text-sm font-semibold">পরিমাণ</th>
-                        <th className="py-3 px-4 text-right text-sm font-semibold">দাম</th>
-                        <th className="py-3 px-4 text-right text-sm font-semibold rounded-tr-xl">মোট</th>
+                        <th className="py-3 px-4 text-left text-sm font-semibold rounded-tl-xl">{lang === "en" ? "Product" : "পণ্য"}</th>
+                        <th className="py-3 px-4 text-center text-sm font-semibold">{lang === "en" ? "Qty" : "পরিমাণ"}</th>
+                        <th className="py-3 px-4 text-right text-sm font-semibold">{lang === "en" ? "Price" : "দাম"}</th>
+                        <th className="py-3 px-4 text-right text-sm font-semibold rounded-tr-xl">{lang === "en" ? "Total" : "মোট"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -569,15 +582,15 @@ export default function CheckoutPage() {
                 <div className="p-6 md:px-8 flex justify-end">
                   <div className="w-64">
                     <div className="flex justify-between py-2 text-sm">
-                      <span className="text-text-muted">সাবটোটাল</span>
+                      <span className="text-text-muted">{lang === "en" ? "Subtotal" : "সাবটোটাল"}</span>
                       <span className="font-medium">৳{toBn(order.subtotal)}</span>
                     </div>
                     <div className="flex justify-between py-2 text-sm">
-                      <span className="text-text-muted">শিপিং চার্জ</span>
-                      <span className={`font-medium ${order.shipping_cost === 0 ? "text-green-600" : ""}`}>{order.shipping_cost === 0 ? "ফ্রি" : `৳${toBn(order.shipping_cost)}`}</span>
+                      <span className="text-text-muted">{lang === "en" ? "Shipping" : "শিপিং চার্জ"}</span>
+                      <span className={`font-medium ${order.shipping_cost === 0 ? "text-green-600" : ""}`}>{order.shipping_cost === 0 ? (lang === "en" ? "Free" : "ফ্রি") : `৳${toBn(order.shipping_cost)}`}</span>
                     </div>
                     <div className="flex justify-between py-3 text-lg font-bold border-t-2 border-primary mt-2">
-                      <span>সর্বমোট</span>
+                      <span>{lang === "en" ? "Grand Total" : "সর্বমোট"}</span>
                       <span className="text-primary">৳{toBn(order.total)}</span>
                     </div>
                   </div>
@@ -585,7 +598,7 @@ export default function CheckoutPage() {
 
                 {/* Footer */}
                 <div className="px-6 md:px-8 pb-6 pt-4 border-t border-border text-center">
-                  <p className="text-xs text-text-muted">ধন্যবাদ আপনার অর্ডারের জন্য! — {siteName}</p>
+                  <p className="text-xs text-text-muted">{lang === "en" ? "Thank you for your order!" : "ধন্যবাদ আপনার অর্ডারের জন্য!"} — {siteName}</p>
                   {(siteEmail || sitePhone) && (
                     <p className="text-xs text-text-light mt-1">{[siteEmail, sitePhone].filter(Boolean).join(" | ")}</p>
                   )}
@@ -688,13 +701,14 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Email — conditional */}
-              {checkoutSettings.checkout_show_email === "true" && (
-                <div>
-                  <label className="block font-bold text-sm mb-2 px-1">ইমেইল (ঐচ্ছিক)</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="your@email.com" />
-                </div>
-              )}
+              {/* Email — always visible, optional. Customer can skip it;
+                  order works either way. We never inject a dummy email
+                  server-side, so leaving it blank means truly no email on
+                  the user/order record (and no fake data leaks into Pixel). */}
+              <div>
+                <label className="block font-bold text-sm mb-2 px-1">ইমেইল (ঐচ্ছিক)</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="your@email.com (optional)" />
+              </div>
 
               {/* Saved addresses — auto-filled silently, no UI shown */}
 
