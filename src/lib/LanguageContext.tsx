@@ -21,9 +21,14 @@ import { setNumberLang } from "@/utils/toBn";
 const dicts: Record<Lang, Record<string, string>> = { bn, en };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("bn");
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith("/dashboard") || pathname?.startsWith("/cdlogin");
+  // Pick the initial language SYNCHRONOUSLY from the route so the first paint
+  // is already in the right language. Dashboard → English by default, public
+  // storefront → Bengali. Without this, state starts as "bn" and flips to "en"
+  // after the settings fetch resolves, causing a visible BN→EN flash on every
+  // dashboard load.
+  const [lang, setLangState] = useState<Lang>(isDashboard ? "en" : "bn");
   const settingsRef = useRef<{ site_language?: string; dashboard_language?: string } | null>(null);
   const fetchedRef = useRef(false);
 

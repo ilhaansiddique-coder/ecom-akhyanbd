@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, unauthorized, errorResponse } from "@/lib/api-response";
 import { getSessionUser } from "@/lib/auth-helpers";
+import { revalidateTag } from "next/cache";
 
 export async function POST(
   _request: NextRequest,
@@ -42,6 +43,8 @@ await prisma.$transaction(async (tx: any) => {
       }
     }
   });
+
+  revalidateTag("products");
 
   const updated = await prisma.order.findUnique({
     where: { id: order.id },

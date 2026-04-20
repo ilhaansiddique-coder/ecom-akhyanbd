@@ -164,14 +164,10 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
       ],
     },
     {
-      label: t("dash.customizer") || "Customizer",
-      icon: FiDroplet,
-      href: "/dashboard/customizer",
-    },
-    {
       label: t("dash.settings"),
       icon: FiSettings,
       items: [
+        { label: "Customizer", href: "/dashboard/customizer", icon: FiDroplet },
         { label: t("dash.shippingZones"), href: "/dashboard/shipping", icon: FiTruck },
         { label: t("dash.siteSettings"), href: "/dashboard/settings", icon: FiSettings },
         { label: t("dash.checkoutSettings"), href: "/dashboard/settings/checkout", icon: FiShoppingCart },

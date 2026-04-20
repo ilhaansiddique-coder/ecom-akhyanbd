@@ -7,6 +7,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { getSessionUser } from "@/lib/auth-helpers";
 import { sendOrderConfirmation, sendAdminOrderNotification } from "@/lib/email";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateTag } from "next/cache";
 import { randomBytes } from "crypto";
 import { calculateRiskScore, isValidBDPhone } from "@/lib/spamDetection";
 import { getClientIp } from "@/lib/fbcapi";
@@ -286,6 +287,8 @@ export async function POST(request: NextRequest) {
   });
 
   bumpVersion("orders");
+  // Bust the dashboard products cache so live sales counts refresh immediately
+  revalidateTag("products");
 
   // ── Spam detection: attach fingerprint + risk score (non-blocking) ──
   const fpHash = request.cookies.get("fpHash")?.value;

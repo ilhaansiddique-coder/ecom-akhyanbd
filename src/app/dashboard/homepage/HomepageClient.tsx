@@ -438,10 +438,14 @@ export default function HomepageClient({ initialData }: { initialData?: Homepage
           onSelect={(url) => { updateHero("hero_logo" as any, url); setMediaPickerOpen(false); }}
         />
 
-        {/* Save button */}
-        <div className="sticky bottom-4 flex justify-end">
-          <button onClick={save} disabled={saving} className={theme.btn.primary + " shadow-lg"}>
-            <FiSave className="w-4 h-4 mr-2 inline" />
+        {/* Save button — static footer, end of page, no overlap */}
+        <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
+          >
+            <FiSave className="w-4 h-4" />
             {saving ? "Saving..." : saved ? "✓ Saved!" : "Save Changes"}
           </button>
         </div>

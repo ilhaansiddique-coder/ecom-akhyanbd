@@ -42,13 +42,24 @@ const prefetch = unstable_cache(
       console.warn("[products] deletedAt filter failed, falling back. Run `npx prisma generate && npx prisma db push`. Err:", e instanceof Error ? e.message : e);
       products = await prisma.product.findMany({ select: productSelect, orderBy: { createdAt: "desc" } });
     }
-    const [categories, brands] = await Promise.all([
+    const [categories, brands, soldAgg] = await Promise.all([
       prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
       prisma.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      // Live sales count from OrderItem — excludes cancelled orders.
+      // `soldCount` column stays as fallback for legacy data but this wins.
+      prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: { productId: { not: null }, order: { status: { notIn: ["cancelled", "trashed"] } } },
+        _sum: { quantity: true },
+      }),
     ]);
-    return { products, categories, brands };
+    const soldMap = new Map<number, number>();
+    for (const row of soldAgg) {
+      if (row.productId != null) soldMap.set(row.productId, row._sum.quantity || 0);
+    }
+    return { products, categories, brands, soldMap: Object.fromEntries(soldMap) };
   },
-  ["admin-products-all"],
+  ["admin-products-all-v2-sold"],
   { tags: ["products"], revalidate: 30 }
 );
 
@@ -74,7 +85,8 @@ export default async function ProductsPage() {
       custom_shipping: Boolean(p.customShipping),
       shipping_cost: p.shippingCost != null ? Number(p.shippingCost) : null,
       variation_type: p.variationType,
-      sold_count: p.soldCount,
+      // Prefer live order aggregate; fall back to stored soldCount for legacy rows
+      sold_count: (data.soldMap as Record<number, number>)[p.id] ?? p.soldCount,
       original_price: p.originalPrice != null ? Number(p.originalPrice) : null,
       is_active: p.isActive,
       is_featured: p.isFeatured,

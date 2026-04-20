@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   // Trash view shows only soft-deleted; default view excludes them.
   where.deletedAt = trash ? { not: null } : null;
 
-  const [products, total] = await Promise.all([
+  const [products, total, soldAgg] = await Promise.all([
     prisma.product.findMany({
       where,
       select: {
@@ -49,9 +49,27 @@ export async function GET(request: NextRequest) {
       take: perPage,
     }),
     prisma.product.count({ where }),
+    // Live sold count from OrderItem — excludes cancelled/trashed orders.
+    // Must match the SSR path in src/app/dashboard/products/page.tsx so the
+    // background refetch doesn't overwrite good counts with stale soldCount.
+    prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: { productId: { not: null }, order: { status: { notIn: ["cancelled", "trashed"] } } },
+      _sum: { quantity: true },
+    }),
   ]);
+  const soldMap = new Map<number, number>();
+  for (const row of soldAgg) {
+    if (row.productId != null) soldMap.set(row.productId, row._sum.quantity || 0);
+  }
+  // Merge live sales into each product. `sold_count` (snake) is what the client reads.
+  const withSold = products.map((p) => ({
+    ...p,
+    soldCount: soldMap.get(p.id) ?? p.soldCount,
+    sold_count: soldMap.get(p.id) ?? p.soldCount,
+  }));
 
-  return jsonResponse(paginatedResponse(products, { page, perPage, total }));
+  return jsonResponse(paginatedResponse(withSold, { page, perPage, total }));
 }
 
 export async function POST(request: NextRequest) {

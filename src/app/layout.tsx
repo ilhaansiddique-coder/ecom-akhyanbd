@@ -6,11 +6,23 @@ import HeadScripts from "@/components/HeadScripts";
 import { prisma } from "@/lib/prisma";
 import { buildThemeCss } from "@/lib/theme-tokens";
 
+// Font loading strategy:
+//   display: "block" + preload: true for the PRIMARY body/heading stack
+//   (Bricolage + Hind Siliguri) so the browser blocks briefly until the
+//   webfont arrives instead of painting a system fallback and then swapping
+//   — eliminates the layout shift the user sees on page load. Next/font
+//   auto-generates a size-adjusted fallback so even the pre-swap render
+//   (if any) keeps the same line metrics.
+//
+//   Secondary display fonts (Playfair, Manrope) stay on "swap" because
+//   they're only used in a few scoped spots and blocking hurts LCP.
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
   subsets: ["bengali", "latin"],
   weight: ["400", "500", "700"],
-  display: "swap",
+  display: "block",
+  preload: true,
+  adjustFontFallback: true,
 });
 
 
@@ -32,7 +44,9 @@ const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
-  display: "swap",
+  display: "block",
+  preload: true,
+  adjustFontFallback: true,
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";

@@ -88,7 +88,9 @@ export async function PUT(
       include: { items: true },
     });
 
-    revalidateAll("orders");
+    // Include "products" so the dashboard products list re-aggregates sold counts
+    // (e.g. cancellation should decrement the live Sales column).
+    revalidateAll("orders", "products");
     bumpVersion("orders");
     return jsonResponse(serialize(order));
   } catch (error) {

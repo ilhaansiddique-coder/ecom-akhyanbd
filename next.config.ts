@@ -46,18 +46,27 @@ const nextConfig: NextConfig = {
       static: 300,
     },
   },
-  // When R2 is configured, rewrite all legacy /uploads/* + /storage/* URLs
-  // directly to the Cloudflare R2 public bucket. No DB migration needed —
-  // the URL format stays `/uploads/<name>` and the browser is transparently
-  // served from R2's CDN. When R2 is not set, fall back to the local API
-  // handler that streams from UPLOAD_DIR (dev default).
+  // When R2 is configured, REDIRECT legacy /uploads/* + /storage/* URLs to
+  // the Cloudflare CDN (308 permanent). Rewrites would proxy every image
+  // through Next (browser → Next server → R2 → Next → browser) which kills
+  // CDN caching and adds a hop per image. A 308 redirect is cached by the
+  // browser, so subsequent loads hit cdn.akhiyanbd.com directly.
+  // When R2 is NOT set, fall back to the local API handler via rewrite.
+  async redirects() {
+    if (!R2_PUBLIC_URL) return [];
+    return [
+      { source: "/storage/uploads/:path*", destination: `${R2_PUBLIC_URL}/:path*`, permanent: true },
+      { source: "/storage/:path*", destination: `${R2_PUBLIC_URL}/:path*`, permanent: true },
+      { source: "/uploads/:path*", destination: `${R2_PUBLIC_URL}/:path*`, permanent: true },
+    ];
+  },
   async rewrites() {
-    const destUploads = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/:path*` : "/api/uploads/:path*";
+    if (R2_PUBLIC_URL) return { beforeFiles: [] };
     return {
       beforeFiles: [
-        { source: "/storage/uploads/:path*", destination: destUploads },
-        { source: "/storage/:path*", destination: destUploads },
-        { source: "/uploads/:path*", destination: destUploads },
+        { source: "/storage/uploads/:path*", destination: "/api/uploads/:path*" },
+        { source: "/storage/:path*", destination: "/api/uploads/:path*" },
+        { source: "/uploads/:path*", destination: "/api/uploads/:path*" },
       ],
     };
   },

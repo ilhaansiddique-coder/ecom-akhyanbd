@@ -14,7 +14,6 @@ import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
 import {
   FiPlus, FiEdit2, FiTrash2, FiSearch, FiX, FiImage, FiUploadCloud, FiEye, FiCopy,
-  FiBox, FiCheckCircle, FiXCircle, FiTrendingUp,
 } from "react-icons/fi";
 import { useChannel } from "@/lib/useChannel";
 import { useAutoSlug } from "@/lib/useAutoSlug";
@@ -118,6 +117,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
   const [editId, setEditId] = useState<number | null>(null);
   const [badgeOpen, setBadgeOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  // Bulk-apply inputs for the variants panel. Kept outside `form` so the
+  // main payload isn't polluted with transient UI-only values.
+  const [bulk, setBulk] = useState<{ price: string; original_price: string; stock: string }>({ price: "", original_price: "", stock: "" });
   const formRef = useRef<FormState>(emptyForm);
   // Keep ref in sync with state — ref is always latest, never stale
   formRef.current = form;
@@ -173,6 +175,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
   const openCreate = () => {
     setEditId(null);
     setForm(emptyForm);
+    setBulk({ price: "", original_price: "", stock: "" });
     setModalOpen(true);
   };
 
@@ -203,6 +206,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
         image: v.image || "", is_active: v.is_active !== false,
       })),
     });
+    setBulk({ price: "", original_price: "", stock: "" });
     setModalOpen(true);
     showToast(lang === "en" ? "Product duplicated — edit and save" : "পণ্য ডুপ্লিকেট হয়েছে — সম্পাদনা করে সংরক্ষণ করুন");
   };
@@ -234,6 +238,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
         image: v.image || "", is_active: v.is_active !== false,
       })),
     });
+    setBulk({ price: "", original_price: "", stock: "" });
     setModalOpen(true);
   };
 
@@ -427,45 +432,6 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
         onCancel={() => setDeleteId(null)}
         loading={deleting}
       />
-
-      {/* Product Stats Cards */}
-      {allProducts.length > 0 && (() => {
-        const total = allProducts.length;
-        const inStock = allProducts.filter(p => (p as any).unlimited_stock || p.stock > 0).length;
-        const outOfStock = allProducts.filter(p => !(p as any).unlimited_stock && p.stock <= 0).length;
-        const getStockValue = (p: Product) => (p as any).unlimited_stock ? 0 : p.price * p.stock;
-        const totalValue = allProducts.reduce((s, p) => s + getStockValue(p), 0);
-        const inStockValue = allProducts.filter(p => (p as any).unlimited_stock || p.stock > 0).reduce((s, p) => s + getStockValue(p), 0);
-        const getSold = (p: Product) => p.sold_count ?? p.sold ?? 0;
-        const best = [...allProducts].sort((a, b) => getSold(b) - getSold(a))[0];
-        const bestSold = best ? getSold(best) : 0;
-        const bestRevenue = bestSold * (best?.price || 0);
-
-        const cards = [
-          { icon: FiBox, label: t("dash.productCount"), value: toBn(total), sub: `৳${toBn(totalValue)}`, color: "bg-[var(--primary)]" },
-          { icon: FiCheckCircle, label: lang === "en" ? "In Stock" : "স্টকে আছে", value: toBn(inStock), sub: `৳${toBn(inStockValue)}`, color: "bg-emerald-500" },
-          { icon: FiXCircle, label: lang === "en" ? "Out of Stock" : "স্টক শেষ", value: toBn(outOfStock), sub: lang === "en" ? "Needs restock" : "রিস্টক দরকার", color: "bg-red-500" },
-          { icon: FiTrendingUp, label: lang === "en" ? "Best Seller" : "সেরা বিক্রিত", value: bestSold > 0 ? (best?.name || "-") : (lang === "en" ? "No sales yet" : "এখনো বিক্রি হয়নি"), sub: bestSold > 0 ? `${toBn(bestSold)} ${lang === "en" ? "sold" : "বিক্রি"} • ৳${toBn(bestRevenue)}` : (lang === "en" ? "Sales will appear here" : "বিক্রি হলে দেখাবে"), color: "bg-violet-500", truncate: true },
-        ];
-
-        return (
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
-            {cards.map((c, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 shadow-sm">
-                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${c.color}`}>
-                  <c.icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className={`text-lg md:text-xl font-bold text-gray-800 ${c.truncate ? "truncate" : ""}`}>{c.value}</div>
-                  <div className="text-[11px] md:text-xs text-gray-500 truncate">{c.label}</div>
-                  <div className="text-[11px] md:text-xs font-semibold text-[var(--primary)] truncate">{c.sub}</div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        );
-      })()}
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         {/* Toolbar */}
@@ -665,13 +631,13 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-              >← আগের</button>
+              >{lang === "en" ? "← Prev" : "← আগের"}</button>
               <span className="px-3 py-1.5 text-xs font-semibold text-[var(--primary)]">{page} / {totalPages}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-              >পরের →</button>
+              >{lang === "en" ? "Next →" : "পরের →"}</button>
             </div>
           </div>
         )}
@@ -857,6 +823,86 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                   <div className="border border-[var(--primary)]/20 bg-[var(--primary)]/[0.02] rounded-xl p-4 space-y-3">
                     <input value={form.variation_type} onChange={(e) => setForm(prev => ({ ...prev, variation_type: e.target.value }))}
                       className={inputCls} placeholder={lang === "en" ? "Variation type (e.g. Weight, Size, Color)" : "ভ্যারিয়েশন টাইপ (যেমন: ওজন, সাইজ, রং)"} />
+
+                    {/* Bulk apply — sets the given field on every variant at once.
+                        Field-level buttons (not a single Apply) so partial edits
+                        don't accidentally overwrite other columns. */}
+                    {form.variants.length > 0 && (
+                      <div className="rounded-lg bg-white border border-dashed border-[var(--primary)]/30 p-2.5 space-y-2">
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                          {lang === "en" ? "Bulk apply to all variants" : "সব ভ্যারিয়েন্টে একসাথে প্রয়োগ"}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {([
+                            { key: "price", label: lang === "en" ? "Price" : "দাম" },
+                            { key: "original_price", label: lang === "en" ? "Original Price" : "আসল দাম" },
+                            { key: "stock", label: lang === "en" ? "Stock" : "স্টক" },
+                          ] as const).map(({ key, label }) => (
+                            <div key={key} className="flex items-end gap-1 min-w-0">
+                              <div className="flex-1 min-w-0">
+                                <label className="text-[10px] text-gray-400 truncate block">{label}</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={bulk[key]}
+                                  onChange={(e) => setBulk(b => ({ ...b, [key]: e.target.value }))}
+                                  className={inputCls + " w-full"}
+                                  placeholder="—"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                disabled={bulk[key] === ""}
+                                onClick={() => {
+                                  const val = bulk[key];
+                                  if (val === "") return;
+                                  setForm(prev => ({
+                                    ...prev,
+                                    variants: prev.variants.map(v => ({ ...v, [key]: val })),
+                                  }));
+                                }}
+                                className="shrink-0 px-2.5 h-[34px] rounded-lg bg-[var(--primary)] text-white text-[11px] font-semibold hover:bg-[var(--primary-light)] disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {lang === "en" ? "Apply" : "প্রয়োগ"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allOn = form.variants.every(v => v.unlimited_stock);
+                              setForm(prev => ({
+                                ...prev,
+                                variants: prev.variants.map(v => ({ ...v, unlimited_stock: !allOn })),
+                              }));
+                            }}
+                            className="px-2.5 h-7 rounded-lg border border-gray-200 text-[11px] text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                          >
+                            {form.variants.every(v => v.unlimited_stock)
+                              ? (lang === "en" ? "Uncheck Unlimited (all)" : "সব আনলিমিটেড বাদ")
+                              : (lang === "en" ? "Check Unlimited (all)" : "সব আনলিমিটেড")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allOn = form.variants.every(v => v.is_active);
+                              setForm(prev => ({
+                                ...prev,
+                                variants: prev.variants.map(v => ({ ...v, is_active: !allOn })),
+                              }));
+                            }}
+                            className="px-2.5 h-7 rounded-lg border border-gray-200 text-[11px] text-gray-600 hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                          >
+                            {form.variants.every(v => v.is_active)
+                              ? (lang === "en" ? "Deactivate all" : "সব নিষ্ক্রিয়")
+                              : (lang === "en" ? "Activate all" : "সব সক্রিয়")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {form.variants.map((v, idx) => (
                       <div key={idx} className="bg-white rounded-xl p-3 space-y-2 border border-gray-100">
                         <div className="flex items-center gap-2">
@@ -866,7 +912,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                           <button type="button" onClick={() => { const variants = form.variants.filter((_, i) => i !== idx); setForm(prev => ({ ...prev, variants })); }}
                             className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><FiX className="w-4 h-4" /></button>
                         </div>
-                        <div className="grid grid-cols-[1fr_1fr_1fr_42px] gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_42px] gap-2">
                           <div>
                             <label className="text-[10px] text-gray-400">{lang === "en" ? "Price" : "দাম"} *</label>
                             <input type="number" min="0" value={v.price} onChange={(e) => { const variants = [...form.variants]; variants[idx] = { ...variants[idx], price: e.target.value }; setForm(prev => ({ ...prev, variants })); }}
