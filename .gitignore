@@ -57,3 +57,6 @@ next-env.d.ts
 # database temp files
 *.db-shm
 *.db-wal
+
+# Local Capacitor scratch folder (not part of repo)
+mobile/

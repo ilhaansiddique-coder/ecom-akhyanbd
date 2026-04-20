@@ -4,15 +4,40 @@ import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
+import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
+
+const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
+const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
 
 /**
- * GET /api/v1/admin/media — List all uploaded files from public/uploads
+ * GET /api/v1/admin/media — List all uploaded files.
+ * Prefers R2 when configured, falls back to local uploads dir.
  */
 export async function GET(_request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   try {
+    if (isR2Configured()) {
+      const objects = await r2List();
+      const media = objects
+        .map((o) => {
+          const ext = path.extname(o.key).toLowerCase();
+          const isVideo = VIDEO_EXTS.includes(ext);
+          const isImage = IMAGE_EXTS.includes(ext);
+          if (!isVideo && !isImage) return null;
+          return {
+            filename: o.key,
+            url: r2PublicUrl(o.key),
+            size: o.size,
+            type: isVideo ? "video" : "image",
+            modified: o.modified,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b!.modified).getTime() - new Date(a!.modified).getTime());
+      return jsonResponse(media);
+    }
+
     const uploadsDir = getUploadDir();
     const files = await readdir(uploadsDir).catch(() => []);
 
@@ -24,8 +49,8 @@ export async function GET(_request: NextRequest) {
             const filePath = path.join(uploadsDir, filename);
             const stats = await stat(filePath);
             const ext = path.extname(filename).toLowerCase();
-            const isVideo = [".mp4", ".webm", ".mov", ".avi", ".mkv"].includes(ext);
-            const isImage = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"].includes(ext);
+            const isVideo = VIDEO_EXTS.includes(ext);
+            const isImage = IMAGE_EXTS.includes(ext);
 
             return {
               filename,
@@ -52,11 +77,11 @@ export async function GET(_request: NextRequest) {
 }
 
 /**
- * DELETE /api/v1/admin/media — Delete an uploaded file
+ * DELETE /api/v1/admin/media — Delete an uploaded file.
+ * Accepts either a bare filename (legacy local) or an R2 key.
  */
 export async function DELETE(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   try {
     const { filename } = await request.json();
@@ -64,10 +89,16 @@ export async function DELETE(request: NextRequest) {
       return errorResponse("Filename required", 400);
     }
 
-    // Prevent path traversal
+    if (isR2Configured()) {
+      // Accept keys that may have a leading slash or path prefix
+      const key = filename.replace(/^\/+/, "").replace(/^uploads\//, "");
+      const ok = await r2Delete(key);
+      if (!ok) return errorResponse("Failed to delete file", 500);
+      return jsonResponse({ message: "File deleted" });
+    }
+
     const safeName = path.basename(filename);
     const filePath = path.join(getUploadDir(), safeName);
-
     await unlink(filePath);
     return jsonResponse({ message: "File deleted" });
   } catch {
