@@ -16,7 +16,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
-import PushRegister from "@/components/PushRegister";
 
 import {
   FiHome,
@@ -487,7 +486,6 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
 
   return (
     <DashboardShellContext.Provider value={{ setTitle }}>
-    <PushRegister />
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar — no width transition to prevent flash on navigation.
           Inline style mirrors the Tailwind class but also gives a hard fallback

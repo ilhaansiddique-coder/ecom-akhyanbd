@@ -285,20 +285,6 @@ export async function POST(request: NextRequest) {
     items: orderItems,
   });
 
-  // Fire-and-forget push to every admin device subscribed via the Capacitor
-  // app or PWA. Import is dynamic so missing FCM env vars don't crash order
-  // creation — the sender bails out gracefully when credentials are absent.
-  import("@/lib/push")
-    .then(({ sendAdminPush }) =>
-      sendAdminPush({
-        title: "New Order",
-        body: `${data.customer_name} — ৳${order.total}`,
-        url: `/dashboard/orders/${order.id}`,
-        data: { orderId: String(order.id) },
-      })
-    )
-    .catch((e) => console.error("[push] admin notify failed:", e));
-
   bumpVersion("orders");
 
   // ── Spam detection: attach fingerprint + risk score (non-blocking) ──
