@@ -621,8 +621,8 @@ export default function CheckoutPage() {
           <div className="bg-white rounded-[2rem] md:rounded-[3rem] p-6 md:p-12 shadow-2xl border border-gray-100">
             {/* Header */}
             <div className="text-center mb-8">
-              <h1 className="text-2xl md:text-4xl font-extrabold text-primary mb-2">{checkoutSettings.checkout_title || "🛒 আপনার অর্ডার দিন"}</h1>
-              <p className="text-gray-500 text-sm md:text-base">{checkoutSettings.checkout_subtitle || "নিচের ফরমটি পূরণ করে অর্ডারটি কনফার্ম করুন।"}</p>
+              <h1 className="text-2xl md:text-4xl font-extrabold text-primary mb-2">{checkoutSettings.checkout_title || (lang === "en" ? "🛒 Place Your Order" : "🛒 আপনার অর্ডার দিন")}</h1>
+              <p className="text-gray-500 text-sm md:text-base">{checkoutSettings.checkout_subtitle || (lang === "en" ? "Fill out the form below to confirm your order." : "নিচের ফরমটি পূরণ করে অর্ডারটি কনফার্ম করুন।")}</p>
             </div>
 
             {error && (
@@ -632,7 +632,7 @@ export default function CheckoutPage() {
             <form onSubmit={handleSubmit} className="space-y-5" ref={(el) => { (formRef as any).current = el; attachToForm(el); }}>
               {/* Products with qty controls */}
               <div>
-                <label className="block font-bold text-sm mb-3 px-1">আপনার পণ্য</label>
+                <label className="block font-bold text-sm mb-3 px-1">{lang === "en" ? "Your Products" : "আপনার পণ্য"}</label>
                 <div className="space-y-3">
                   {items.map((item) => (
                     <div key={`${item.id}-${item.variantId || 0}`} className="p-3 md:p-4 rounded-xl border-2 border-gray-100 hover:border-gray-200 transition-colors">
@@ -656,7 +656,7 @@ export default function CheckoutPage() {
                             </button>
                           </div>
                           {!item.unlimitedStock && item.stock != null && (
-                            <div className="text-[10px] text-gray-400">{item.quantity >= item.stock ? "সর্বোচ্চ পরিমাণ" : `${toBn(item.stock)}টি আছে`}</div>
+                            <div className="text-[10px] text-gray-400">{item.quantity >= item.stock ? (lang === "en" ? "Max quantity" : "সর্বোচ্চ পরিমাণ") : (lang === "en" ? `${item.stock} in stock` : `${toBn(item.stock)}টি আছে`)}</div>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-2 shrink-0">
@@ -675,11 +675,11 @@ export default function CheckoutPage() {
               {/* Name + Phone */}
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1">
-                  <label className="block font-bold text-sm mb-2 px-1">আপনার নাম *</label>
-                  <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="পুরো নাম লিখুন" />
+                  <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Your Name *" : "আপনার নাম *"}</label>
+                  <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder={lang === "en" ? "Enter full name" : "পুরো নাম লিখুন"} />
                 </div>
                 <div className="flex-1">
-                  <label className="block font-bold text-sm mb-2 px-1">মোবাইল নম্বর *</label>
+                  <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Mobile Number *" : "মোবাইল নম্বর *"}</label>
                   <input
                     required type="tel" value={phone}
                     onChange={(e) => {
@@ -706,7 +706,7 @@ export default function CheckoutPage() {
                   server-side, so leaving it blank means truly no email on
                   the user/order record (and no fake data leaks into Pixel). */}
               <div>
-                <label className="block font-bold text-sm mb-2 px-1">ইমেইল (ঐচ্ছিক)</label>
+                <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Email (optional)" : "ইমেইল (ঐচ্ছিক)"}</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="your@email.com (optional)" />
               </div>
 
@@ -714,8 +714,8 @@ export default function CheckoutPage() {
 
               {/* Address */}
               <div>
-                <label className="block font-bold text-sm mb-2 px-1">সম্পূর্ণ ঠিকানা *</label>
-                <textarea required rows={3} value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls + " resize-none"} placeholder="গ্রাম, থানা, জেলা উল্লেখ করুন" />
+                <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Full Address *" : "সম্পূর্ণ ঠিকানা *"}</label>
+                <textarea required rows={3} value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Village, Thana, District" : "গ্রাম, থানা, জেলা উল্লেখ করুন"} />
               </div>
 
               {/* Honeypot — invisible to humans, bots fill it */}
@@ -735,7 +735,7 @@ export default function CheckoutPage() {
               {/* Shipping Zone Selector — hidden when product has custom shipping */}
               {customShippingValues.length === 0 && shippingZones.length > 0 && (
                 <div>
-                  <label className="block font-bold text-sm mb-3 px-1">ডেলিভারি এরিয়া সিলেক্ট করুন *</label>
+                  <label className="block font-bold text-sm mb-3 px-1">{lang === "en" ? "Select Delivery Area *" : "ডেলিভারি এরিয়া সিলেক্ট করুন *"}</label>
                   <div className="space-y-2">
                     {shippingZones.map((zone) => (
                       <label key={zone.id}
@@ -767,27 +767,27 @@ export default function CheckoutPage() {
               {/* City fallback if no zones + Zip */}
               {shippingZones.length === 0 && (
                 <div>
-                  <label className="block font-bold text-sm mb-2 px-1">শহর/জেলা *</label>
-                  <input required value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} placeholder="আপনার জেলা" />
+                  <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "City / District *" : "শহর/জেলা *"}</label>
+                  <input required value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} placeholder={lang === "en" ? "Your district" : "আপনার জেলা"} />
                 </div>
               )}
 
               {checkoutSettings.checkout_show_zip === "true" && (
                 <div>
-                  <label className="block font-bold text-sm mb-2 px-1">জিপ কোড</label>
-                  <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} className={inputCls} placeholder="৬৪০০" />
+                  <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "ZIP Code" : "জিপ কোড"}</label>
+                  <input value={zipCode} onChange={(e) => setZipCode(e.target.value)} className={inputCls} placeholder={lang === "en" ? "6400" : "৬৪০০"} />
                 </div>
               )}
 
               {/* Coupon — conditional */}
               {checkoutSettings.checkout_show_coupon !== "false" && (
               <div>
-                <label className="block font-bold text-sm mb-2 px-1">কুপন কোড</label>
+                <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Coupon Code" : "কুপন কোড"}</label>
                 <div className="flex gap-2">
-                  <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} className={inputCls + " flex-1"} placeholder="কুপন কোড লিখুন" />
+                  <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} className={inputCls + " flex-1"} placeholder={lang === "en" ? "Enter coupon code" : "কুপন কোড লিখুন"} />
                   <button type="button" onClick={handleApplyCoupon} disabled={couponLoading || !couponCode.trim()}
                     className="px-5 py-3 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-light transition-colors disabled:opacity-50 shrink-0">
-                    {couponLoading ? "..." : "প্রয়োগ"}
+                    {couponLoading ? "..." : (lang === "en" ? "Apply" : "প্রয়োগ")}
                   </button>
                 </div>
                 {couponMsg && <p className={`text-xs mt-1.5 px-1 ${couponDiscount > 0 ? "text-green-600" : "text-red-500"}`}>{couponMsg}</p>}
@@ -797,14 +797,14 @@ export default function CheckoutPage() {
               {/* Payment Methods — dynamic from settings */}
               {(() => {
                 const methods = [
-                  { value: "cod", label: "ক্যাশ অন ডেলিভারি", icon: "💵", enabled: checkoutSettings.checkout_payment_cod !== "false" },
-                  { value: "bkash", label: "বিকাশ", icon: "📱", enabled: checkoutSettings.checkout_payment_bkash === "true" },
-                  { value: "nagad", label: "নগদ", icon: "📲", enabled: checkoutSettings.checkout_payment_nagad === "true" },
+                  { value: "cod", label: lang === "en" ? "Cash on Delivery" : "ক্যাশ অন ডেলিভারি", icon: "💵", enabled: checkoutSettings.checkout_payment_cod !== "false" },
+                  { value: "bkash", label: lang === "en" ? "bKash" : "বিকাশ", icon: "📱", enabled: checkoutSettings.checkout_payment_bkash === "true" },
+                  { value: "nagad", label: lang === "en" ? "Nagad" : "নগদ", icon: "📲", enabled: checkoutSettings.checkout_payment_nagad === "true" },
                 ].filter(m => m.enabled);
                 if (methods.length === 0) return null;
                 return (
                   <div>
-                    <label className="block font-bold text-sm mb-3 px-1">পেমেন্ট মেথড *</label>
+                    <label className="block font-bold text-sm mb-3 px-1">{lang === "en" ? "Payment Method *" : "পেমেন্ট মেথড *"}</label>
                     <div className="space-y-2">
                       {methods.map((m) => (
                         <div key={m.value}>
@@ -824,16 +824,16 @@ export default function CheckoutPage() {
                             <div className="mt-2 ml-2 p-4 bg-pink-50 rounded-xl border border-pink-100 space-y-3">
                               {checkoutSettings.checkout_bkash_instruction && (
                                 <div>
-                                  <p className="text-xs font-bold text-pink-700 mb-1">📱 বিকাশে পেমেন্ট করার নিয়ম:</p>
+                                  <p className="text-xs font-bold text-pink-700 mb-1">{lang === "en" ? "📱 bKash payment instructions:" : "📱 বিকাশে পেমেন্ট করার নিয়ম:"}</p>
                                   <p className="text-xs text-pink-600 whitespace-pre-line">{checkoutSettings.checkout_bkash_instruction}</p>
                                 </div>
                               )}
                               {checkoutSettings.checkout_bkash_number && (
-                                <p className="text-sm font-bold text-pink-700">বিকাশ নম্বর: {checkoutSettings.checkout_bkash_number}</p>
+                                <p className="text-sm font-bold text-pink-700">{lang === "en" ? "bKash Number" : "বিকাশ নম্বর"}: {checkoutSettings.checkout_bkash_number}</p>
                               )}
                               <input value={transactionId} onChange={(e) => setTransactionId(e.target.value)}
                                 className="w-full bg-white border border-pink-200 rounded-xl p-3 focus:ring-2 focus:ring-pink-300 focus:outline-none text-sm placeholder-pink-300"
-                                placeholder="বিকাশ Transaction ID লিখুন" required />
+                                placeholder={lang === "en" ? "Enter bKash Transaction ID" : "বিকাশ Transaction ID লিখুন"} required />
                             </div>
                           )}
                           {/* Nagad instructions + TrxID */}
@@ -841,16 +841,16 @@ export default function CheckoutPage() {
                             <div className="mt-2 ml-2 p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-3">
                               {checkoutSettings.checkout_nagad_instruction && (
                                 <div>
-                                  <p className="text-xs font-bold text-orange-700 mb-1">📲 নগদে পেমেন্ট করার নিয়ম:</p>
+                                  <p className="text-xs font-bold text-orange-700 mb-1">{lang === "en" ? "📲 Nagad payment instructions:" : "📲 নগদে পেমেন্ট করার নিয়ম:"}</p>
                                   <p className="text-xs text-orange-600 whitespace-pre-line">{checkoutSettings.checkout_nagad_instruction}</p>
                                 </div>
                               )}
                               {checkoutSettings.checkout_nagad_number && (
-                                <p className="text-sm font-bold text-orange-700">নগদ নম্বর: {checkoutSettings.checkout_nagad_number}</p>
+                                <p className="text-sm font-bold text-orange-700">{lang === "en" ? "Nagad Number" : "নগদ নম্বর"}: {checkoutSettings.checkout_nagad_number}</p>
                               )}
                               <input value={transactionId} onChange={(e) => setTransactionId(e.target.value)}
                                 className="w-full bg-white border border-orange-200 rounded-xl p-3 focus:ring-2 focus:ring-orange-300 focus:outline-none text-sm placeholder-orange-300"
-                                placeholder="নগদ Transaction ID লিখুন" required />
+                                placeholder={lang === "en" ? "Enter Nagad Transaction ID" : "নগদ Transaction ID লিখুন"} required />
                             </div>
                           )}
                         </div>
@@ -863,29 +863,29 @@ export default function CheckoutPage() {
               {/* Notes — conditional */}
               {checkoutSettings.checkout_show_notes !== "false" && (
                 <div>
-                  <label className="block font-bold text-sm mb-2 px-1">নোট (ঐচ্ছিক)</label>
-                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder="ডেলিভারি সম্পর্কে কোনো নির্দেশনা..." />
+                  <label className="block font-bold text-sm mb-2 px-1">{lang === "en" ? "Note (optional)" : "নোট (ঐচ্ছিক)"}</label>
+                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Any delivery instructions..." : "ডেলিভারি সম্পর্কে কোনো নির্দেশনা..."} />
                 </div>
               )}
 
               {/* Order Summary */}
               <div className="bg-gray-50 rounded-2xl p-5 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">সাবটোটাল</span>
+                  <span className="text-gray-500">{lang === "en" ? "Subtotal" : "সাবটোটাল"}</span>
                   <span className="font-semibold">৳{toBn(totalPrice)}</span>
                 </div>
                 {couponDiscount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-green-600">কুপন ছাড়</span>
+                    <span className="text-green-600">{lang === "en" ? "Coupon discount" : "কুপন ছাড়"}</span>
                     <span className="font-semibold text-green-600">-৳{toBn(couponDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">শিপিং চার্জ</span>
-                  <span className={`font-semibold ${effectiveShipping === 0 ? "text-green-600" : ""}`}>{effectiveShipping === 0 ? "ফ্রি" : `৳${toBn(effectiveShipping)}`}</span>
+                  <span className="text-gray-500">{lang === "en" ? "Shipping" : "শিপিং চার্জ"}</span>
+                  <span className={`font-semibold ${effectiveShipping === 0 ? "text-green-600" : ""}`}>{effectiveShipping === 0 ? (lang === "en" ? "Free" : "ফ্রি") : `৳${toBn(effectiveShipping)}`}</span>
                 </div>
                 <div className="flex justify-between text-xl font-extrabold pt-3 border-t-2 border-primary/20">
-                  <span>সর্বমোট</span>
+                  <span>{lang === "en" ? "Total" : "সর্বমোট"}</span>
                   <span className="text-primary">৳{toBn(total)}</span>
                 </div>
               </div>
@@ -893,7 +893,7 @@ export default function CheckoutPage() {
               {/* Submit */}
               <button type="submit" disabled={loading}
                 className="w-full py-4 md:py-5 rounded-full text-white text-lg font-bold shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-primary hover:bg-primary-light">
-                {loading ? "অর্ডার হচ্ছে..." : (checkoutSettings.checkout_btn_text || "✅ অর্ডার কনফার্ম করুন")}
+                {loading ? (lang === "en" ? "Placing order..." : "অর্ডার হচ্ছে...") : (checkoutSettings.checkout_btn_text || (lang === "en" ? "✅ Confirm Order" : "✅ অর্ডার কনফার্ম করুন"))}
               </button>
 
               {/* Trust / Guarantee */}
@@ -901,11 +901,11 @@ export default function CheckoutPage() {
                 <p className="text-center text-xs font-medium text-gray-400 pt-2">{checkoutSettings.checkout_guarantee_text}</p>
               ) : (
                 <div className="flex flex-wrap justify-center gap-3 text-xs font-medium text-gray-400 pt-2">
-                  <span>🔒 নিরাপদ অর্ডার</span>
+                  <span>{lang === "en" ? "🔒 Secure Order" : "🔒 নিরাপদ অর্ডার"}</span>
                   <span>•</span>
-                  <span>🚚 দ্রুত ডেলিভারি</span>
+                  <span>{lang === "en" ? "🚚 Fast Delivery" : "🚚 দ্রুত ডেলিভারি"}</span>
                   <span>•</span>
-                  <span>💵 ক্যাশ অন ডেলিভারি</span>
+                  <span>{lang === "en" ? "💵 Cash on Delivery" : "💵 ক্যাশ অন ডেলিভারি"}</span>
                 </div>
               )}
             </form>
