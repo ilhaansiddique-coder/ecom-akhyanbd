@@ -3,7 +3,14 @@ import type { NextConfig } from "next";
 // Cloudflare R2 public base URL (e.g. https://pub-xxx.r2.dev). When set, legacy
 // `/uploads/*` URLs stored in the DB are rewritten to R2 so we never hit local
 // disk in production. Empty string means "fall back to local API handler".
-const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+// Auto-prepends https:// if the env var was set without a protocol — Next's
+// rewrite validator rejects bare hostnames and kills the build otherwise.
+const R2_PUBLIC_URL = (() => {
+  const raw = (process.env.R2_PUBLIC_URL || "").trim().replace(/\/$/, "");
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
+})();
 let R2_HOSTNAME = "";
 try { R2_HOSTNAME = R2_PUBLIC_URL ? new URL(R2_PUBLIC_URL).hostname : ""; } catch { R2_HOSTNAME = ""; }
 
