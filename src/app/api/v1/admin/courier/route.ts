@@ -15,6 +15,7 @@ import {
   clearKeyCache,
   isValidBDPhone,
 } from "@/lib/steadfast";
+import { checkPathaoStatus, hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
 
 /**
  * GET /api/v1/admin/courier?action=balance
@@ -160,14 +161,29 @@ export async function POST(request: NextRequest) {
     if (!order) return notFound("Order not found");
     if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
 
-    // If this order was sent via Pathao, don't call Steadfast's endpoint — it
-    // would 404. Route the client to the right provider.
+    // Auto-delegate to the right provider based on order.courierType so the
+    // client doesn't need to know. Callers have been getting confused when
+    // their local activeCourier doesn't match an order's actual provider.
     if (order.courierType === "pathao") {
-      return errorResponse("Order sent via Pathao — use Pathao status endpoint", 400);
+      clearPathaoCache();
+      if (!(await hasPathaoAuth())) {
+        return errorResponse("Pathao credentials missing — cannot check status for this Pathao order. Re-add in Settings → Courier.", 400);
+      }
+      try {
+        const r = await checkPathaoStatus(order.consignmentId);
+        if (r.data?.order_status) {
+          await prisma.order.update({ where: { id: order.id }, data: { courierStatus: r.data.order_status } });
+          return jsonResponse({ delivery_status: r.data.order_status, consignment: r.data });
+        }
+        console.error("[courier status] Pathao (delegated) returned:", r);
+        return errorResponse(r.message || `Pathao code=${r.code ?? "?"}, no order_status`, 400);
+      } catch (err) {
+        console.error("[courier status] Pathao (delegated) fetch failed:", err);
+        return errorResponse("Failed to check status: " + (err instanceof Error ? err.message : "Unknown"), 500);
+      }
     }
 
-    // Need keys to call Steadfast status. If admin removed Steadfast since
-    // this order was sent, surface the real cause instead of a generic 500.
+    // Steadfast path (courierType === "steadfast" or legacy null)
     if (!(await isSteadfastConfigured())) {
       return errorResponse("Steadfast API keys not configured — cannot check status for this Steadfast order. Re-add keys in Settings → Courier.", 400);
     }

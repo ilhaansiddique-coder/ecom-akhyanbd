@@ -19,7 +19,7 @@ import {
   listPathaoStores,
   type PathaoOrder,
 } from "@/lib/pathao";
-import { formatPhone, isValidBDPhone } from "@/lib/steadfast";
+import { formatPhone, isValidBDPhone, checkDeliveryStatus, isSteadfastConfigured, clearKeyCache } from "@/lib/steadfast";
 
 /**
  * GET /api/v1/admin/courier/pathao?action=test
@@ -163,12 +163,29 @@ export async function POST(request: NextRequest) {
     if (!order) return notFound("Order not found");
     if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
 
-    // If this order was sent via Steadfast, don't call Pathao's endpoint.
-    if (order.courierType && order.courierType !== "pathao") {
-      return errorResponse(`Order sent via ${order.courierType} — use ${order.courierType} status endpoint`, 400);
+    // Auto-delegate to Steadfast if the order was actually sent through it
+    // (client's activeCourier may not match the order's real provider).
+    if (order.courierType === "steadfast") {
+      clearKeyCache();
+      if (!(await isSteadfastConfigured())) {
+        return errorResponse("Steadfast API keys not configured — cannot check status for this Steadfast order.", 400);
+      }
+      try {
+        const r = await checkDeliveryStatus(order.consignmentId);
+        if (r.status === 200 && r.delivery_status) {
+          await prisma.order.update({ where: { id: order.id }, data: { courierStatus: r.delivery_status } });
+          return jsonResponse({ delivery_status: r.delivery_status, consignment: r.consignment });
+        }
+        console.error("[courier status] Steadfast (delegated) returned:", r);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return errorResponse((r as any)?.message || `Steadfast status=${r.status}, no delivery_status`, 400);
+      } catch (err) {
+        console.error("[courier status] Steadfast (delegated) fetch failed:", err);
+        return errorResponse("Failed to check status: " + (err instanceof Error ? err.message : "Unknown"), 500);
+      }
     }
 
-    // Need Pathao auth to hit the status endpoint. Surface real cause.
+    // Pathao path (courierType === "pathao" or legacy null)
     if (!(await hasPathaoAuth())) {
       return errorResponse("Pathao credentials missing — cannot check status. Re-add credentials in Settings → Courier.", 400);
     }
