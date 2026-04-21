@@ -17,6 +17,10 @@ import { isStaffOrAdmin } from "@/lib/auth-helpers";
  * prompt, no leakage that an admin PWA exists. The /api/dashboard/manifest
  * endpoint also 404s for non-staff as defense-in-depth.
  */
+// generateMetadata reads cookies() via getSessionUser → layout must be dynamic.
+// Without this, Next may try to prerender at build time and fail on cookies().
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const user = await getSessionUser();
