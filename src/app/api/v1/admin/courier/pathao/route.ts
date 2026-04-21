@@ -143,9 +143,19 @@ function buildPathaoPayload(order: any): PathaoOrder {
 export async function POST(request: NextRequest) {
   try { await requireStaff(); } catch (e) { return e as Response; }
 
-  if (!(await isPathaoConfigured())) return errorResponse("Pathao not configured", 400);
-
   const body = await request.json();
+
+  // Bust 5-min settings cache so a just-saved Pathao credential is read
+  // fresh from DB, not reported as "not configured".
+  clearPathaoCache();
+
+  // Per-action gate: status check only needs auth to hit Pathao's read
+  // endpoint, so it still works on pre-existing orders even if admin later
+  // disables Pathao. Send actions do need full config — checked below.
+  const isStatusCheck = body.action === "check_status";
+  if (!isStatusCheck && !(await isPathaoConfigured())) {
+    return errorResponse("Pathao not configured", 400);
+  }
 
   // Check & update delivery status
   if (body.action === "check_status" && body.order_id) {
@@ -156,6 +166,11 @@ export async function POST(request: NextRequest) {
     // If this order was sent via Steadfast, don't call Pathao's endpoint.
     if (order.courierType && order.courierType !== "pathao") {
       return errorResponse(`Order sent via ${order.courierType} — use ${order.courierType} status endpoint`, 400);
+    }
+
+    // Need Pathao auth to hit the status endpoint. Surface real cause.
+    if (!(await hasPathaoAuth())) {
+      return errorResponse("Pathao credentials missing — cannot check status. Re-add credentials in Settings → Courier.", 400);
     }
 
     try {

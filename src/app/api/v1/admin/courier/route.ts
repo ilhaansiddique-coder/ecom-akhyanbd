@@ -137,11 +137,22 @@ export async function POST(request: NextRequest) {
   let admin;
   try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
-  if (!(await isSteadfastConfigured())) {
+  const body = await request.json();
+
+  // Clear cache so we always read the latest keys from DB — admin may have
+  // just saved new credentials via Settings → Courier and the old 5-min
+  // cache would otherwise still report "not configured" even though keys
+  // are present. Cheap; only runs on courier actions.
+  clearKeyCache();
+
+  // Per-action configured gate: status/score only need keys to exist to hit
+  // Steadfast's read endpoints. Send/bulk_send need them too, and we check
+  // below. Pure-read status checks on old orders still work even if admin
+  // later disables Steadfast.
+  const needsConfigured = !(body.action === "check_status" || body.action === "check_score");
+  if (needsConfigured && !(await isSteadfastConfigured())) {
     return errorResponse("Steadfast API keys not configured", 400);
   }
-
-  const body = await request.json();
 
   // Check & update delivery status for an order
   if (body.action === "check_status" && body.order_id) {
@@ -153,6 +164,12 @@ export async function POST(request: NextRequest) {
     // would 404. Route the client to the right provider.
     if (order.courierType === "pathao") {
       return errorResponse("Order sent via Pathao — use Pathao status endpoint", 400);
+    }
+
+    // Need keys to call Steadfast status. If admin removed Steadfast since
+    // this order was sent, surface the real cause instead of a generic 500.
+    if (!(await isSteadfastConfigured())) {
+      return errorResponse("Steadfast API keys not configured — cannot check status for this Steadfast order. Re-add keys in Settings → Courier.", 400);
     }
 
     try {
