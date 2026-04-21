@@ -102,6 +102,46 @@ function postCollect(body: unknown) {
 let _pixelId = "";
 let _userId = "";
 let _deferPurchase = false;
+// Track the last advanced-matching payload we pushed to fbq so we only
+// re-init when user data actually changes (on login, checkout submit).
+// Re-initializing on every event trips Pixel Helper's "duplicate pixel ID"
+// warning — the FB-recommended pattern for late advanced matching but
+// cosmetically noisy.
+let _lastAdvancedMatchingHash = "";
+
+/**
+ * Update Pixel Advanced Matching. Call on login, registration, or
+ * checkout-form submit — NOT on every event. Internally hashes the
+ * payload and skips the fbq init call when nothing meaningful changed,
+ * so repeated calls are safe.
+ */
+export function setAdvancedMatching(userData: {
+  em?: string; ph?: string; fn?: string; ln?: string;
+  ct?: string; st?: string; zp?: string; country?: string;
+  external_id?: string;
+} | undefined) {
+  if (typeof window === "undefined") return;
+  if (!_pixelId) return;
+  if (typeof window.fbq !== "function") return;
+  const pixelUserData: Record<string, string> = {};
+  if (userData?.em) pixelUserData.em = userData.em.trim().toLowerCase();
+  if (userData?.ph) pixelUserData.ph = userData.ph.replace(/[^0-9]/g, "");
+  if (userData?.fn) pixelUserData.fn = userData.fn.trim().toLowerCase();
+  if (userData?.ln) pixelUserData.ln = userData.ln.trim().toLowerCase();
+  if (userData?.ct) pixelUserData.ct = userData.ct.trim().toLowerCase();
+  if (userData?.st) pixelUserData.st = userData.st.trim().toLowerCase();
+  if (userData?.zp) pixelUserData.zp = userData.zp.trim();
+  if (userData?.country) pixelUserData.country = userData.country.trim().toLowerCase();
+  pixelUserData.external_id = userData?.external_id || _userId || getAnonId();
+  const hash = JSON.stringify(pixelUserData);
+  if (hash === _lastAdvancedMatchingHash) return;
+  _lastAdvancedMatchingHash = hash;
+  try {
+    window.fbq("init", _pixelId, pixelUserData);
+  } catch {
+    // never throw from analytics
+  }
+}
 
 /** Called by FacebookPixel component after init */
 export function setPixelId(id: string) {
@@ -121,6 +161,10 @@ export function setDeferPurchase(defer: boolean) {
 /** Called when user logs in — enables external_id on all events */
 export function setTrackingUserId(id: string | number) {
   _userId = String(id);
+  // Push fresh external_id to Pixel Advanced Matching. Dedup-aware; only
+  // re-inits if value changed, so calling setTrackingUserId repeatedly
+  // on the same id (e.g. AuthContext re-renders) is safe.
+  setAdvancedMatching({ external_id: _userId });
 }
 
 // --------------- core send ---------------
@@ -182,25 +226,13 @@ function sendEvent(
       if (PIXEL_KEYS.has(k) && v !== undefined) pixelData[k] = v;
     }
 
-    // Build Advanced Matching user_data for browser pixel
-    // Facebook pixel accepts: em, ph, fn, ln, ct, st, zp, country, external_id
-    // Values should be lowercase, trimmed (pixel hashes them automatically)
-    const pixelUserData: Record<string, string> = {};
-    if (userData.em) pixelUserData.em = userData.em.trim().toLowerCase();
-    if (userData.ph) pixelUserData.ph = userData.ph.replace(/[^0-9]/g, "");
-    if (userData.fn) pixelUserData.fn = userData.fn.trim().toLowerCase();
-    if (userData.ln) pixelUserData.ln = userData.ln.trim().toLowerCase();
-    if (userData.ct) pixelUserData.ct = userData.ct.trim().toLowerCase();
-    if (userData.st) pixelUserData.st = userData.st.trim().toLowerCase();
-    if (userData.zp) pixelUserData.zp = userData.zp.trim();
-    if (userData.country) pixelUserData.country = userData.country.trim().toLowerCase();
-    // external_id: explicit > authenticated > anon cookie (always populated)
-    pixelUserData.external_id = userData.external_id || _userId || getAnonId();
-
-    // Pass Advanced Matching user_data via fbq('init') before firing event
-    // Re-calling init with user data updates matching parameters
-    if (Object.keys(pixelUserData).length > 0 && _pixelId) {
-      window.fbq("init", _pixelId, pixelUserData);
+    // Push Advanced Matching via setAdvancedMatching (dedup-aware). Skips
+    // the fbq init call when values haven't changed since the last push,
+    // so Pixel Helper doesn't flag "duplicate Pixel ID" on every event.
+    // Pass undefined if nothing new — external_id anon cookie is the
+    // baseline and only needs to be sent once per session.
+    if (Object.keys(userData).length > 0) {
+      setAdvancedMatching(userData);
     }
 
     window.fbq("track", eventName, pixelData, { eventID: eventId });
@@ -426,17 +458,11 @@ export function trackPurchase(data: {
       if (PIXEL_KEYS.has(k) && v !== undefined) pixelData[k] = v;
     }
 
-    // Advanced Matching
-    const pixelUserData: Record<string, string> = {};
-    if (userData?.em) pixelUserData.em = userData.em.trim().toLowerCase();
-    if (userData?.ph) pixelUserData.ph = userData.ph.replace(/[^0-9]/g, "");
-    if (userData?.fn) pixelUserData.fn = userData.fn.trim().toLowerCase();
-    if (userData?.ln) pixelUserData.ln = userData.ln.trim().toLowerCase();
-    if (userData?.ct) pixelUserData.ct = userData.ct.trim().toLowerCase();
-    if (userData?.country) pixelUserData.country = userData.country.trim().toLowerCase();
-    pixelUserData.external_id = _userId || getAnonId();
-    if (Object.keys(pixelUserData).length > 0 && _pixelId) {
-      window.fbq("init", _pixelId, pixelUserData);
+    // Advanced Matching — dedup-aware so Pixel Helper doesn't flag
+    // "duplicate Pixel ID". Will no-op if em/ph haven't changed since
+    // the same user already submitted checkout.
+    if (userData && Object.keys(userData).length > 0) {
+      setAdvancedMatching(userData);
     }
 
     window.fbq("track", "Purchase", pixelData, { eventID: eventId });
