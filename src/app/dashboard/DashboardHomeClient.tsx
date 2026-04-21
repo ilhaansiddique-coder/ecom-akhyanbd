@@ -25,17 +25,21 @@ import {
 } from "react-icons/fi";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useLang } from "@/lib/LanguageContext";
-import dynamic from "next/dynamic";
-
-const RechartsBarChart = dynamic(() => import("recharts").then(m => m.BarChart), { ssr: false });
-const Bar = dynamic(() => import("recharts").then(m => m.Bar), { ssr: false });
-const XAxis = dynamic(() => import("recharts").then(m => m.XAxis), { ssr: false });
-const YAxis = dynamic(() => import("recharts").then(m => m.YAxis), { ssr: false });
-const Tooltip = dynamic(() => import("recharts").then(m => m.Tooltip), { ssr: false });
-const RechartsPieChart = dynamic(() => import("recharts").then(m => m.PieChart), { ssr: false });
-const Pie = dynamic(() => import("recharts").then(m => m.Pie), { ssr: false });
-const Cell = dynamic(() => import("recharts").then(m => m.Cell), { ssr: false });
-const ResponsiveContainer = dynamic(() => import("recharts").then(m => m.ResponsiveContainer), { ssr: false });
+// Normal imports (not dynamic ssr:false) — file is already "use client" so
+// recharts only ships on client anyway, and the dynamic wrapper caused a
+// mount race where ResponsiveContainer measured its parent before layout,
+// producing "width(-1) and height(-1)" console warnings.
+import {
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+} from "recharts";
 
 // ─── Status labels ───────────────────────────────────────────────────────────
 const statusColors: Record<string, string> = {
@@ -263,7 +267,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           {pieData.length === 0 ? (
             <p className="text-sm text-gray-400 py-16 text-center">{t("empty.orders")}</p>
           ) : (
-            <div className="h-64 flex items-center">
+            <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value"
