@@ -66,8 +66,9 @@ export const api = {
   // Menus
   getMenus: () => fetchAPI("/menus"),
 
-  // Landing Pages
-  getLandingPage: (slug: string) => fetchAPI(`/landing-pages/${slug}`),
+  // Blog
+  getBlogPosts: () => fetchAPI("/blog"),
+  getBlogPost: (slug: string) => fetchAPI(`/blog/${slug}`),
 
   // Auth
   register: (data: { name: string; email: string; password: string; password_confirmation: string; phone?: string }) =>
@@ -261,9 +262,11 @@ export const api = {
     pathaoAreas: (zoneId: number) => fetchAPI(`/admin/courier/pathao?action=areas&zone_id=${zoneId}`) as Promise<{ items: { area_id: number; area_name: string }[] }>,
     pathaoParseAddress: (address: string, phone: string) =>
       fetchAPI("/admin/courier/pathao/parse", { method: "POST", body: JSON.stringify({ address, phone }) }) as Promise<{
-        data?: { area_id?: number | null; area_name?: string | null; zone_id?: number; zone_name?: string;
-                 district_id?: number; district_name?: string; hub_id?: number; hub_name?: string;
-                 score?: number; source?: string; is_implicit?: boolean };
+        data?: {
+          area_id?: number | null; area_name?: string | null; zone_id?: number; zone_name?: string;
+          district_id?: number; district_name?: string; hub_id?: number; hub_name?: string;
+          score?: number; source?: string; is_implicit?: boolean
+        };
       }>,
     pathaoCustomerHistory: (phone: string) =>
       fetchAPI("/admin/courier/pathao/customer-history", { method: "POST", body: JSON.stringify({ phone }) }) as Promise<{

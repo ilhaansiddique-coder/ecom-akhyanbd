@@ -29,6 +29,8 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
   const [activeBrand, setActiveBrand] = useState<string>("");
   const [sort, setSort] = useState<SortOption>("default");
   const [search, setSearch] = useState("");
+  const [minPrice, setMinPrice] = useState<number>(0);
+  const [maxPrice, setMaxPrice] = useState<number>(10000);
 
   // Read URL params on mount: ?category=ID or ?brand=ID
   useEffect(() => {
@@ -107,6 +109,8 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
   if (sort === "newest") filtered = [...filtered].sort((a, b) => b.id - a.id);
   if (sort === "popular") filtered = [...filtered].sort((a, b) => (b.originalPrice ? 1 : 0) - (a.originalPrice ? 1 : 0));
 
+  filtered = filtered.filter(p => p.price >= minPrice && p.price <= maxPrice);
+
   return (
     <section className="py-8 md:py-12 bg-background-alt min-h-[70vh]">
       <div className="container mx-auto px-4">
@@ -144,6 +148,28 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
                 </button>
               ))}
             </div>
+
+            <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-border">
+              <span className="text-xs font-bold text-text-muted uppercase tracking-wider">{lang === "en" ? "Price Range" : "মূল্য সীমা"}:</span>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="number" 
+                  value={minPrice} 
+                  onChange={(e) => setMinPrice(Number(e.target.value))}
+                  className="w-20 px-2 py-1 text-sm border border-border rounded-lg focus:outline-none focus:border-primary"
+                  placeholder="Min"
+                />
+                <span className="text-text-muted">থেকে</span>
+                <input 
+                  type="number" 
+                  value={maxPrice} 
+                  onChange={(e) => setMaxPrice(Number(e.target.value))}
+                  className="w-20 px-2 py-1 text-sm border border-border rounded-lg focus:outline-none focus:border-primary"
+                  placeholder="Max"
+                />
+              </div>
+            </div>
+
             <InlineSelect value={sort} options={[
               { value: "default", label: lang === "en" ? "Default" : "ডিফল্ট সর্টিং" },
               { value: "price_asc", label: lang === "en" ? "Price: Low → High" : "দাম: কম → বেশি" },
