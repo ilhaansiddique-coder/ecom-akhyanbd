@@ -14,6 +14,48 @@ function getCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+function setCookie(name: string, value: string, days = 90) {
+  if (typeof document === "undefined") return;
+  const exp = new Date(Date.now() + days * 86400000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${exp}; path=/; SameSite=Lax`;
+}
+
+/**
+ * Build _fbc value from a fresh fbclid query param when the Pixel hasn't
+ * written the cookie yet. Format per Facebook spec: fb.1.{ts}.{fbclid}.
+ * Caches into the _fbc cookie too so subsequent events read consistently.
+ */
+function getFbc(): string | undefined {
+  const cookie = getCookie("_fbc");
+  if (cookie) return cookie;
+  if (typeof window === "undefined") return undefined;
+  try {
+    const fbclid = new URL(window.location.href).searchParams.get("fbclid");
+    if (!fbclid) return undefined;
+    const fbc = `fb.1.${Date.now()}.${fbclid}`;
+    setCookie("_fbc", fbc);
+    return fbc;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Stable anonymous ID for guest users. Improves CAPI external_id coverage
+ * (FB dashboard wants this >= 80%; logged-in-only gets ~25%). Stored in a
+ * 1-year cookie so the same browser is recognized across sessions and
+ * paired with the eventual logged-in id when the user signs up.
+ */
+function getAnonId(): string {
+  const existing = getCookie("_aid");
+  if (existing) return existing;
+  const id = (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  setCookie("_aid", id, 365);
+  return id;
+}
+
 function genEventId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   // Fallback for older browsers
@@ -152,7 +194,8 @@ function sendEvent(
     if (userData.st) pixelUserData.st = userData.st.trim().toLowerCase();
     if (userData.zp) pixelUserData.zp = userData.zp.trim();
     if (userData.country) pixelUserData.country = userData.country.trim().toLowerCase();
-    if (userData.external_id) pixelUserData.external_id = userData.external_id;
+    // external_id: explicit > authenticated > anon cookie (always populated)
+    pixelUserData.external_id = userData.external_id || _userId || getAnonId();
 
     // Pass Advanced Matching user_data via fbq('init') before firing event
     // Re-calling init with user data updates matching parameters
@@ -173,8 +216,11 @@ function sendEvent(
       custom_data: dataWithCurrency,
       user_data: {
         fbp: getCookie("_fbp"),
-        fbc: getCookie("_fbc"),
-        ...(_userId ? { external_id: _userId } : {}),
+        fbc: getFbc(),
+        // external_id: prefer authenticated user id, fall back to stable anon
+        // cookie so CAPI gets coverage for guests too (FB dashboard wants
+        // this above 80%, was at ~27% with logged-in-only).
+        external_id: _userId || getAnonId(),
         ...userData,
       },
     });
@@ -292,7 +338,7 @@ export function trackPurchase(data: {
     if (userData?.ln) pixelUserData.ln = userData.ln.trim().toLowerCase();
     if (userData?.ct) pixelUserData.ct = userData.ct.trim().toLowerCase();
     if (userData?.country) pixelUserData.country = userData.country.trim().toLowerCase();
-    if (_userId) pixelUserData.external_id = _userId;
+    pixelUserData.external_id = _userId || getAnonId();
     if (Object.keys(pixelUserData).length > 0 && _pixelId) {
       window.fbq("init", _pixelId, pixelUserData);
     }
@@ -311,8 +357,8 @@ export function trackPurchase(data: {
     custom_data: customData,
     user_data: {
       fbp: getCookie("_fbp"),
-      fbc: getCookie("_fbc"),
-      ...(_userId ? { external_id: _userId } : {}),
+      fbc: getFbc(),
+      external_id: _userId || getAnonId(),
       ...userData,
     },
     order_id: data.order_id,

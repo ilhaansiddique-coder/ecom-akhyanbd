@@ -6,11 +6,25 @@ export function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 }
 
-/** Extract client IP from request headers */
+/**
+ * Extract client IP from request headers.
+ *
+ * Order matters — Cloudflare's cf-connecting-ip and true-client-ip preserve
+ * the original IPv6 address. x-forwarded-for is often truncated/normalized
+ * to IPv4 by intermediate proxies, which is why FB's CAPI dashboard
+ * complains "server sending IPv4, pixel sending IPv6". Prefer the CF
+ * headers when present.
+ */
 export function getClientIp(request: NextRequest): string | undefined {
+  const cf = request.headers.get("cf-connecting-ip");
+  if (cf) return cf.trim();
+  const tci = request.headers.get("true-client-ip");
+  if (tci) return tci.trim();
+  const xri = request.headers.get("x-real-ip");
+  if (xri) return xri.trim();
   const xff = request.headers.get("x-forwarded-for");
   if (xff) return xff.split(",")[0].trim();
-  return request.headers.get("x-real-ip") || undefined;
+  return undefined;
 }
 
 /** Build hashed user_data object for Facebook CAPI */
