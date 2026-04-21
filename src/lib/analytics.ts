@@ -227,9 +227,70 @@ function sendEvent(
   }
 }
 
+// --------------- GA4 dataLayer ---------------
+
+/**
+ * GA4 Enhanced Ecommerce dataLayer push.
+ *
+ * GTM listens for these and can fan out to the GA4 Config tag, Google Ads,
+ * or any other GTM-compatible destination. Event names follow the GA4
+ * recommended schema so out-of-the-box GA4 reports (Monetization, Funnels)
+ * work without custom mapping.
+ *
+ * Pixel fires on the same tick — GTM handles Google side, our analytics
+ * module handles Facebook side. Single source of truth for when events
+ * happen; multiple sinks.
+ */
+interface Ga4Item {
+  item_id: string;
+  item_name?: string;
+  item_category?: string;
+  item_variant?: string;
+  price?: number;
+  quantity?: number;
+}
+
+function pushDataLayer(event: string, ecommerce: Record<string, unknown>, extra?: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    w.dataLayer = w.dataLayer || [];
+    // GA4 best practice: null out ecommerce before each push so the object
+    // from the previous event doesn't leak into the current one.
+    w.dataLayer.push({ ecommerce: null });
+    w.dataLayer.push({ event, ecommerce, ...(extra || {}) });
+  } catch {
+    // never throw from analytics
+  }
+}
+
+/**
+ * Build GA4 items[] from our internal contents[]. `contents` entries come
+ * from the cart/product page with id + quantity + optional item_price.
+ * `name` is a single product name (for ViewContent/AddToCart) or order
+ * context (for Purchase where we may not have per-line names yet).
+ */
+function toGa4Items(
+  contents: { id: string | number; quantity: number; item_price?: number; name?: string; category?: string; variant?: string }[] | undefined,
+  fallbackName?: string,
+  fallbackCategory?: string,
+): Ga4Item[] {
+  if (!contents || contents.length === 0) return [];
+  return contents.map((c) => ({
+    item_id: String(c.id),
+    item_name: c.name || fallbackName,
+    item_category: c.category || fallbackCategory,
+    item_variant: c.variant,
+    price: c.item_price,
+    quantity: c.quantity,
+  }));
+}
+
 // --------------- public API ---------------
 
-/** PageView — browser pixel + server CAPI */
+/** PageView — browser pixel + server CAPI. GA4 page_view fires natively from GTM's Config tag. */
 export function trackPageView() {
   sendEvent("PageView", {}, {}, false);
 }
@@ -252,6 +313,19 @@ export function trackViewContent(data: {
     currency: "BDT",
     content_category: data.content_category,
   }, {}, false, data.sourceUrl);
+
+  // GA4 view_item
+  pushDataLayer("view_item", {
+    currency: "BDT",
+    value: data.value,
+    items: data.content_ids.map((id) => ({
+      item_id: String(id),
+      item_name: data.content_name,
+      item_category: data.content_category,
+      price: data.value,
+      quantity: 1,
+    })),
+  });
 }
 
 /** Item added to cart */
@@ -270,13 +344,25 @@ export function trackAddToCart(data: {
     value: data.value,
     currency: "BDT",
   });
+
+  // GA4 add_to_cart
+  pushDataLayer("add_to_cart", {
+    currency: "BDT",
+    value: data.value,
+    items: data.content_ids.map((id) => ({
+      item_id: String(id),
+      item_name: data.content_name,
+      price: data.value / Math.max(1, data.quantity || 1),
+      quantity: data.quantity || 1,
+    })),
+  });
 }
 
 /** Checkout page opened */
 export function trackInitiateCheckout(data: {
   content_ids: (string | number)[];
   content_name?: string;
-  contents?: { id: string | number; quantity: number; item_price?: number }[];
+  contents?: { id: string | number; quantity: number; item_price?: number; name?: string; category?: string; variant?: string }[];
   num_items: number;
   value: number;
 }, userData?: UserData) {
@@ -289,13 +375,23 @@ export function trackInitiateCheckout(data: {
     value: data.value,
     currency: "BDT",
   }, userData);
+
+  // GA4 begin_checkout
+  const items = data.contents
+    ? toGa4Items(data.contents, data.content_name)
+    : data.content_ids.map((id) => ({ item_id: String(id), item_name: data.content_name, quantity: 1 }));
+  pushDataLayer("begin_checkout", {
+    currency: "BDT",
+    value: data.value,
+    items,
+  });
 }
 
 /** Order completed — currency + value REQUIRED by Facebook */
 export function trackPurchase(data: {
   content_ids: (string | number)[];
   content_name?: string;
-  contents?: { id: string | number; quantity: number; item_price?: number }[];
+  contents?: { id: string | number; quantity: number; item_price?: number; name?: string; category?: string; variant?: string }[];
   num_items: number;
   value: number;
   order_id?: string;
@@ -363,19 +459,126 @@ export function trackPurchase(data: {
     },
     order_id: data.order_id,
   });
+
+  // GA4 purchase. Fires on the browser regardless of FB defer mode — GA4
+  // has its own reporting cycle and doesn't need to align with our admin
+  // confirm workflow. Google Ads conversions also pick this up via GTM.
+  const items = data.contents
+    ? toGa4Items(data.contents, data.content_name)
+    : data.content_ids.map((id) => ({ item_id: String(id), item_name: data.content_name, quantity: 1 }));
+  pushDataLayer("purchase", {
+    transaction_id: data.order_id ? String(data.order_id) : eventId,
+    currency: "BDT",
+    value: data.value,
+    shipping: data.shipping,
+    items,
+  });
 }
 
 /** Search performed */
 export function trackSearch(data: { search_string: string }) {
   sendEvent("Search", { search_string: data.search_string, content_type: "product" });
+  pushDataLayer("search", { search_term: data.search_string });
 }
 
 /** Contact form / lead form submitted */
 export function trackLead(userData?: UserData) {
   sendEvent("Lead", {}, userData);
+  pushDataLayer("generate_lead", { currency: "BDT", value: 0 });
 }
 
 /** User registered */
 export function trackCompleteRegistration(userData?: UserData) {
   sendEvent("CompleteRegistration", {}, userData);
+  pushDataLayer("sign_up", { method: "email" });
+}
+
+/**
+ * GA4 view_item_list — fire on shop/category/search result pages. Helps
+ * the Products report in GA4 attribute clicks back to impressions.
+ */
+export function trackViewItemList(data: {
+  item_list_id?: string;
+  item_list_name?: string;
+  items: { id: string | number; name?: string; category?: string; price?: number }[];
+}) {
+  if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
+  pushDataLayer("view_item_list", {
+    item_list_id: data.item_list_id,
+    item_list_name: data.item_list_name,
+    items: data.items.map((it, i) => ({
+      item_id: String(it.id),
+      item_name: it.name,
+      item_category: it.category,
+      price: it.price,
+      index: i,
+    })),
+  });
+}
+
+/**
+ * GA4 select_item — fire when a user clicks a product card from a list.
+ * Pairs with view_item_list for funnel analysis.
+ */
+export function trackSelectItem(data: {
+  item_list_id?: string;
+  item_list_name?: string;
+  item: { id: string | number; name?: string; category?: string; price?: number };
+}) {
+  if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
+  pushDataLayer("select_item", {
+    item_list_id: data.item_list_id,
+    item_list_name: data.item_list_name,
+    items: [{
+      item_id: String(data.item.id),
+      item_name: data.item.name,
+      item_category: data.item.category,
+      price: data.item.price,
+    }],
+  });
+}
+
+/**
+ * GA4 remove_from_cart — fire when user removes an item in the cart drawer.
+ */
+export function trackRemoveFromCart(data: {
+  content_ids: (string | number)[];
+  content_name?: string;
+  value: number;
+  quantity?: number;
+}) {
+  if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
+  pushDataLayer("remove_from_cart", {
+    currency: "BDT",
+    value: data.value,
+    items: data.content_ids.map((id) => ({
+      item_id: String(id),
+      item_name: data.content_name,
+      price: data.value / Math.max(1, data.quantity || 1),
+      quantity: data.quantity || 1,
+    })),
+  });
+}
+
+/**
+ * GA4 add_payment_info — fire when the user selects a payment method on
+ * checkout. Useful for funnel drop-off analysis between begin_checkout
+ * and purchase.
+ */
+export function trackAddPaymentInfo(data: {
+  value: number;
+  payment_type: string;
+  content_ids: (string | number)[];
+}) {
+  if (typeof window === "undefined") return;
+  if (isExcludedPath()) return;
+  pushDataLayer("add_payment_info", {
+    currency: "BDT",
+    value: data.value,
+    payment_type: data.payment_type,
+    items: data.content_ids.map((id) => ({ item_id: String(id), quantity: 1 })),
+  });
 }
