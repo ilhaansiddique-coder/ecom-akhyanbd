@@ -2,8 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
-import { isSteadfastEnabled, checkCourierScore as steadfastScore, formatPhone } from "@/lib/steadfast";
-import { isPathaoEnabled } from "@/lib/pathao";
+import { isSteadfastConfigured, checkCourierScore as steadfastScore, formatPhone, clearKeyCache } from "@/lib/steadfast";
+import { hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
 
 /**
  * Unified courier fraud-score check.
@@ -107,14 +107,22 @@ export async function POST(req: NextRequest) {
 
   if (!phone) return errorResponse("phone or order_id required", 400);
 
-  const [stEnabled, pxEnabled] = await Promise.all([isSteadfastEnabled(), isPathaoEnabled()]);
-  if (!stEnabled && !pxEnabled) {
+  // Fraud-score check intentionally ignores the per-courier Active checkmark.
+  // Merchants often disable a courier for dispatch while still wanting its
+  // historical fraud data — e.g. Steadfast has years of rider feedback even
+  // if the shop has switched to Pathao. Use configured/hasAuth (keys present)
+  // instead of enabled (keys + active checkbox).
+  // Bust 5-min cache so freshly-saved keys register immediately.
+  clearKeyCache();
+  clearPathaoCache();
+  const [stReady, pxReady] = await Promise.all([isSteadfastConfigured(), hasPathaoAuth()]);
+  if (!stReady && !pxReady) {
     return errorResponse("No courier configured. Go to Settings → Courier.", 400);
   }
 
   const tasks: Promise<ProviderResult>[] = [];
-  if (stEnabled) tasks.push(scoreSteadfast(phone));
-  if (pxEnabled) tasks.push(scorePathao(phone));
+  if (stReady) tasks.push(scoreSteadfast(phone));
+  if (pxReady) tasks.push(scorePathao(phone));
   const providers = await Promise.all(tasks);
 
   // Combined aggregate (sum across successful providers)
