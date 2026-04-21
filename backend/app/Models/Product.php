@@ -33,11 +33,11 @@ class Product extends Model
     ];
 
     protected $casts = [
-        'price'          => 'decimal:2',
+        'price' => 'decimal:2',
         'original_price' => 'decimal:2',
-        'images'         => 'array',
-        'is_active'      => 'boolean',
-        'is_featured'    => 'boolean',
+        'images' => 'array',
+        'is_active' => 'boolean',
+        'is_featured' => 'boolean',
     ];
 
     public function category(): BelongsTo
@@ -60,15 +60,18 @@ class Product extends Model
         return $this->hasOne(LandingPage::class);
     }
 
-    public function reviews() { return $this->hasMany(Review::class); }
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
 
     public function toSearchableArray(): array
     {
         return [
-            'id'          => $this->id,
-            'name'        => $this->name,
+            'id' => $this->id,
+            'name' => $this->name,
             'description' => $this->description,
-            'badge'       => $this->badge,
+            'badge' => $this->badge,
         ];
     }
 }

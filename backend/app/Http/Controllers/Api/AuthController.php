@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Mail\WelcomeEmail;
+use App\Mail\ResetCodeMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
@@ -98,8 +99,13 @@ class AuthController extends Controller
             ['token' => Hash::make($token), 'created_at' => now()]
         );
 
-        // TODO: Send $token via email/SMS using Mail::to($user)->send(new ResetCodeMail($token))
-        // For now, the code is stored in password_reset_tokens — user must receive it via email
+        // Send reset code via email
+        try {
+            Mail::to($user->email)->queue(new ResetCodeMail($token));
+        } catch (\Throwable $e) {
+            // Log error or handle gracefully
+        }
+
         return response()->json([
             'message' => 'রিসেট কোড আপনার ইমেইলে পাঠানো হয়েছে।',
         ]);
