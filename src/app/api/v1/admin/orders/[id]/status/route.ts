@@ -32,17 +32,27 @@ export async function PUT(
     const updateData: any = { status: data.status };
     if (data.payment_status) updateData.paymentStatus = data.payment_status;
 
-    // Handle Purchase / OrderCancelled event based on new status
+    // Handle Purchase / OrderCancelled event based on new status.
+    // Guard: only re-fire on confirm when deferred-purchase mode was ON at
+    // the time of checkout. Older order rows may have stale trackingData
+    // stored from before the collect route was fixed — firing them again
+    // would produce duplicate Purchase events (same event_id; FB dedupes
+    // within ~7 days but not after). Read the CURRENT defer setting; if
+    // off, skip the refire and just clear the stale payload.
     if (existing.trackingData) {
-      // Get CAPI credentials once for both branches
       const credRows = await prisma.siteSetting.findMany({
-        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code"] } },
+        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"] } },
       });
       const creds: Record<string, string> = {};
       for (const r of credRows) if (r.value) creds[r.key] = r.value;
       const accessToken = creds.fb_capi_access_token;
+      const deferEnabled = creds.fb_deferred_purchase === "true";
 
-      if (data.status === "confirmed") {
+      if (data.status === "confirmed" && !deferEnabled) {
+        // Defer OFF: Purchase already fired at checkout time. Just clear
+        // any stale stored payload so confirm never refires it.
+        updateData.trackingData = null;
+      } else if (data.status === "confirmed") {
         // Fire the stored Purchase event to Facebook CAPI
         try {
           const stored = JSON.parse(existing.trackingData);

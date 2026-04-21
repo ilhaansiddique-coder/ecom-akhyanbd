@@ -47,31 +47,34 @@ export async function POST(request: NextRequest) {
       eventData.custom_data = custom_data;
     }
 
-    // For Purchase events with an order_id — always store to DB
+    // For Purchase events with an order_id, behavior splits on defer setting:
+    //   Deferred ON  → store payload to order.trackingData, do NOT fire CAPI
+    //                  yet. Admin confirm route fires it later.
+    //   Deferred OFF → fire CAPI now, do NOT store. Storing would cause the
+    //                  admin confirm route to re-fire the same Purchase
+    //                  (same event_id; FB dedupes within ~7d but not after,
+    //                  and it pollutes the test events panel either way).
     if (event_name === "Purchase" && order_id) {
-      try {
-        await prisma.order.update({
-          where: { id: Number(order_id) },
-          data: {
-            trackingData: JSON.stringify({
-              eventData,
-              pixelId,
-              testEventCode: settings.fb_test_event_code || null,
-            }),
-          },
-        });
-      } catch {
-        // Order not found — silently ignore
-      }
-
       if (isDeferred) {
-        // Deferred ON: stored, will fire when admin confirms order
+        try {
+          await prisma.order.update({
+            where: { id: Number(order_id) },
+            data: {
+              trackingData: JSON.stringify({
+                eventData,
+                pixelId,
+                testEventCode: settings.fb_test_event_code || null,
+              }),
+            },
+          });
+        } catch {
+          // Order not found — silently ignore
+        }
         return jsonResponse({ success: true, deferred: true });
       }
-      // Deferred OFF: stored AND fire immediately to Facebook.
-      // Fire-and-forget so we return 200 to the browser before the FB call
-      // finishes. Previously this awaited the FB roundtrip, racing with the
-      // post-checkout router.push and dropping the event.
+
+      // Deferred OFF: fire-and-forget so we return 200 to the browser before
+      // the FB call finishes. Never store — confirm route would refire it.
       sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code).catch((err) => {
         console.error("[FB CAPI] Purchase send failed:", err);
       });
