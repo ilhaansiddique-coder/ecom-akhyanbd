@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { jsonResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import { isSteadfastEnabled } from "@/lib/steadfast";
 import { isPathaoEnabled } from "@/lib/pathao";
 
@@ -10,7 +10,7 @@ import { isPathaoEnabled } from "@/lib/pathao";
  * Drives the dynamic courier picker on the orders page.
  */
 export async function GET(_req: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   const [steadfast, pathao] = await Promise.all([
     isSteadfastEnabled(),

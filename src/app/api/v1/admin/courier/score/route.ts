@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import { isSteadfastEnabled, checkCourierScore as steadfastScore, formatPhone } from "@/lib/steadfast";
 import { isPathaoEnabled } from "@/lib/pathao";
 
@@ -93,7 +93,7 @@ async function scorePathao(phone: string): Promise<ProviderResult> {
 }
 
 export async function POST(req: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   const body = await req.json().catch(() => ({}));
   let phone: string | undefined = body.phone;

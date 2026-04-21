@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 
 /**
  * POST /api/v1/admin/courier/pathao/customer-history
@@ -20,7 +20,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
  *   } }
  */
 export async function POST(req: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   const tokenRow = await prisma.siteSetting.findUnique({ where: { key: "pathao_web_token" } });
   const token = tokenRow?.value?.trim();

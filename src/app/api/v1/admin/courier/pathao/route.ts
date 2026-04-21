@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import {
   sendToPathao,
   sendBulkToPathao,
@@ -28,7 +28,7 @@ import { formatPhone, isValidBDPhone } from "@/lib/steadfast";
  * GET ?action=cities | zones&city_id=XX | areas&zone_id=XX | stores
  */
 export async function GET(request: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   const action = request.nextUrl.searchParams.get("action");
 
@@ -141,7 +141,7 @@ function buildPathaoPayload(order: any): PathaoOrder {
  * { order_id } | { order_ids } | { action: "bulk_send", order_ids } | { action: "check_status", order_id }
  */
 export async function POST(request: NextRequest) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+  try { await requireStaff(); } catch (e) { return e as Response; }
 
   if (!(await isPathaoConfigured())) return errorResponse("Pathao not configured", 400);
 

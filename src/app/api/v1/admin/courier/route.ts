@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireStaff } from "@/lib/auth-helpers";
 import {
   sendToSteadfast,
   sendBulkToSteadfast,
@@ -23,7 +23,7 @@ import {
  */
 export async function GET(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   const action = request.nextUrl.searchParams.get("action");
 
@@ -135,7 +135,7 @@ function buildSteadfastPayload(order: any) {
  */
 export async function POST(request: NextRequest) {
   let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   if (!(await isSteadfastConfigured())) {
     return errorResponse("Steadfast API keys not configured", 400);
