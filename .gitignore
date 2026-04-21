@@ -60,3 +60,11 @@ next-env.d.ts
 
 # Local Capacitor scratch folder (not part of repo)
 mobile/
+
+# graphify knowledge graph (regenerable, 10MB+)
+graphify-out/
+.graphify_*
+.agent/
+
+# claude project notes
+CLAUDE.md

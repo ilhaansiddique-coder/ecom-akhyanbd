@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
+import InstallPwaButton from "@/components/dashboard/InstallPwaButton";
 
 import {
   FiHome,
@@ -555,6 +556,7 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
           </button>
           <h1 className="text-lg font-bold text-gray-800 flex-1">{title}</h1>
           <div className="flex items-center gap-3">
+            <InstallPwaButton />
             <Link
               href="/"
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--primary)] hover:bg-green-50 rounded-lg transition-colors"

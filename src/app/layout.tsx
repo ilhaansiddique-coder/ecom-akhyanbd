@@ -6,16 +6,22 @@ import HeadScripts from "@/components/HeadScripts";
 import { prisma } from "@/lib/prisma";
 import { buildThemeCss } from "@/lib/theme-tokens";
 
-// Font loading strategy:
-//   display: "block" + preload: true for the PRIMARY body/heading stack
-//   (Bricolage + Hind Siliguri) so the browser blocks briefly until the
-//   webfont arrives instead of painting a system fallback and then swapping
-//   — eliminates the layout shift the user sees on page load. Next/font
-//   auto-generates a size-adjusted fallback so even the pre-swap render
-//   (if any) keeps the same line metrics.
-//
-//   Secondary display fonts (Playfair, Manrope) stay on "swap" because
-//   they're only used in a few scoped spots and blocking hurts LCP.
+// Font loading strategy (perf-tuned for mobile LCP):
+//   - PRIMARY body font (Hind Siliguri) stays on display: "block" + preload:
+//     it carries Bengali script and a fallback swap is jarring (English glyphs
+//     paint first, then snap to Bengali). adjustFontFallback keeps metrics
+//     stable so there's still no CLS.
+//   - HEADING font (Bricolage) moved to display: "swap" + dropped preload.
+//     "block" was hiding hero h1 text until the WOFF2 arrived, killing LCP
+//     on slow mobile networks. With "swap" the system fallback paints
+//     instantly, then the webfont swaps in (adjustFontFallback prevents
+//     visible reflow).
+//   - Secondary fonts (Playfair, Manrope) keep "swap" — only used in
+//     customizer-selectable spots, never on the critical path.
+//   - Weights trimmed to the ones the UI actually renders. Each extra
+//     weight = a separate WOFF2 fetch.
+//   - All four are kept declared because the dashboard customizer lets
+//     admins pick any of them as the live heading/body font.
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
   subsets: ["bengali", "latin"],
@@ -29,23 +35,25 @@ const hindSiliguri = Hind_Siliguri({
 const playfairDisplay = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["400", "700"],
   display: "swap",
+  adjustFontFallback: true,
 });
 
 const manrope = Manrope({
   variable: "--font-manrope",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "600"],
   display: "swap",
+  adjustFontFallback: true,
 });
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  display: "block",
-  preload: true,
+  weight: ["500", "700"],
+  display: "swap",
+  preload: false,
   adjustFontFallback: true,
 });
 
@@ -132,6 +140,16 @@ export default async function RootLayout({
         {fbDomainVerification && (
           <meta name="facebook-domain-verification" content={fbDomainVerification} />
         )}
+        {/* Resource hints: warm up TLS to hot 3rd-party origins before the
+            browser even discovers their requests. Saves 100-300ms on slow
+            mobile. preconnect = full handshake; dns-prefetch = name only.
+            CDN gets full preconnect (every page hits it for images).
+            Tracking gets dns-prefetch only (tracking is deferred via
+            ClientLayout, full preconnect would waste a connection slot). */}
+        <link rel="preconnect" href="https://cdn.akhiyanbd.com" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://connect.facebook.net" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://www.google-analytics.com" />
         <style id="theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />
       </head>
       <body className="min-h-screen bg-background" suppressHydrationWarning>

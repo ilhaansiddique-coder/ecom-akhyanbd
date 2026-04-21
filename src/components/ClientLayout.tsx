@@ -17,9 +17,11 @@ import FooterBottom from "./FooterBottom";
 
 // Non-critical UI — load after hydration, not in initial bundle
 const FloatingWidgets = dynamic(() => import("./FloatingWidgets"), { ssr: false });
-const FacebookPixel = dynamic(() => import("./FacebookPixel"), { ssr: false });
 const FingerprintCollector = dynamic(() => import("./FingerprintCollector"), { ssr: false });
-const GoogleTagManager = dynamic(() => import("./GoogleTagManager"), { ssr: false });
+// FacebookPixel + GoogleTagManager are owned by DeferredAnalytics, which
+// holds them until the browser is idle (or until the user interacts) on
+// non-conversion pages — protects LCP/TBT without breaking attribution.
+const DeferredAnalytics = dynamic(() => import("./DeferredAnalytics"), { ssr: false });
 
 // Lazy-load heavy modals — not needed on initial paint
 const CartDrawer = lazy(() => import("./CartDrawer"));
@@ -73,9 +75,12 @@ export default function ClientLayout({
     {!isDashboard && <NavigationProgress />}
     <Suspense fallback={null}><PreviewBridgeGate /></Suspense>
     {/* Analytics — storefront only. Skip dashboard so admin clicks don't pollute
-        Pixel/GTM events or trigger PageView spam in the merchant's data. */}
-    {!isDashboard && <FacebookPixel />}
-    {!isDashboard && <GoogleTagManager />}
+        Pixel/GTM events or trigger PageView spam in the merchant's data.
+        DeferredAnalytics defers the actual Pixel/GTM load until the browser
+        is idle (or until first user interaction), except on conversion paths
+        (/checkout, /lp/*, /order/*) where it mounts immediately so funnel
+        events are not lost. */}
+    {!isDashboard && <DeferredAnalytics />}
     <FingerprintCollector />
     <AuthProvider>
     <CartProvider>

@@ -73,7 +73,11 @@ export default function Hero({ content }: { content?: HeroContent }) {
             <div className="relative">
               <div className="w-80 h-80 xl:w-96 xl:h-96 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20">
                 <div className="w-64 h-64 xl:w-80 xl:h-80 bg-white/10 rounded-full flex items-center justify-center overflow-hidden">
-                  <Image src={content?.hero_logo || "/logo.svg"} alt="Site Logo" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl object-contain" style={{ height: "auto" }} priority unoptimized={!!(content?.hero_logo)} />
+                  {/* Hero logo on desktop only (hidden lg:flex parent). priority hint
+                      stays so it doesn't compete with below-the-fold images. unoptimized
+                      removed — R2-hosted logos go through next/image AVIF/WebP pipeline
+                      now, cutting ~30-100KB. */}
+                  <Image src={content?.hero_logo || "/logo.svg"} alt="Site Logo" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl object-contain" style={{ height: "auto" }} priority sizes="(min-width: 1280px) 224px, 192px" />
                 </div>
               </div>
               <HeroFloatingTags tags={content?.floating_tags} />
