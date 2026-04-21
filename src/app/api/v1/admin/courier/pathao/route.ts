@@ -152,6 +152,12 @@ export async function POST(request: NextRequest) {
     const order = await prisma.order.findUnique({ where: { id: Number(body.order_id) } });
     if (!order) return notFound("Order not found");
     if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
+
+    // If this order was sent via Steadfast, don't call Pathao's endpoint.
+    if (order.courierType && order.courierType !== "pathao") {
+      return errorResponse(`Order sent via ${order.courierType} — use ${order.courierType} status endpoint`, 400);
+    }
+
     try {
       const result = await checkPathaoStatus(order.consignmentId);
       if (result.data?.order_status) {
@@ -161,8 +167,12 @@ export async function POST(request: NextRequest) {
         });
         return jsonResponse({ delivery_status: result.data.order_status, consignment: result.data });
       }
-      return errorResponse("Failed to get status", 400);
-    } catch { return errorResponse("Failed to check status", 500); }
+      console.error("[courier status] Pathao returned:", result);
+      return errorResponse(result.message || `Pathao code=${result.code ?? "?"}, no order_status in response`, 400);
+    } catch (err) {
+      console.error("[courier status] Pathao fetch failed:", err);
+      return errorResponse("Failed to check status: " + (err instanceof Error ? err.message : "Unknown"), 500);
+    }
   }
 
   // Bulk preview — returns each order's base payload + auto-matched city/zone/area

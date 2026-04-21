@@ -149,6 +149,12 @@ export async function POST(request: NextRequest) {
     if (!order) return notFound("Order not found");
     if (!order.consignmentId) return errorResponse("No consignment ID for this order", 400);
 
+    // If this order was sent via Pathao, don't call Steadfast's endpoint — it
+    // would 404. Route the client to the right provider.
+    if (order.courierType === "pathao") {
+      return errorResponse("Order sent via Pathao — use Pathao status endpoint", 400);
+    }
+
     try {
       const result = await checkDeliveryStatus(order.consignmentId);
       if (result.status === 200 && result.delivery_status) {
@@ -161,9 +167,14 @@ export async function POST(request: NextRequest) {
           consignment: result.consignment,
         });
       }
-      return errorResponse("Failed to get status", 400);
-    } catch {
-      return errorResponse("Failed to check status", 500);
+      // Surface real upstream response for debugging instead of generic 400
+      console.error("[courier status] Steadfast returned:", result);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = (result as any)?.message || `Steadfast status=${result.status}, no delivery_status in response`;
+      return errorResponse(msg, 400);
+    } catch (err) {
+      console.error("[courier status] Steadfast fetch failed:", err);
+      return errorResponse("Failed to check status: " + (err instanceof Error ? err.message : "Unknown"), 500);
     }
   }
 

@@ -653,9 +653,13 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_status: res.delivery_status } : o));
         if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_status: res.delivery_status } : prev);
         showToast(`কুরিয়ার স্ট্যাটাস: ${res.delivery_status}`);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        showToast((res as any)?.error || "স্ট্যাটাস চেক করতে সমস্যা হয়েছে", "error");
       }
-    } catch {
-      showToast("স্ট্যাটাস চেক করতে সমস্যা হয়েছে", "error");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "স্ট্যাটাস চেক করতে সমস্যা হয়েছে";
+      showToast(msg, "error");
     } finally {
       setCourierLoading(null);
     }
