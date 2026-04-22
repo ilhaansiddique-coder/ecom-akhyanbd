@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { FiSearch } from "react-icons/fi";
 import ProductCard from "@/components/ProductCard";
 import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
@@ -28,9 +27,6 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeBrand, setActiveBrand] = useState<string>("");
   const [sort, setSort] = useState<SortOption>("default");
-  const [search, setSearch] = useState("");
-  const [minPrice, setMinPrice] = useState<number>(0);
-  const [maxPrice, setMaxPrice] = useState<number>(10000);
 
   // Read URL params on mount: ?category=ID or ?brand=ID
   useEffect(() => {
@@ -95,21 +91,10 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
     filtered = filtered.filter((p) => String(p.brand_id || "") === activeBrand);
   }
 
-  if (search.trim()) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter((p) =>
-      (p.nameBn || "").toLowerCase().includes(q) ||
-      (p.name || "").toLowerCase().includes(q) ||
-      (p.descriptionBn || "").toLowerCase().includes(q)
-    );
-  }
-
   if (sort === "price_asc") filtered = [...filtered].sort((a, b) => a.price - b.price);
   if (sort === "price_desc") filtered = [...filtered].sort((a, b) => b.price - a.price);
   if (sort === "newest") filtered = [...filtered].sort((a, b) => b.id - a.id);
   if (sort === "popular") filtered = [...filtered].sort((a, b) => (b.originalPrice ? 1 : 0) - (a.originalPrice ? 1 : 0));
-
-  filtered = filtered.filter(p => p.price >= minPrice && p.price <= maxPrice);
 
   return (
     <section className="py-8 md:py-12 bg-background-alt min-h-[70vh]">
@@ -121,17 +106,6 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
               <p className="text-text-muted text-sm mt-1" suppressHydrationWarning>
                 {lang === "en" ? `${filtered.length} products found` : `${toBn(filtered.length)}টি পণ্য পাওয়া গেছে`}
               </p>
-            </div>
-            {/* Search */}
-            <div className="relative w-full md:w-72">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={lang === "en" ? "Search products..." : "পণ্য খুঁজুন..."}
-                className="w-full pl-10 pr-4 py-2.5 border border-border rounded-xl text-sm bg-white focus:border-primary focus:outline-none transition-colors"
-              />
             </div>
           </div>
 
@@ -147,27 +121,6 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
                   {cat.name}
                 </button>
               ))}
-            </div>
-
-            <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-border">
-              <span className="text-xs font-bold text-text-muted uppercase tracking-wider">{lang === "en" ? "Price Range" : "মূল্য সীমা"}:</span>
-              <div className="flex items-center gap-3">
-                <input 
-                  type="number" 
-                  value={minPrice} 
-                  onChange={(e) => setMinPrice(Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-sm border border-border rounded-lg focus:outline-none focus:border-primary"
-                  placeholder="Min"
-                />
-                <span className="text-text-muted">থেকে</span>
-                <input 
-                  type="number" 
-                  value={maxPrice} 
-                  onChange={(e) => setMaxPrice(Number(e.target.value))}
-                  className="w-20 px-2 py-1 text-sm border border-border rounded-lg focus:outline-none focus:border-primary"
-                  placeholder="Max"
-                />
-              </div>
             </div>
 
             <InlineSelect value={sort} options={[
@@ -191,7 +144,7 @@ export default function ShopClient({ initialProducts, apiCategories }: ShopClien
           {filtered.length === 0 && (
             <div className="text-center py-16 text-text-muted">
               <p className="text-lg">{lang === "en" ? "No products found" : "কোনো পণ্য পাওয়া যায়নি"}</p>
-              <button onClick={() => { setActiveCategory("all"); setSearch(""); }} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
+              <button onClick={() => { setActiveCategory("all"); }} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
                 {lang === "en" ? "View All Products" : "সব পণ্য দেখুন"}
               </button>
             </div>

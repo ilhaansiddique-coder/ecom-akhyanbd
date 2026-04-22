@@ -41,9 +41,15 @@ interface OrderItem {
   product_name: string;
   variant_id?: number;
   variant_label?: string;
+  variant_image?: string | null;
   price: number;
   quantity: number;
   product?: { image?: string } | null;
+}
+
+// Resolve the best image for an order item: product main image, then variant snapshot.
+function itemImage(item: OrderItem): string | undefined {
+  return item.product?.image || item.variant_image || undefined;
 }
 interface Order {
   id: number;
@@ -1178,11 +1184,20 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 {/* Items */}
                 {o.items && o.items.length > 0 && (
                   <div className="space-y-1 pt-1.5 mt-1 border-t border-gray-100">
-                    {o.items.map((item) => (
+                    {o.items.map((item) => {
+                      const img = itemImage(item);
+                      return (
                       <div key={item.id} className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-md overflow-hidden bg-gray-100 shrink-0 relative">
-                          {item.product?.image ? (
-                            <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="32px" className="object-cover" />
+                        <div className="w-8 h-8 rounded-md overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
+                          onMouseEnter={(e) => {
+                            if (!img) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setHoverPreview({ image: img, x: rect.left + rect.width / 2, y: rect.top });
+                          }}
+                          onMouseLeave={() => setHoverPreview(null)}
+                          onClick={() => img && setPreviewImage(img)}>
+                          {img ? (
+                            <SafeNextImage src={img} alt={item.product_name} fill sizes="32px" className="object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-300"><FiPackage className="w-3.5 h-3.5" /></div>
                           )}
@@ -1196,7 +1211,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         </div>
                         <p className="font-semibold text-[var(--primary)] shrink-0">৳{toBn(item.price * item.quantity)}</p>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {/* Status + Score + Totals */}
@@ -1426,18 +1442,20 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                   <div className="bg-gray-50/80 border-t border-gray-100 px-6 py-4">
                                     {o.items && o.items.length > 0 && (
                                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {o.items.map((item) => (
+                                        {o.items.map((item) => {
+                                          const img = itemImage(item);
+                                          return (
                                           <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-sm">
                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
                                               onMouseEnter={(e) => {
-                                                if (!item.product?.image) return;
+                                                if (!img) return;
                                                 const rect = e.currentTarget.getBoundingClientRect();
-                                                setHoverPreview({ image: item.product.image, x: rect.left + rect.width / 2, y: rect.top });
+                                                setHoverPreview({ image: img, x: rect.left + rect.width / 2, y: rect.top });
                                               }}
                                               onMouseLeave={() => setHoverPreview(null)}
-                                              onClick={() => item.product?.image && setPreviewImage(item.product.image)}>
-                                              {item.product?.image ? (
-                                                <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="56px" className="object-cover hover:scale-110 transition-transform" />
+                                              onClick={() => img && setPreviewImage(img)}>
+                                              {img ? (
+                                                <SafeNextImage src={img} alt={item.product_name} fill sizes="56px" className="object-cover hover:scale-110 transition-transform" />
                                               ) : (
                                                 <div className="w-full h-full flex items-center justify-center bg-[var(--primary)]/10 text-[var(--primary)]">
                                                   <FiPackage className="w-6 h-6" />
@@ -1451,7 +1469,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                             </div>
                                             <p className="text-sm font-bold text-[var(--primary)] shrink-0">৳{toBn(item.price * item.quantity)}</p>
                                           </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     )}
                                     <div className="flex items-center justify-end gap-4 mt-3 pt-2 border-t border-gray-200/60 text-xs text-gray-400">
@@ -1551,18 +1570,20 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                           {t("misc.productItems")} ({toBn(o.items?.length || 0)})
                         </h3>
                         <div className="space-y-2">
-                          {o.items?.map((item) => (
+                          {o.items?.map((item) => {
+                            const img = itemImage(item);
+                            return (
                             <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                               <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 shrink-0 relative cursor-pointer"
                                 onMouseEnter={(e) => {
-                                  if (!item.product?.image) return;
+                                  if (!img) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  setHoverPreview({ image: item.product.image, x: rect.left + rect.width / 2, y: rect.top });
+                                  setHoverPreview({ image: img, x: rect.left + rect.width / 2, y: rect.top });
                                 }}
                                 onMouseLeave={() => setHoverPreview(null)}
-                                onClick={() => item.product?.image && setPreviewImage(item.product.image)}>
-                                {item.product?.image ? (
-                                  <SafeNextImage src={item.product.image} alt={item.product_name} fill sizes="48px" className="object-cover hover:scale-110 transition-transform" />
+                                onClick={() => img && setPreviewImage(img)}>
+                                {img ? (
+                                  <SafeNextImage src={img} alt={item.product_name} fill sizes="48px" className="object-cover hover:scale-110 transition-transform" />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center bg-[var(--primary)]/10 text-[var(--primary)]">
                                     <FiPackage className="w-5 h-5" />
@@ -1578,7 +1599,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                               </div>
                               <p className="text-sm font-bold text-[var(--primary)] whitespace-nowrap">৳{toBn(item.price * item.quantity)}</p>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
 

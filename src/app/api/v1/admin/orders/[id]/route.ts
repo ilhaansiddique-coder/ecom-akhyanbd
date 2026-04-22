@@ -19,7 +19,28 @@ export async function GET(
   });
 
   if (!order) return notFound("Order not found");
-  return jsonResponse(serialize(order));
+
+  // Attach variant image fallback (no Prisma relation declared on OrderItem.variantId)
+  const variantIds = order.items.map((i) => i.variantId).filter((v): v is number => !!v);
+  const variantMap = new Map<number, string>();
+  if (variantIds.length > 0) {
+    const variants = await prisma.productVariant.findMany({
+      where: { id: { in: variantIds } },
+      select: { id: true, image: true },
+    });
+    for (const v of variants) {
+      if (v.image) variantMap.set(v.id, v.image);
+    }
+  }
+  const orderWithVariantImages = {
+    ...order,
+    items: order.items.map((i) => ({
+      ...i,
+      variantImage: i.variantId ? variantMap.get(i.variantId) || null : null,
+    })),
+  };
+
+  return jsonResponse(serialize(orderWithVariantImages));
 }
 
 export async function PUT(

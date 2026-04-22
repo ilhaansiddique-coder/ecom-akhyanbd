@@ -35,5 +35,31 @@ export async function GET(request: NextRequest) {
     prisma.order.count({ where }),
   ]);
 
-  return jsonResponse(paginatedResponse(orders, { page, perPage, total }));
+  // Attach variant image as fallback (no Prisma relation declared on OrderItem.variantId,
+  // so we fetch them in one batched query and merge in memory).
+  const variantIds = Array.from(
+    new Set(
+      orders.flatMap((o) => o.items.map((i) => i.variantId).filter((v): v is number => !!v))
+    )
+  );
+  const variantMap = new Map<number, string>();
+  if (variantIds.length > 0) {
+    const variants = await prisma.productVariant.findMany({
+      where: { id: { in: variantIds } },
+      select: { id: true, image: true },
+    });
+    for (const v of variants) {
+      if (v.image) variantMap.set(v.id, v.image);
+    }
+  }
+
+  const ordersWithVariantImages = orders.map((o) => ({
+    ...o,
+    items: o.items.map((i) => ({
+      ...i,
+      variantImage: i.variantId ? variantMap.get(i.variantId) || null : null,
+    })),
+  }));
+
+  return jsonResponse(paginatedResponse(ordersWithVariantImages, { page, perPage, total }));
 }
