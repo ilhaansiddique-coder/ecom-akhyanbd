@@ -13,7 +13,7 @@ export default async function OrdersPage() {
   try {
     const [data, total, zonesData] = await Promise.all([
       prisma.order.findMany({
-        include: { items: true },
+        include: { items: { include: { product: { select: { image: true } } } } },
         orderBy: { createdAt: "desc" },
         take: 20,
         where: { status: { not: "trashed" } },
@@ -21,6 +21,23 @@ export default async function OrdersPage() {
       prisma.order.count({ where: { status: { not: "trashed" } } }),
       prisma.shippingZone.findMany({ orderBy: { id: "asc" } }),
     ]);
+
+    // Batched variant-image lookup (no Prisma relation declared on OrderItem.variantId)
+    const variantIds = Array.from(
+      new Set(
+        data.flatMap((o) => o.items.map((i) => i.variantId).filter((v): v is number => !!v))
+      )
+    );
+    const variantImageMap = new Map<number, string>();
+    if (variantIds.length > 0) {
+      const variants = await prisma.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: { id: true, image: true },
+      });
+      for (const v of variants) {
+        if (v.image) variantImageMap.set(v.id, v.image);
+      }
+    }
 
     const items = data.map((o) => ({
       id: o.id,
@@ -50,8 +67,10 @@ export default async function OrdersPage() {
         product_name: i.productName,
         variant_id: i.variantId ?? undefined,
         variant_label: i.variantLabel ?? undefined,
+        variant_image: i.variantId ? variantImageMap.get(i.variantId) ?? null : null,
         price: Number(i.price),
         quantity: i.quantity,
+        product: i.product?.image ? { image: i.product.image } : null,
       })),
     }));
 

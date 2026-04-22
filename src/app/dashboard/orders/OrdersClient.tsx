@@ -1140,6 +1140,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-400 font-medium">#{toBn(o.id)}</span>
                         <span className="text-xs text-gray-400">{new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}</span>
+                        <span className="text-xs text-gray-400">{new Date(o.created_at).toLocaleTimeString(lang === "en" ? "en-US" : "bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
                       <p className="font-semibold text-gray-800 truncate">{o.customer_name}</p>
                       <p className="text-xs text-gray-500">{o.customer_phone || o.phone || "—"}</p>
