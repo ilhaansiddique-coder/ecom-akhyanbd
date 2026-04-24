@@ -211,6 +211,54 @@ export default function CheckoutPage() {
   const effectiveShipping = customShippingValues.length > 0 ? Math.max(...customShippingValues) : shippingCost;
   const total = totalPrice - couponDiscount + effectiveShipping;
 
+  // === Incomplete-order capture ===
+  // Persist (phone, name, email, address, city, zip, notes, cart, totals) to
+  // /api/v1/incomplete-orders whenever the user pauses typing. Phone must be
+  // a valid 11-digit BD number; items must be present. Server upserts by phone
+  // and silently skips invalid input. Conversion is auto-marked server-side
+  // when the matching order is placed, so we don't need to clear locally.
+  // Tracking pixels are unaffected — this is a separate fire-and-forget POST.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (orderPlaced) return;
+    if (items.length === 0) return;
+    const digits = phone.replace(/\D/g, "");
+    if (!/^01[3-9]\d{8}$/.test(digits)) return;
+
+    const handle = setTimeout(() => {
+      const payload = {
+        phone: digits,
+        name: name || null,
+        email: email || null,
+        address: address || null,
+        city: city || (selectedZone ? shippingZones.find(z => z.id === selectedZone)?.name || null : null),
+        zip_code: zipCode || null,
+        notes: notes || null,
+        subtotal: totalPrice,
+        shipping_cost: effectiveShipping,
+        total,
+        source: "checkout",
+        cart_items: items.map((i) => ({
+          product_id: i.id,
+          variant_id: i.variantId || null,
+          variant_label: i.variantLabel || null,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          image: i.image || null,
+        })),
+      };
+      fetch("/api/v1/incomplete-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    }, 1200);
+
+    return () => clearTimeout(handle);
+  }, [hydrated, orderPlaced, items, phone, name, email, address, city, zipCode, notes, totalPrice, effectiveShipping, total, selectedZone, shippingZones]);
+
   // Apply coupon
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;

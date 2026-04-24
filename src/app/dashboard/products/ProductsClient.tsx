@@ -113,6 +113,21 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
   );
   const totalProducts = filtered.length;
 
+  // Hover preview tooltip + click-to-zoom modal for product list images
+  const [hoverPreview, setHoverPreview] = useState<{ image: string; x: number; y: number } | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Bulk selection — same pattern as orders page
+  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
+  const toggleSelectProduct = (id: number) => {
+    setSelectedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [badgeOpen, setBadgeOpen] = useState(false);
@@ -415,6 +430,77 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
     }
   };
 
+  // Select / deselect every visible product on the current page
+  const toggleSelectAll = () => {
+    if (selectedProducts.size >= products.length) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(products.map((p) => p.id)));
+    }
+  };
+
+  // Bulk: trash (or permanent delete when in trash view) every selected product
+  const handleBulkDelete = async () => {
+    if (selectedProducts.size === 0) return;
+    const count = selectedProducts.size;
+    const confirmMsg = trashView
+      ? (lang === "en" ? `Permanently delete ${count} products?` : `${count}টি পণ্য স্থায়ীভাবে মুছবেন?`)
+      : (lang === "en" ? `Move ${count} products to trash?` : `${count}টি পণ্য ট্র্যাশে পাঠাবেন?`);
+    if (!confirm(confirmMsg)) return;
+    setBulkActing(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      await Promise.all(ids.map((id) => api.admin.deleteProduct(id, trashView)));
+      setAllProducts((prev) => prev.filter((p) => !selectedProducts.has(p.id)));
+      setSelectedProducts(new Set());
+      showToast(trashView
+        ? (lang === "en" ? `${count} permanently deleted` : `${count}টি স্থায়ীভাবে মুছে ফেলা হয়েছে`)
+        : (lang === "en" ? `${count} moved to trash` : `${count}টি ট্র্যাশে পাঠানো হয়েছে`));
+    } catch {
+      showToast(t("common.deleteError"), "error");
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
+  // Bulk activate / deactivate — flips isActive on every selected product
+  const handleBulkSetActive = async (active: boolean) => {
+    if (selectedProducts.size === 0) return;
+    setBulkActing(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      await Promise.all(ids.map((id) => api.admin.updateProduct(id, { is_active: active })));
+      setAllProducts((prev) => prev.map((p) => (selectedProducts.has(p.id) ? { ...p, is_active: active } : p)));
+      setSelectedProducts(new Set());
+      showToast(
+        active
+          ? (lang === "en" ? `${ids.length} activated` : `${ids.length}টি সক্রিয় হয়েছে`)
+          : (lang === "en" ? `${ids.length} deactivated` : `${ids.length}টি নিষ্ক্রিয় হয়েছে`)
+      );
+    } catch {
+      showToast(lang === "en" ? "Bulk update failed" : "বাল্ক আপডেট ব্যর্থ", "error");
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
+  // Bulk restore — only meaningful in trash view
+  const handleBulkRestore = async () => {
+    if (selectedProducts.size === 0) return;
+    setBulkActing(true);
+    try {
+      const ids = Array.from(selectedProducts);
+      await Promise.all(ids.map((id) => api.admin.restoreProduct(id)));
+      setAllProducts((prev) => prev.filter((p) => !selectedProducts.has(p.id)));
+      setSelectedProducts(new Set());
+      showToast(lang === "en" ? `${ids.length} restored` : `${ids.length}টি পুনরুদ্ধার হয়েছে`);
+    } catch {
+      showToast(lang === "en" ? "Bulk restore failed" : "বাল্ক পুনরুদ্ধার ব্যর্থ", "error");
+    } finally {
+      setBulkActing(false);
+    }
+  };
+
   const totalPages = Math.ceil(totalProducts / perPage);
 
   const inputCls = theme.input;
@@ -472,6 +558,91 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
           </div>
         )}
 
+        {/* Bulk action toolbar — shown when products are selected */}
+        {selectedProducts.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-xl">
+            <span className="text-sm font-medium text-gray-700">
+              {lang === "en" ? `${selectedProducts.size} selected` : `${toBn(selectedProducts.size)}টি নির্বাচিত`}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {!trashView && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkSetActive(true)}
+                    disabled={bulkActing}
+                    className="flex items-center gap-1.5 px-3.5 py-2 border border-green-200 rounded-xl text-sm font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    <span>{lang === "en" ? "Activate" : "সক্রিয়"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkSetActive(false)}
+                    disabled={bulkActing}
+                    className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-gray-400" />
+                    <span>{lang === "en" ? "Deactivate" : "নিষ্ক্রিয়"}</span>
+                  </button>
+                </>
+              )}
+              {trashView && (
+                <button
+                  type="button"
+                  onClick={handleBulkRestore}
+                  disabled={bulkActing}
+                  className="flex items-center gap-1.5 px-3.5 py-2 border border-emerald-200 rounded-xl text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  ↩ <span>{lang === "en" ? "Restore" : "পুনরুদ্ধার"}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={bulkActing}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap ${
+                  trashView
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "border border-red-200 text-red-600 hover:bg-red-50"
+                }`}
+              >
+                <FiTrash2 className="w-4 h-4" />
+                <span>
+                  {trashView
+                    ? (lang === "en" ? "Delete Forever" : "স্থায়ীভাবে মুছুন")
+                    : (lang === "en" ? "Trash" : "ট্র্যাশ")}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedProducts(new Set())}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title={lang === "en" ? "Clear selection" : "নির্বাচন বাতিল"}
+              >
+                <FiX className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile select-all bar — mirrors orders page */}
+        {products.length > 0 && (
+          <div className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border border-gray-100">
+            <input
+              type="checkbox"
+              checked={selectedProducts.size > 0 && selectedProducts.size >= products.length}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 accent-[var(--primary)] shrink-0"
+            />
+            <span className="text-xs font-medium text-gray-600">
+              {selectedProducts.size > 0
+                ? (lang === "en" ? `${selectedProducts.size} selected` : `${toBn(selectedProducts.size)}টি নির্বাচিত`)
+                : (lang === "en" ? `Select all (${products.length})` : `সব নির্বাচন (${toBn(products.length)})`)}
+            </span>
+          </div>
+        )}
+
         {/* Mobile Card View */}
         <div className="lg:hidden space-y-3">
           {products.length === 0 ? (
@@ -480,8 +651,23 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
             <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-4 pt-4 pb-3">
                 <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.has(p.id)}
+                    onChange={() => toggleSelectProduct(p.id)}
+                    className="w-4 h-4 accent-[var(--primary)] shrink-0 mt-1"
+                  />
                   {p.image ? (
-                    <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-14 h-14 rounded-xl object-cover border border-gray-100 shrink-0" />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image)); }}
+                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image), x: r.left + r.width / 2, y: r.top }); }}
+                      onMouseLeave={() => setHoverPreview(null)}
+                      className="shrink-0 cursor-zoom-in"
+                      aria-label="Preview image"
+                    >
+                      <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-14 h-14 rounded-xl object-cover border border-gray-100" />
+                    </button>
                   ) : (
                     <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
                       <FiImage className="w-5 h-5 text-gray-400" />
@@ -533,6 +719,14 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
+                    <th className="px-2 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.size > 0 && selectedProducts.size >= products.length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 accent-[var(--primary)]"
+                      />
+                    </th>
                     {[t("th.image"), t("th.name"), t("th.category"), t("th.price"), t("th.stock"), t("th.sales"), t("th.status"), t("th.actions")].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
@@ -541,7 +735,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                 <tbody className="divide-y divide-gray-50">
                   {products.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-400">{t("empty.products")}</td>
+                      <td colSpan={9} className="py-12 text-center text-gray-400">{t("empty.products")}</td>
                     </tr>
                   ) : (
                     products.map((p) => (
@@ -551,9 +745,26 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                         animate={{ opacity: 1 }}
                         className="hover:bg-gray-50 transition-colors"
                       >
+                        <td className="px-2 py-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedProducts.has(p.id)}
+                            onChange={() => toggleSelectProduct(p.id)}
+                            className="w-4 h-4 accent-[var(--primary)]"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           {p.image ? (
-                            <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image)); }}
+                              onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image), x: r.left + r.width / 2, y: r.top }); }}
+                              onMouseLeave={() => setHoverPreview(null)}
+                              className="cursor-zoom-in"
+                              aria-label="Preview image"
+                            >
+                              <SafeImg src={resolveImg(p.image || "/placeholder.svg")} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                            </button>
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
                               <FiImage className="w-4 h-4 text-gray-400" />
@@ -1011,6 +1222,48 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
           }
         }}
       />
+
+      {/* Hover tooltip preview — floats above image, mirrors orders page UX */}
+      {hoverPreview && (
+        <div className="fixed z-[9999] pointer-events-none hidden md:block"
+          style={{ left: hoverPreview.x, top: hoverPreview.y, transform: "translate(-50%, -100%) translateY(-8px)" }}>
+          <div className="w-56 h-56 rounded-2xl overflow-hidden border-2 border-white shadow-2xl bg-white">
+            <SafeImg src={hoverPreview.image} alt="" className="w-full h-full object-cover" />
+          </div>
+        </div>
+      )}
+
+      {/* Click-to-zoom fullscreen preview */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="relative max-w-sm w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+                <div className="relative aspect-square">
+                  <SafeImg src={previewImage} alt="Preview" className="w-full h-full object-contain" />
+                </div>
+              </div>
+              <button onClick={() => setPreviewImage(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
+                <FiX className="w-4 h-4" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 }

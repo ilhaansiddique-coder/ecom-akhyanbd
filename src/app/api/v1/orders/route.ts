@@ -288,7 +288,16 @@ export async function POST(request: NextRequest) {
 
   bumpVersion("orders");
   // Bust the dashboard products cache so live sales counts refresh immediately
-  revalidateTag("products");
+  revalidateTag("products", "max");
+
+  // Mark any in-progress incomplete-order row for this phone as converted.
+  // Non-blocking; never fail the order on this.
+  if (customerPhone) {
+    prisma.incompleteOrder.updateMany({
+      where: { phone: customerPhone, convertedAt: null },
+      data: { convertedAt: new Date() },
+    }).catch(() => {});
+  }
 
   // ── Spam detection: attach fingerprint + risk score (non-blocking) ──
   const fpHash = request.cookies.get("fpHash")?.value;

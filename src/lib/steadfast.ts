@@ -134,8 +134,28 @@ export interface SteadfastFraudResponse { status: number | string; total_parcels
 
 export async function checkCourierScore(phone: string): Promise<SteadfastFraudResponse> {
   const cleanPhone = phone.replace(/[^0-9]/g, "");
-  const res = await fetch(`${API_BASE}/fraud_check/${cleanPhone}`, { method: "GET", headers: await apiHeaders() });
-  const data = await res.json();
+  const { apiKey, secretKey } = await getKeys();
+  if (!apiKey || !secretKey) throw new Error("Steadfast keys missing");
+
+  const res = await fetch(`${API_BASE}/fraud_check/${cleanPhone}`, {
+    method: "GET",
+    headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  // Distinguish bad keys (401/403) and other server errors from a valid empty
+  // response. Steadfast returns 200 + total_parcels:0 for unknown phones, so
+  // only HTTP-level failure should mark the provider as failed.
+  if (res.status === 401 || res.status === 403) throw new Error("Steadfast keys invalid");
+  if (!res.ok) throw new Error(`Steadfast HTTP ${res.status}`);
+
+  const data = await res.json().catch(() => ({}));
+
+  // Body-level error: API returns { status: 400, message: "..." } for bad requests.
+  if (data && typeof data === "object" && data.status && Number(data.status) >= 400) {
+    throw new Error(data.message || `Steadfast error ${data.status}`);
+  }
+
   const totalParcels = data.total_parcels || 0;
   const totalDelivered = data.total_delivered || 0;
   const successRatio = totalParcels > 0 ? `${((totalDelivered / Math.max(1, totalParcels)) * 100).toFixed(1)}%` : "0.0%";

@@ -515,6 +515,31 @@ model FormSubmission {
   @@map("form_submissions")
 }
 
+model IncompleteOrder {
+  id           Int       @id @default(autoincrement())
+  phone        String    @unique
+  name         String?
+  email        String?
+  address      String?
+  city         String?
+  zipCode      String?   @map("zip_code")
+  notes        String?
+  cartItems    String    @map("cart_items") // JSON array: [{product_id, variant_id, name, price, quantity, image, variant_label}]
+  subtotal     Float     @default(0)
+  shippingCost Float     @default(0) @map("shipping_cost")
+  total        Float     @default(0)
+  userId       Int?      @map("user_id")
+  source       String?   // "checkout" | "lp:slug" — which form captured it
+  convertedAt  DateTime? @map("converted_at") // set when matching order placed
+  createdAt    DateTime? @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  @@index([phone])
+  @@index([convertedAt])
+  @@index([updatedAt])
+  @@map("incomplete_orders")
+}
+
 model ProductVariant {
   id            Int       @id @default(autoincrement())
   productId     Int       @map("product_id")

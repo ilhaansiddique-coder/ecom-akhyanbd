@@ -17,6 +17,12 @@ import {
 } from "@/lib/steadfast";
 import { checkPathaoStatus, hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
 
+// Spacing between sequential courier API hits inside bulk loops so we don't
+// trip Steadfast/Pathao rate limits. ~500ms keeps a 50-order bulk send under
+// 30s while staying well under any reasonable per-second cap.
+const COURIER_REQ_GAP_MS = 500;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
  * GET /api/v1/admin/courier?action=balance
  * GET /api/v1/admin/courier?action=status&consignment_id=XXX
@@ -111,10 +117,12 @@ function buildSteadfastPayload(order: any) {
     const name = i.productName || i.product_name;
     const variant = i.variantLabel || i.variant_label;
     const label = variant ? `${name} – ${variant}` : name;
-    return `${label} x ${i.quantity}`;
+    return `${label} * ${i.quantity}`;
   });
   const itemsDescription = items.join(" / ");
-  const note = [itemsDescription, order.notes].filter(Boolean).join(" | ");
+  // Strip internal "Landing page: <slug>" marker — irrelevant to riders.
+  const cleanNotes = (order.notes || "").replace(/^Landing page:.*$/i, "").trim();
+  const note = [itemsDescription, cleanNotes].filter(Boolean).join(" | ");
 
   return {
     invoice: generateInvoice(order.id),
@@ -242,7 +250,10 @@ export async function POST(request: NextRequest) {
 
     const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
 
+    let first = true;
     for (const order of validOrders) {
+      if (!first) await sleep(COURIER_REQ_GAP_MS);
+      first = false;
       try {
         const payload = buildSteadfastPayload(order);
         const res = await sendToSteadfast(payload);
@@ -269,7 +280,10 @@ export async function POST(request: NextRequest) {
   if (body.order_ids && Array.isArray(body.order_ids)) {
     const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
 
+    let firstSeq = true;
     for (const orderId of body.order_ids) {
+      if (!firstSeq) await sleep(COURIER_REQ_GAP_MS);
+      firstSeq = false;
       const order = await prisma.order.findUnique({
         where: { id: Number(orderId) },
         include: { items: true },

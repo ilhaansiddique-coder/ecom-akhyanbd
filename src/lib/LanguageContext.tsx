@@ -28,7 +28,20 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // storefront → Bengali. Without this, state starts as "bn" and flips to "en"
   // after the settings fetch resolves, causing a visible BN→EN flash on every
   // dashboard load.
-  const [lang, setLangState] = useState<Lang>(isDashboard ? "en" : "bn");
+  // Read cached preference synchronously so first paint matches the value the
+  // settings fetch will resolve to. Without this, every refresh flashes the
+  // hardcoded default ("en" for dashboard / "bn" for storefront) before the
+  // fetch resolves and switches to the user's actual saved preference.
+  const [lang, setLangState] = useState<Lang>(() => {
+    const fallback: Lang = isDashboard ? "en" : "bn";
+    if (typeof window === "undefined") return fallback;
+    try {
+      const key = isDashboard ? "akhiyan_dashboard_lang" : "akhiyan_site_lang";
+      const cached = window.localStorage.getItem(key);
+      if (cached === "en" || cached === "bn") return cached;
+    } catch {}
+    return fallback;
+  });
   const settingsRef = useRef<{ site_language?: string; dashboard_language?: string } | null>(null);
   const fetchedRef = useRef(false);
 
@@ -64,6 +77,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (activeLang === "en" || activeLang === "bn") {
       setLangState(activeLang);
       setNumberLang(activeLang);
+      // Cache for next refresh so initial paint matches
+      try {
+        const key = isDashboard ? "akhiyan_dashboard_lang" : "akhiyan_site_lang";
+        window.localStorage.setItem(key, activeLang);
+      } catch {}
     }
   }
 
@@ -73,7 +91,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = l === "en" ? "en" : "bn";
     document.documentElement.classList.toggle("lang-en", l === "en");
     document.documentElement.classList.toggle("lang-bn", l === "bn");
-  }, []);
+    try {
+      const key = isDashboard ? "akhiyan_dashboard_lang" : "akhiyan_site_lang";
+      window.localStorage.setItem(key, l);
+    } catch {}
+  }, [isDashboard]);
 
   // Set HTML lang classes
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import DashboardPage from "./DashboardHomeClient";
+import DashboardPage from "../DashboardHomeClient";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +59,12 @@ export default async function DashboardServerPage() {
       if (s.status in revByStatus) revByStatus[s.status] = Number(s._sum.total ?? 0);
     }
 
-    // Today stats
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // Today stats — BD timezone (UTC+6, no DST). Hostinger Node has small-icu
+    // so we avoid Intl tz lookups and use plain offset math instead.
+    const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
+    const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
     const [todayOrders, todayRevAgg] = await Promise.all([
       prisma.order.count({ where: { createdAt: { gte: today }, status: { not: "trashed" } } }),
       prisma.order.aggregate({ where: { createdAt: { gte: today }, status: { not: "trashed" } }, _sum: { total: true } }),
@@ -81,13 +85,23 @@ export default async function DashboardServerPage() {
       select: { id: true, name: true, soldCount: true, price: true, image: true },
     });
 
-    // Daily orders last 7 days
-    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const dailyRaw = await prisma.order.groupBy({
-      by: ["createdAt"],
-      where: { createdAt: { gte: sevenDaysAgo } },
-      _count: { id: true },
-    });
+    // Daily orders last 7 days — BD-day buckets
+    const days: Date[] = [];
+    for (let i = 6; i >= 0; i--) {
+      days.push(new Date(today.getTime() - i * 86400000));
+    }
+    const dailyCounts = await Promise.all(
+      days.map((day) => {
+        const next = new Date(day.getTime() + 86400000);
+        return prisma.order.count({
+          where: { createdAt: { gte: day, lt: next }, status: { not: "trashed" } },
+        });
+      })
+    );
+    const dailyOrders = days.map((day, i) => ({
+      date: day.toISOString().slice(5, 10),
+      count: dailyCounts[i],
+    }));
 
     const stats = {
       total_orders: totalOrders,
@@ -139,7 +153,7 @@ export default async function DashboardServerPage() {
           stats,
           orderCounts: orderCounts as any,
           revByStatus: revByStatus as any,
-          dailyOrders: [],
+          dailyOrders,
           recentOrders: recentOrders as any,
           topProducts,
           lowStockItems,

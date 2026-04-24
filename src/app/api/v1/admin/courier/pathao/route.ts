@@ -21,6 +21,11 @@ import {
 } from "@/lib/pathao";
 import { formatPhone, isValidBDPhone, checkDeliveryStatus, isSteadfastConfigured, clearKeyCache } from "@/lib/steadfast";
 
+// Spacing between sequential courier API hits inside bulk loops so we don't
+// trip Pathao/Steadfast rate limits.
+const COURIER_REQ_GAP_MS = 500;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
  * GET /api/v1/admin/courier/pathao?action=test
  * GET ?action=balance
@@ -118,10 +123,12 @@ function buildPathaoPayload(order: any): PathaoOrder {
     const name = i.productName || i.product_name;
     const variant = i.variantLabel || i.variant_label;
     const label = variant ? `${name} – ${variant}` : name;
-    return `${label} x ${i.quantity}`;
+    return `${label} * ${i.quantity}`;
   });
   const itemsDesc = items.join(" / ");
   const totalQty = (order.items || []).reduce((s: number, i: any) => s + Number(i.quantity || 1), 0) || 1;
+  // Strip internal "Landing page: <slug>" marker — irrelevant to riders.
+  const cleanNotes = (order.notes || "").replace(/^Landing page:.*$/i, "").trim();
 
   return {
     merchant_order_id: generatePathaoMerchantOrderId(order.id),
@@ -132,7 +139,7 @@ function buildPathaoPayload(order: any): PathaoOrder {
     item_weight: 0.5,
     amount_to_collect: Math.round(Number(order.total)),
     item_description: itemsDesc,
-    special_instruction: order.notes || "",
+    special_instruction: cleanNotes,
   };
 }
 
@@ -318,7 +325,10 @@ export async function POST(request: NextRequest) {
       }
     } catch (err) {
       // Bulk endpoint failed — fall back to per-order send
+      let firstFb = true;
       for (const order of validOrders) {
+        if (!firstFb) await sleep(COURIER_REQ_GAP_MS);
+        firstFb = false;
         try {
           const r = await sendToPathao(buildPathaoPayload(order));
           if (r.data?.consignment_id) {
@@ -352,7 +362,10 @@ export async function POST(request: NextRequest) {
   // Multiple order_ids — sequential send
   if (Array.isArray(body.order_ids)) {
     const results: { order_id: number; status: string; consignment_id?: string; error?: string }[] = [];
+    let firstSeq = true;
     for (const orderId of body.order_ids) {
+      if (!firstSeq) await sleep(COURIER_REQ_GAP_MS);
+      firstSeq = false;
       const order = await prisma.order.findUnique({ where: { id: Number(orderId) }, include: { items: true } });
       if (!order) { results.push({ order_id: orderId, status: "not_found" }); continue; }
       if (order.courierSent) { results.push({ order_id: orderId, status: "already_sent", consignment_id: order.consignmentId || undefined }); continue; }

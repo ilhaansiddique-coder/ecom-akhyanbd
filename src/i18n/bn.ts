@@ -233,6 +233,7 @@ export const bn: Record<string, string> = {
   "dash.brands": "ব্র্যান্ড",
   "dash.orderMgmt": "অর্ডার ব্যবস্থাপনা",
   "dash.orders": "অর্ডার",
+  "dash.incompleteOrders": "অসম্পূর্ণ অর্ডার",
   "dash.spamDetection": "স্প্যাম সনাক্তকরণ",
   "dash.homepageContent": "হোমপেজ",
   "dash.customer": "গ্রাহক",

@@ -44,7 +44,7 @@ await prisma.$transaction(async (tx: any) => {
     }
   });
 
-  revalidateTag("products");
+  revalidateTag("products", "max");
 
   const updated = await prisma.order.findUnique({
     where: { id: order.id },

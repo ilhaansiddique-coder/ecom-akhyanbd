@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
@@ -133,9 +134,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const [orders, setOrders] = useState<Order[]>(initialData?.items ?? []);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Seed filters from URL on first render so dashboard stat-card links land
+  // pre-filtered (e.g. ?status=pending, ?from=YYYY-MM-DD&to=YYYY-MM-DD)
+  const sp = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() => sp?.get("status") ?? "");
+  const [dateFrom, setDateFrom] = useState(() => sp?.get("from") ?? "");
+  const [dateTo, setDateTo] = useState(() => sp?.get("to") ?? "");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [pendingStatus, setPendingStatus] = useState<Record<number, string>>({});
@@ -473,11 +477,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   };
 
   const toggleSelectAll = () => {
-    const unsent = filtered.filter(o => !o.courier_sent);
-    if (selectedOrders.size >= unsent.length) {
+    // Select-all spans every visible order (sent or not). Bulk actions that
+    // only apply to unsent orders filter the selection at execution time.
+    if (selectedOrders.size >= filtered.length) {
       setSelectedOrders(new Set());
     } else {
-      setSelectedOrders(new Set(unsent.map(o => o.id)));
+      setSelectedOrders(new Set(filtered.map(o => o.id)));
     }
   };
 
@@ -530,13 +535,26 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   };
 
   // Wrapper: pick courier dynamically. 0 → toast, 1 → auto, 2+ → modal.
+  // Filters out orders already sent to courier so a mixed selection still
+  // works — only the unsent subset gets dispatched.
   const handleBulkSendToCourier = () => {
     if (selectedOrders.size === 0) return;
     if (availableCouriers.length === 0) {
       showToast(lang === "en" ? "No courier configured. Go to Settings → Courier." : "কোনো কুরিয়ার কনফিগার করা নেই", "error");
       return;
     }
-    const ids = Array.from(selectedOrders);
+    const ids = Array.from(selectedOrders).filter((id) => {
+      const o = orders.find((x) => x.id === id);
+      return o && !o.courier_sent;
+    });
+    if (ids.length === 0) {
+      showToast(lang === "en" ? "All selected orders are already sent" : "নির্বাচিত সব অর্ডার ইতিমধ্যে পাঠানো হয়েছে", "error");
+      return;
+    }
+    const skipped = selectedOrders.size - ids.length;
+    if (skipped > 0) {
+      showToast(lang === "en" ? `Skipping ${skipped} already-sent order${skipped > 1 ? "s" : ""}` : `${skipped}টি অর্ডার আগেই পাঠানো হয়েছে, বাদ দেওয়া হলো`);
+    }
     if (availableCouriers.length === 1) {
       const provider = availableCouriers[0].id;
       if (provider === "pathao") setPathaoBulkReviewIds(ids);
@@ -981,14 +999,24 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       String(o.id).includes(q);
     if (!matchesSearch) return false;
 
-    // Date filter
+    // Date filter — anchor day boundaries to Bangladesh time (UTC+6, no DST).
+    // We avoid both `new Date("YYYY-MM-DD")` (UTC midnight) and local tz parse
+    // (browser's tz, may not be BD) so this stays consistent with the
+    // dashboard's BD-anchored todayOrders count regardless of where the user
+    // is viewing from.
     if (dateFrom || dateTo) {
-      const orderDate = new Date(o.created_at);
-      if (dateFrom && orderDate < new Date(dateFrom)) return false;
+      const orderMs = new Date(o.created_at).getTime();
+      const toBdMidnightMs = (ymd: string) => {
+        const [yy, mm, dd] = ymd.split("-").map(Number);
+        // Date.UTC(...) gives UTC midnight; subtract 6h to land on BD midnight.
+        return Date.UTC(yy, (mm || 1) - 1, dd || 1) - 6 * 3600 * 1000;
+      };
+      if (dateFrom) {
+        if (orderMs < toBdMidnightMs(dateFrom)) return false;
+      }
       if (dateTo) {
-        const toEnd = new Date(dateTo);
-        toEnd.setHours(23, 59, 59, 999);
-        if (orderDate > toEnd) return false;
+        // End-of-day in BD = next BD midnight - 1ms
+        if (orderMs > toBdMidnightMs(dateTo) + 86400000 - 1) return false;
       }
     }
     return true;
@@ -1030,17 +1058,23 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
               </button>
             </div>
             {/* Bulk actions — shown when orders are selected */}
-            {selectedOrders.size > 0 && (
+            {selectedOrders.size > 0 && (() => {
+              // Count of selected orders that haven't been sent yet — only these will be dispatched
+              const unsentSelected = Array.from(selectedOrders).filter((id) => {
+                const o = orders.find((x) => x.id === id);
+                return o && !o.courier_sent;
+              }).length;
+              return (
               <>
-                {/* Send to Courier */}
-                <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading}
+                {/* Send to Courier — only ships unsent subset */}
+                <button type="button" onClick={handleBulkSendToCourier} disabled={bulkSending || bulkStatusLoading || unsentSelected === 0}
                   style={{ backgroundColor: "var(--primary, #0f5931)", color: "#fff" }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 85%, black)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; }}
                   className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 whitespace-nowrap">
                   <FiTruck className="w-4 h-4" />
-                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : (availableCouriers.length === 1 ? `Send ${selectedOrders.size} to ${availableCouriers[0].label}` : `Send ${selectedOrders.size} to Courier`)}</span>
-                  <span className="sm:hidden">{bulkSending ? "..." : selectedOrders.size}</span>
+                  <span className="hidden sm:inline">{bulkSending ? "Sending..." : (availableCouriers.length === 1 ? `Send ${unsentSelected} to ${availableCouriers[0].label}` : `Send ${unsentSelected} to Courier`)}</span>
+                  <span className="sm:hidden">{bulkSending ? "..." : unsentSelected}</span>
                 </button>
 
                 {/* Bulk Status Change */}
@@ -1086,7 +1120,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                   </button>
                 )}
               </>
-            )}
+              );
+            })()}
             {/* Search: visible only on desktop, inline */}
             <div className="relative flex-1 min-w-52 hidden md:block">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -1121,6 +1156,23 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
           </div>
         </div>
 
+        {/* Mobile select-all bar — mirrors desktop table header checkbox */}
+        {!loading && filtered.length > 0 && (
+          <div className="lg:hidden flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border border-gray-100 mb-3">
+            <input
+              type="checkbox"
+              checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.length}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 accent-[var(--primary)] shrink-0"
+            />
+            <span className="text-xs font-medium text-gray-600">
+              {selectedOrders.size > 0
+                ? (lang === "en" ? `${selectedOrders.size} selected` : `${toBn(selectedOrders.size)}টি নির্বাচিত`)
+                : (lang === "en" ? `Select all (${filtered.length})` : `সব নির্বাচন (${toBn(filtered.length)})`)}
+            </span>
+          </div>
+        )}
+
         {/* Mobile Cards */}
         <div className="lg:hidden space-y-3">
           {loading ? (
@@ -1133,9 +1185,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
               <div className="px-4 pt-4 pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    {!o.courier_sent && (
-                      <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)] shrink-0 mt-0.5" />
-                    )}
+                    <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)] shrink-0 mt-0.5" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-400 font-medium">#{toBn(o.id)}</span>
@@ -1143,7 +1193,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         <span className="text-xs text-gray-400">{new Date(o.created_at).toLocaleTimeString(lang === "en" ? "en-US" : "bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
                       </div>
                       <p className="font-semibold text-gray-800 truncate">{o.customer_name}</p>
-                      <p className="text-xs text-gray-500">{o.customer_phone || o.phone || "—"}</p>
+                      {(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
+                        <a href={`tel:${ph}`} onClick={(e) => e.stopPropagation()} className="text-xs text-blue-600 hover:underline">{ph}</a>
+                      ) : <p className="text-xs text-gray-500">—</p>; })()}
                     </div>
                   </div>
                   <p className="text-lg font-bold text-[var(--primary)] shrink-0">৳{toBn(o.total)}</p>
@@ -1254,7 +1306,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <div>
                   {o.courier_sent ? (
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
                         o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                         o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                         o.courier_status === "cancelled" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
@@ -1298,7 +1350,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
                     <th className="px-2 py-3 w-8">
-                      <input type="checkbox" checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.filter(o => !o.courier_sent).length}
+                      <input type="checkbox" checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.length}
                         onChange={toggleSelectAll} className="w-4 h-4 accent-[var(--primary)]" />
                     </th>
                     {["#", t("th.customer"), t("th.phone"), t("th.total"), t("th.status")].map((h) => (
@@ -1334,13 +1386,13 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       <Fragment key={o.id}>
                         <tr className="hover:bg-gray-50 transition-colors">
                           <td className="px-2 py-3">
-                            {!o.courier_sent && (
-                              <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)]" />
-                            )}
+                            <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)]" />
                           </td>
                           <td className="px-4 py-3 text-gray-500 font-medium">#{toBn(o.id)}</td>
                           <td className="px-4 py-3 font-medium text-gray-800 max-w-32 truncate">{o.customer_name}</td>
-                          <td className="px-4 py-3 text-gray-500">{o.customer_phone || o.phone || "—"}</td>
+                          <td className="px-4 py-3">{(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
+                            <a href={`tel:${ph}`} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{ph}</a>
+                          ) : <span className="text-gray-500">—</span>; })()}</td>
                           <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">৳{toBn(o.total)}</td>
                           <td className="px-4 py-3">
                             <InlineSelect
@@ -1359,7 +1411,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                           <td className="px-4 py-3">
                             {o.courier_sent ? (
                               <div className="flex items-center gap-1.5">
-                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
                                   o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                                   o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                                   o.courier_status === "cancelled" ? "bg-red-100 text-red-700" :
@@ -1536,7 +1588,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                           </div>
                           <div className="flex items-center gap-2 text-gray-700">
                             <FiPhone className="w-4 h-4 text-gray-400 shrink-0" />
-                            <span>{o.customer_phone || o.phone || "—"}</span>
+                            {(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
+                              <a href={`tel:${ph}`} className="text-blue-600 hover:underline">{ph}</a>
+                            ) : <span>—</span>; })()}
                           </div>
                           {(o.customer_email) && (
                             <div className="flex items-center gap-2 text-gray-700">
@@ -1680,7 +1734,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             </div>
                             <div className="flex items-center gap-3 text-sm">
                               <span className="text-gray-500">Status:</span>
-                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                              <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
                                 o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                                 o.courier_status === "cancelled" || o.courier_status === "partial_delivered" ? "bg-red-100 text-red-700" :
                                 "bg-blue-100 text-blue-700"

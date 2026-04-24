@@ -9,15 +9,22 @@ export async function GET(_request: NextRequest) {
   try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Compute "today" in Bangladesh timezone (UTC+6) without relying on Intl
+    // ICU tz data — Hostinger's Node ships small-icu, so timeZone:'Asia/Dhaka'
+    // can silently fall back to UTC and shift the day boundary 6 hours.
+    // Using plain offset math (BD has no DST) so counts always match what the
+    // shop owner sees on their wall clock.
+    const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    // Floor "now shifted into BD" to the nearest day, then shift back to a
+    // real UTC instant. This yields BD midnight as a UTC Date.
+    const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
+    const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
 
-    // Build last 7 days date range
+    // Build last 7 days as BD-midnight markers
     const days: Date[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
+      const d = new Date(today.getTime() - i * 86400000);
       days.push(d);
     }
 

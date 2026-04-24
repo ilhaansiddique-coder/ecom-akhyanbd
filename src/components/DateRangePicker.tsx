@@ -229,31 +229,42 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
   };
 
   const hasFilter = from || to;
-  const label = hasFilter
-    ? `${formatDate(from, lang)} — ${formatDate(to, lang)}`
-    : t("date.filter");
+  // Compact labels for common single-day picks: today / yesterday / single date.
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  let label: string;
+  if (!hasFilter) {
+    label = t("date.filter");
+  } else if (from && to && from === to) {
+    if (from === todayStr) label = t("date.today");
+    else if (from === yesterdayStr) label = (lang === "en" ? "Yesterday" : "গতকাল");
+    else label = formatDate(from, lang);
+  } else {
+    label = `${formatDate(from, lang)} — ${formatDate(to, lang)}`;
+  }
 
   // Second calendar month
   const month2 = viewMonth === 11 ? 0 : viewMonth + 1;
   const year2 = viewMonth === 11 ? viewYear + 1 : viewYear;
 
   return (
-    <div ref={ref} className="relative">
-      {/* Trigger button */}
+    <div ref={ref} className="relative w-full md:w-auto">
+      {/* Trigger button — w-full on mobile so it stays within its flex slot,
+          truncates long labels (e.g. "Apr 24 — Apr 24") instead of overlapping siblings */}
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 px-3.5 py-2.5 border rounded-xl text-sm transition-all duration-200 whitespace-nowrap ${
+        className={`w-full md:w-auto flex items-center gap-2 px-3.5 py-2.5 border rounded-xl text-sm transition-all duration-200 min-w-0 ${
           hasFilter
             ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931] font-medium shadow-sm shadow-[#0f5931]/10"
             : "border-gray-200 text-gray-500 hover:border-gray-300 hover:shadow-sm"
         }`}
       >
-        <FiCalendar className="w-4 h-4" />
-        <span>{label}</span>
+        <FiCalendar className="w-4 h-4 shrink-0" />
+        <span className="truncate min-w-0 flex-1 text-left">{label}</span>
         {hasFilter && (
           <span
             onClick={(e) => { e.stopPropagation(); onChange("", ""); setOpen(false); }}
-            className="ml-0.5 p-0.5 hover:bg-red-100 rounded-full text-red-500 transition-colors"
+            className="ml-0.5 p-0.5 hover:bg-red-100 rounded-full text-red-500 transition-colors shrink-0"
           >
             <FiX className="w-3 h-3" />
           </span>

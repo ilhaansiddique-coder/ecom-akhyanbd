@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
 import { motion } from "framer-motion";
@@ -124,6 +125,7 @@ function StatCard({
   color,
   delay,
   raw,
+  href,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -131,14 +133,10 @@ function StatCard({
   color: string;
   delay: number;
   raw?: boolean;
+  href?: string;
 }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4 }}
-      className="bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 md:gap-4 shadow-sm"
-    >
+  const inner = (
+    <>
       <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
         <Icon className="w-5 h-5 md:w-6 md:h-6 text-white" />
       </div>
@@ -146,6 +144,22 @@ function StatCard({
         <div className="text-lg md:text-2xl font-bold text-gray-800 truncate">{raw ? value : toBn(value)}</div>
         <div className="text-xs md:text-sm text-gray-500 mt-0.5 truncate">{label}</div>
       </div>
+    </>
+  );
+  const baseCls = "bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 md:gap-4 shadow-sm";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4 }}
+    >
+      {href ? (
+        <Link href={href} className={`${baseCls} block hover:border-[var(--primary)] hover:shadow-md transition-all cursor-pointer`}>
+          <div className="flex items-center gap-3 md:gap-4 w-full">{inner}</div>
+        </Link>
+      ) : (
+        <div className={baseCls}>{inner}</div>
+      )}
     </motion.div>
   );
 }
@@ -197,11 +211,17 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
 
   if (loading) return <StatsSkeleton />;
 
+  // Today (local) in YYYY-MM-DD for date-filter URL params
+  const todayStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   const row1 = [
-    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[var(--primary)]" },
-    { icon: FiClock, label: t("dash.pendingOrders"), value: orderCounts.pending, color: "bg-yellow-500" },
-    { icon: FiCheckCircle, label: t("dash.confirmed"), value: orderCounts.confirmed, color: "bg-blue-500" },
-    { icon: FiXCircle, label: t("dash.cancelled"), value: orderCounts.cancelled, color: "bg-red-500" },
+    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[var(--primary)]", href: "/dashboard/orders" },
+    { icon: FiClock, label: t("dash.pendingOrders"), value: orderCounts.pending, color: "bg-yellow-500", href: "/dashboard/orders?status=pending" },
+    { icon: FiCheckCircle, label: t("dash.confirmed"), value: orderCounts.confirmed, color: "bg-blue-500", href: "/dashboard/orders?status=confirmed" },
+    { icon: FiXCircle, label: t("dash.cancelled"), value: orderCounts.cancelled, color: "bg-red-500", href: "/dashboard/orders?status=cancelled" },
   ];
   const row2 = [
     { icon: FiDollarSign, label: t("dash.totalRevenue"), value: `৳${toBn(stats?.total_revenue ?? 0)}`, color: "bg-emerald-500", raw: true },
@@ -210,10 +230,10 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     { icon: FiDollarSign, label: t("dash.cancelledAmt"), value: `৳${toBn(revByStatus.cancelled)}`, color: "bg-red-500", raw: true },
   ];
   const row3 = [
-    { icon: FiCalendar, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-indigo-500" },
-    { icon: FiTrendingUp, label: t("dash.todayRevenue"), value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true },
-    { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500" },
-    { icon: FiAlertCircle, label: t("dash.lowStock"), value: stats?.low_stock_count ?? stats?.low_stock ?? 0, color: "bg-orange-500" },
+    { icon: FiCalendar, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-indigo-500", href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
+    { icon: FiTrendingUp, label: t("dash.todayRevenue"), value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true, href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
+    { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500", href: "/dashboard/users" },
+    { icon: FiAlertCircle, label: t("dash.lowStock"), value: stats?.low_stock_count ?? stats?.low_stock ?? 0, color: "bg-orange-500", href: "/dashboard/products?filter=low_stock" },
   ];
 
   const pieData = [
@@ -229,7 +249,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     <div className="space-y-6">
       {/* Row 1: Order Counts */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {row1.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={i * 0.05} />)}
+        {row1.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={i * 0.05} href={s.href} />)}
       </div>
 
       {/* Row 2: Revenue Breakdown */}
@@ -239,7 +259,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
 
       {/* Row 3: Business Health */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {row3.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.4 + i * 0.05} raw={s.raw} />)}
+        {row3.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.4 + i * 0.05} raw={s.raw} href={s.href} />)}
       </div>
 
       {/* Charts */}
