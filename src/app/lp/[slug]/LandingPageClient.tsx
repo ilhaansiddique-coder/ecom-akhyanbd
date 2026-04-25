@@ -301,6 +301,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         subtotal, shipping_cost: shipping, total,
         payment_method: "cod", items,
         notes: `Landing page: ${page.slug}`,
+        lang: "bn",
       });
       // Purchase — fire BEFORE router.push so sendBeacon flushes to /api/v1/collect
       // before the navigation aborts in-flight fetches. Mirrors checkout/page.tsx.

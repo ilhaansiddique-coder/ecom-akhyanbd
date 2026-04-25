@@ -36,7 +36,14 @@ export async function GET(request: NextRequest) {
 
 // POST - Create order (guest checkout OK)
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  // Body parse: malformed JSON should return a clean 400, not crash to 500.
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse("Invalid request body", 400);
+  }
+
   const parsed = createOrderSchema.safeParse(body);
   if (!parsed.success) {
     const errors: Record<string, string[]> = {};
@@ -45,7 +52,43 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
+
+  // Language for server-side error messages. Prefer explicit body field, else
+  // sniff Accept-Language. Default to Bangla (primary audience).
+  const acceptLang = request.headers.get("accept-language") || "";
+  const lang: "en" | "bn" = data.lang
+    ? data.lang
+    : acceptLang.toLowerCase().startsWith("en") ? "en" : "bn";
+  const t = (en: string, bn: string) => (lang === "en" ? en : bn);
+
+  // ── Required-field hardening (server-side, schema is permissive for LP) ──
+  // Phone: must be a valid BD 11-digit number after normalization.
+  const rawPhone = (data.customer_phone || data.phone || "").trim();
+  if (!rawPhone) {
+    return errorResponse(t("Phone number is required.", "ফোন নম্বর আবশ্যক।"), 422);
+  }
+  if (!isValidBDPhone(rawPhone)) {
+    return errorResponse(
+      t("Please enter a valid Bangladeshi phone number (01XXXXXXXXX).",
+        "সঠিক বাংলাদেশী ফোন নম্বর দিন (01XXXXXXXXX)।"),
+      422,
+    );
+  }
+  // Address: must be at least 5 chars to avoid blank/garbage entries.
+  const rawAddress = (data.customer_address || data.address || "").trim();
+  if (rawAddress.length < 5) {
+    return errorResponse(
+      t("Please enter a complete delivery address.", "সম্পূর্ণ ডেলিভারি ঠিকানা দিন।"),
+      422,
+    );
+  }
+
   const user = await getSessionUser();
+
+  // Detect landing-page submissions so we don't override their custom
+  // shipping cost with the storefront zone lookup. LP client sets
+  // notes = "Landing page: <slug>" — this is the only marker we have.
+  const isLandingPageOrder = (data.notes || "").startsWith("Landing page:");
 
   // Create order with optimistic locking + retry logic for concurrent purchases
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,7 +126,11 @@ export async function POST(request: NextRequest) {
 
           if (!stockSource.unlimitedStock && stockSource.stock < item.quantity) {
             const label = variantLabel ? `${product.name} (${variantLabel})` : product.name;
-            throw new Error(`${label} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${stockSource.stock}`);
+            throw new Error(
+              lang === "en"
+                ? `Not enough stock for ${label}. Available: ${stockSource.stock}`
+                : `${label} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${stockSource.stock}`
+            );
           }
 
           return {
@@ -98,9 +145,87 @@ export async function POST(request: NextRequest) {
 
         // 3. Recalculate totals server-side
         const serverSubtotal = verifiedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-        const serverShipping = data.shipping_cost || 0;
-        const serverDiscount = data.discount || 0;
-        const serverTotal = serverSubtotal + serverShipping - serverDiscount;
+
+        // ── Shipping: derive from ShippingZone by city to prevent client-side
+        // manipulation. LP submissions keep their client-supplied value because
+        // landing pages run their own per-page shipping rules that the zone
+        // table doesn't know about. If the city doesn't match any zone (or no
+        // city given), fall back to the client value as a last resort — better
+        // to ship at customer's chosen rate than to fail the order. We still
+        // floor at 0 so a negative value can never reduce the total.
+        let serverShipping: number;
+        if (isLandingPageOrder) {
+          serverShipping = Math.max(0, Number(data.shipping_cost) || 0);
+        } else {
+          const cityRaw = (data.city || "").trim().toLowerCase();
+          let zoneRate: number | null = null;
+          if (cityRaw) {
+            const zones = await tx.shippingZone.findMany({ where: { isActive: true } });
+            for (const zone of zones) {
+              try {
+                const cities = JSON.parse(zone.cities) as string[];
+                if (cities.some((c) => c.toLowerCase() === cityRaw)) {
+                  zoneRate = Number(zone.rate);
+                  break;
+                }
+              } catch {
+                // Zone with malformed cities JSON — skip rather than crash.
+              }
+            }
+          }
+          serverShipping = zoneRate !== null
+            ? zoneRate
+            : Math.max(0, Number(data.shipping_cost) || 0);
+        }
+
+        // ── Coupon: re-validate server-side. Client-sent `discount` is never
+        // trusted. If a `coupon_code` is given we look up the row, run all
+        // gates (active, date window, max-uses, min-order), and recompute the
+        // discount. If invalid, fail with 422 so the customer sees the same
+        // total they'd see if they re-applied — no silent under-charge.
+        let serverDiscount = 0;
+        const couponCode = (data.coupon_code || "").trim();
+        if (couponCode) {
+          const coupon = await tx.coupon.findUnique({ where: { code: couponCode } });
+          if (!coupon) {
+            throw new Error(t("Coupon not found.", "কুপন পাওয়া যায়নি।"));
+          }
+          if (!coupon.isActive) {
+            throw new Error(t("Coupon is inactive.", "কুপন নিষ্ক্রিয়।"));
+          }
+          const now = new Date();
+          if (coupon.startsAt && now < coupon.startsAt) {
+            throw new Error(t("Coupon hasn't started yet.", "কুপন এখনো শুরু হয়নি।"));
+          }
+          if (coupon.expiresAt && now > coupon.expiresAt) {
+            throw new Error(t("Coupon has expired.", "কুপনের মেয়াদ শেষ।"));
+          }
+          if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+            throw new Error(t("Coupon usage limit reached.", "কুপন ব্যবহারের সীমা শেষ।"));
+          }
+          if (serverSubtotal < Number(coupon.minOrderAmount)) {
+            throw new Error(
+              t(
+                `Minimum order ৳${coupon.minOrderAmount} required for this coupon.`,
+                `এই কুপনের জন্য সর্বনিম্ন অর্ডার ৳${coupon.minOrderAmount} হতে হবে।`,
+              ),
+            );
+          }
+          if (coupon.type === "percentage") {
+            serverDiscount = (serverSubtotal * Number(coupon.value)) / 100;
+          } else {
+            serverDiscount = Number(coupon.value);
+          }
+          // Cap at subtotal so total can never go below shipping.
+          serverDiscount = Math.min(serverDiscount, serverSubtotal);
+          // Bump usage counter atomically inside the same tx.
+          await tx.coupon.update({
+            where: { id: coupon.id },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        const serverTotal = Math.max(0, serverSubtotal + serverShipping - serverDiscount);
 
         // 4. Update stock with optimistic locking
         //
@@ -175,9 +300,9 @@ export async function POST(request: NextRequest) {
           data: {
             userId: user?.id || null,
             customerName: data.customer_name,
-            customerPhone: data.customer_phone || data.phone || "",
+            customerPhone: rawPhone,
             customerEmail: data.customer_email || data.email || null,
-            customerAddress: data.customer_address || data.address || "",
+            customerAddress: rawAddress,
             city: data.city,
             zipCode: data.zip_code || null,
             subtotal: serverSubtotal,
@@ -202,7 +327,7 @@ export async function POST(request: NextRequest) {
       break; // Success — exit retry loop
 
     } catch (err: any) {
-      lastError = err?.message || "অর্ডার তৈরি করতে সমস্যা হয়েছে";
+      lastError = err?.message || t("Failed to create order.", "অর্ডার তৈরি করতে সমস্যা হয়েছে");
 
       // If it's a conflict (version mismatch), retry
       if (lastError.startsWith("CONFLICT:") && attempt < MAX_RETRIES - 1) {
@@ -210,22 +335,30 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Stock error — don't retry, return immediately
-      if (lastError.includes("স্টক নেই")) {
-        return errorResponse(lastError, 422);
+      // Stock / coupon / shipping / address-not-found — don't retry, surface
+      // the message as-is so the customer sees the actual reason. Strip the
+      // internal "CONFLICT:" prefix on the final attempt so the customer
+      // doesn't see jargon.
+      if (lastError.startsWith("CONFLICT:")) {
+        const name = lastError.slice(9);
+        return errorResponse(
+          t(`Stock conflict for ${name}. Please try again.`, `${name} এর জন্য স্টক দ্বন্দ্ব। আবার চেষ্টা করুন।`),
+          409,
+        );
       }
-
-      // Other errors — don't retry
       return errorResponse(lastError, 422);
     }
   }
 
   if (!order) {
-    return errorResponse("সার্ভার ব্যস্ত। আবার চেষ্টা করুন।", 503);
+    return errorResponse(t("Server busy. Please try again.", "সার্ভার ব্যস্ত। আবার চেষ্টা করুন।"), 503);
   }
 
-  const customerPhone = data.customer_phone || data.phone || "";
-  const customerAddress = data.customer_address || data.address || "";
+  // Use the normalized values resolved at the top of the handler so downstream
+  // consumers (address save, guest user create, FB CAPI, spam scoring) all see
+  // the same trimmed/validated phone + address that was stored on the order.
+  const customerPhone = rawPhone;
+  const customerAddress = rawAddress;
   const customerCity = data.city || "";
   const customerZip = data.zip_code || null;
   const customerName = data.customer_name;
@@ -308,8 +441,8 @@ export async function POST(request: NextRequest) {
     customerName: data.customer_name,
     orderId: order.id,
     total: order.total,
-    phone: data.customer_phone || data.phone || "",
-    address: data.customer_address || data.address || "",
+    phone: rawPhone,
+    address: rawAddress,
     city: data.city || "",
     paymentMethod: data.payment_method,
     shippingCost: order.shippingCost || 0,

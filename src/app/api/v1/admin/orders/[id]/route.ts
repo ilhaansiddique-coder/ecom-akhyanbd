@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
 
 export async function GET(
@@ -119,8 +119,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Order deletion (trash + hard delete) is admin-only. Staff can update
+  // status, send to courier, etc. but never destroy customer-facing data.
   let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
+  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
 
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });

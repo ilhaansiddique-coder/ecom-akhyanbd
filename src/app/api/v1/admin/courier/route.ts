@@ -16,6 +16,20 @@ import {
   isValidBDPhone,
 } from "@/lib/steadfast";
 import { checkPathaoStatus, hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
+import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
+
+// Build the data payload for `prisma.order.update` when a courier-status
+// poll returns a new value. Always sets `courierStatus`; conditionally sets
+// `status` to "delivered" / "cancelled" if the courier marks the parcel as
+// such — but never overrides a "trashed" order (those are deliberately
+// removed by admin and shouldn't resurrect via courier sync).
+function buildStatusUpdate(currentOrderStatus: string, courierStatus: string) {
+  const derived = mapCourierStatusToOrderStatus(courierStatus);
+  if (!derived || currentOrderStatus === "trashed" || currentOrderStatus === derived) {
+    return { courierStatus };
+  }
+  return { courierStatus, status: derived };
+}
 
 // Spacing between sequential courier API hits inside bulk loops so we don't
 // trip Steadfast/Pathao rate limits. ~500ms keeps a 50-order bulk send under
@@ -180,7 +194,10 @@ export async function POST(request: NextRequest) {
       try {
         const r = await checkPathaoStatus(order.consignmentId);
         if (r.data?.order_status) {
-          await prisma.order.update({ where: { id: order.id }, data: { courierStatus: r.data.order_status } });
+          await prisma.order.update({
+            where: { id: order.id },
+            data: buildStatusUpdate(order.status, r.data.order_status),
+          });
           return jsonResponse({ delivery_status: r.data.order_status, consignment: r.data });
         }
         console.error("[courier status] Pathao (delegated) returned:", r);
@@ -201,7 +218,7 @@ export async function POST(request: NextRequest) {
       if (result.status === 200 && result.delivery_status) {
         await prisma.order.update({
           where: { id: order.id },
-          data: { courierStatus: result.delivery_status },
+          data: buildStatusUpdate(order.status, result.delivery_status),
         });
         return jsonResponse({
           delivery_status: result.delivery_status,

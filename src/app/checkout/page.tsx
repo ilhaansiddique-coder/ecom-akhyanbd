@@ -312,6 +312,7 @@ export default function CheckoutPage() {
         customer_email: email || undefined,
         customer_address: address,
         city: city || (selectedZone ? shippingZones.find(z => z.id === selectedZone)?.name || "" : ""),
+        lang,
         fp_behavioral: { ...behavioralSignals, honeypotTriggered: honeypot.length > 0 },
         zip_code: zipCode || undefined,
         subtotal: totalPrice,

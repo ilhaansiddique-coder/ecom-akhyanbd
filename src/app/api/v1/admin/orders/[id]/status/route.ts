@@ -3,7 +3,7 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
 import { orderStatusSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
 import { sendToFacebookCAPI } from "@/lib/fbcapi";
@@ -27,6 +27,13 @@ export async function PUT(
     }
 
     const data = parsed.data;
+
+    // Trashing an order is treated as a delete — admin-only, even though the
+    // rest of the status transitions (pending → confirmed → shipped, etc.)
+    // are open to staff.
+    if (data.status === "trashed") {
+      try { await requireAdmin(); } catch (e) { return e as Response; }
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = { status: data.status };

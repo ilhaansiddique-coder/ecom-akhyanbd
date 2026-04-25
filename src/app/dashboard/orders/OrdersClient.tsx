@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import Toast from "@/components/Toast";
@@ -128,6 +130,11 @@ interface InitialData { items: Order[]; total: number; shippingZones: ShippingZo
 
 export default function OrdersClient({ initialData }: { initialData?: InitialData }) {
   const { t, lang } = useLang();
+  // Trash / hard-delete actions are admin-only — keeps staff from accidentally
+  // wiping a customer order. Server enforces this too (requireAdmin on DELETE
+  // and on PUT status=trashed); hiding the buttons just removes the temptation.
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const STATUS_OPTIONS = useStatusOptions();
   const PAYMENT_OPTIONS = usePaymentOptions();
   const PAYMENT_LABELS = usePaymentLabels();
@@ -145,6 +152,15 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const [pendingStatus, setPendingStatus] = useState<Record<number, string>>({});
   const [pendingPayment, setPendingPayment] = useState<Record<number, string>>({});
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
+
+  // Pagination — server returns 15 per page (admin/orders/route.ts).
+  // Match that here so page math lines up with what the API actually slices.
+  const perPage = 15;
+  const [page, setPage] = useState(1);
+  // Seed from SSR so pagination controls render immediately on first paint
+  // without waiting for the client-side re-fetch (skipFirstFetchRef).
+  const [totalOrders, setTotalOrders] = useState(initialData?.total ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalOrders / perPage));
 
   // Shipping zones
   const [shippingZones, setShippingZones] = useState<{ id: number; name: string; rate: number }[]>(initialData?.shippingZones ?? []);
@@ -289,26 +305,49 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
   const fetchAll = useCallback((background = false) => {
     if (!background) setLoading(true);
-    const params = statusFilter ? `status=${statusFilter}` : "";
-    api.admin.getOrders(params)
+    // Build paginated query. Server filters by status + search so each page
+    // is computed against the FULL result set, not just the rows currently
+    // in memory. Page is 1-indexed.
+    const qs = new URLSearchParams();
+    qs.set("page", String(page));
+    if (statusFilter) qs.set("status", statusFilter);
+    if (search.trim()) qs.set("search", search.trim());
+    if (dateFrom) qs.set("date_from", dateFrom);
+    if (dateTo) qs.set("date_to", dateTo);
+    api.admin.getOrders(qs.toString())
       .then((res) => {
         const all = res.data || res || [];
-        // Hide trashed orders from "all" view, only show when explicitly filtered
+        // Trashed orders only appear when the filter is explicitly "trashed".
+        // For any other view (including no filter) we hide them. Server
+        // doesn't know about this rule yet — re-applying it here for now.
         setOrders(statusFilter === "trashed" ? all : all.filter((o: Order) => o.status !== "trashed"));
+        // Read pagination meta. Fall back to current data length if server
+        // didn't return meta (e.g. legacy callers / tests).
+        const total = res?.meta?.total ?? res?.total ?? all.length;
+        setTotalOrders(Number(total) || 0);
       })
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
-  }, [statusFilter]);
+  }, [statusFilter, search, page, dateFrom, dateTo]);
 
-  // Re-fetch whenever the status filter changes. SSR seeded the initial list
-  // with the unfiltered view; without this, switching to "Trash" (or any other
-  // filter) would keep showing the SSR list because nothing triggered fetchAll.
-  // Skip the very first render when initialData is present so we don't double-load.
+  // Re-fetch whenever filter / search / page changes. SSR seeded the initial
+  // list with page 1 unfiltered; skip the very first run when initialData is
+  // present so we don't double-load.
   const skipFirstFetchRef = useRef(!!initialData?.items);
   useEffect(() => {
     if (skipFirstFetchRef.current) { skipFirstFetchRef.current = false; return; }
-    fetchAll();
-  }, [statusFilter, fetchAll]);
+    // Debounce so search-as-you-type doesn't fire a request per keystroke.
+    // Status / page changes also go through the debounce — 250ms is short
+    // enough to feel instant on a click and long enough to coalesce typing.
+    const handle = setTimeout(() => fetchAll(), 250);
+    return () => clearTimeout(handle);
+  }, [statusFilter, search, page, dateFrom, dateTo, fetchAll]);
+
+  // When any filter changes, reset back to page 1 so we don't end up stranded
+  // on (say) page 5 of an empty result set.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search, dateFrom, dateTo]);
 
   // Close bulk status dropdown on outside click
   useEffect(() => {
@@ -674,8 +713,55 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       const provider = (o?.courier_type as "steadfast" | "pathao" | undefined) || activeCourier;
       const res = await api.admin.checkCourierStatus(orderId, provider);
       if (res.delivery_status) {
-        setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, courier_status: res.delivery_status } : o));
-        if (detailOrder?.id === orderId) setDetailOrder((prev) => prev ? { ...prev, courier_status: res.delivery_status } : prev);
+        // Mirror the server-side auto-sync (courierStatusMap.ts) so the row's
+        // Status pill flips instantly without waiting for a re-fetch. Server
+        // already wrote it to the DB inside the same request; this is purely
+        // a local optimistic patch.
+        //
+        // Compute the derived flip INSIDE the functional setter so we never
+        // operate on a stale closure of `orders`. A separate flag captures
+        // whether we should also fire the /status PUT (for CAPI + payment).
+        const derived = mapCourierStatusToOrderStatus(res.delivery_status);
+        let firedStatus: "delivered" | "cancelled" | null = null;
+        let firedPayment: "paid" | null = null;
+        setOrders((prev) => prev.map((o) => {
+          if (o.id !== orderId) return o;
+          const willFlipStatus =
+            !!derived && o.status !== "trashed" && o.status !== derived;
+          const willMarkPaid =
+            derived === "delivered" && o.payment_status !== "paid";
+          if (willFlipStatus) firedStatus = derived;
+          if (willMarkPaid) firedPayment = "paid";
+          return {
+            ...o,
+            courier_status: res.delivery_status,
+            ...(willFlipStatus ? { status: derived! } : {}),
+            ...(willMarkPaid ? { payment_status: "paid" } : {}),
+          };
+        }));
+        setDetailOrder((prev) => {
+          if (!prev || prev.id !== orderId) return prev;
+          const willFlipStatus =
+            !!derived && prev.status !== "trashed" && prev.status !== derived;
+          const willMarkPaid =
+            derived === "delivered" && prev.payment_status !== "paid";
+          return {
+            ...prev,
+            courier_status: res.delivery_status,
+            ...(willFlipStatus ? { status: derived! } : {}),
+            ...(willMarkPaid ? { payment_status: "paid" } : {}),
+          };
+        });
+        // Fire /status PUT only if we actually flipped — that route also
+        // updates payment_status server-side and triggers FB CAPI Purchase /
+        // OrderCancelled refire (the courier route only touches status +
+        // courierStatus, not payment or CAPI).
+        if (firedStatus) {
+          api.admin.updateOrderStatus(orderId, {
+            status: firedStatus,
+            ...(firedPayment ? { payment_status: firedPayment } : {}),
+          }).catch(() => {});
+        }
         showToast(`কুরিয়ার স্ট্যাটাস: ${res.delivery_status}`);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -985,40 +1071,14 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     }
   };
 
+  // Status / search / date filtering all happen server-side now (see fetchAll
+  // — it sends the params and the API filters + paginates). The only client
+  // filter still needed is a defensive status check so an order whose status
+  // was just changed inline (optimistic setOrders) leaves the current view
+  // immediately, before the next debounced re-fetch lands.
   const filtered = orders.filter((o) => {
-    // Status filter — also enforced client-side so an order changed inline
-    // (optimistic setOrders) immediately leaves the current filtered view
-    // instead of waiting for a re-fetch.
     if (statusFilter && o.status !== statusFilter) return false;
     if (!statusFilter && o.status === "trashed") return false;
-
-    const q = search.toLowerCase();
-    const matchesSearch =
-      o.customer_name?.toLowerCase().includes(q) ||
-      (o.customer_phone || o.phone || "").toLowerCase().includes(q) ||
-      String(o.id).includes(q);
-    if (!matchesSearch) return false;
-
-    // Date filter — anchor day boundaries to Bangladesh time (UTC+6, no DST).
-    // We avoid both `new Date("YYYY-MM-DD")` (UTC midnight) and local tz parse
-    // (browser's tz, may not be BD) so this stays consistent with the
-    // dashboard's BD-anchored todayOrders count regardless of where the user
-    // is viewing from.
-    if (dateFrom || dateTo) {
-      const orderMs = new Date(o.created_at).getTime();
-      const toBdMidnightMs = (ymd: string) => {
-        const [yy, mm, dd] = ymd.split("-").map(Number);
-        // Date.UTC(...) gives UTC midnight; subtract 6h to land on BD midnight.
-        return Date.UTC(yy, (mm || 1) - 1, dd || 1) - 6 * 3600 * 1000;
-      };
-      if (dateFrom) {
-        if (orderMs < toBdMidnightMs(dateFrom)) return false;
-      }
-      if (dateTo) {
-        // End-of-day in BD = next BD midnight - 1ms
-        if (orderMs > toBdMidnightMs(dateTo) + 86400000 - 1) return false;
-      }
-    }
     return true;
   });
 
@@ -1105,8 +1165,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                   )}
                 </div>
 
-                {/* Bulk Trash or Bulk Permanent Delete */}
-                {statusFilter === "trashed" ? (
+                {/* Bulk Trash or Bulk Permanent Delete — admin-only */}
+                {isAdmin && (statusFilter === "trashed" ? (
                   <button type="button" onClick={handleBulkPermanentDelete} disabled={bulkStatusLoading}
                     className="flex items-center gap-1.5 px-3.5 py-2.5 bg-red-500 rounded-xl text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50 whitespace-nowrap">
                     <FiXCircle className="w-4 h-4" />
@@ -1118,7 +1178,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                     <FiTrash2 className="w-4 h-4" />
                     <span className="hidden sm:inline">{lang === "en" ? "Trash" : "ট্র্যাশ"}</span>
                   </button>
-                )}
+                ))}
               </>
               );
             })()}
@@ -1329,11 +1389,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <div className="flex items-center gap-1">
                   <button onClick={() => openDetail(o.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"><FiEye className="w-4 h-4" /></button>
                   <button onClick={() => openEdit(o.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><FiEdit2 className="w-4 h-4" /></button>
-                  {o.status === "trashed" ? (
+                  {isAdmin && (o.status === "trashed" ? (
                     <button onClick={() => handlePermanentDelete(o.id)} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Permanently delete"><FiXCircle className="w-4 h-4" /></button>
                   ) : (
                     <button onClick={() => handleTrashOrder(o.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><FiTrash2 className="w-4 h-4" /></button>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -1353,7 +1413,21 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       <input type="checkbox" checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.length}
                         onChange={toggleSelectAll} className="w-4 h-4 accent-[var(--primary)]" />
                     </th>
-                    {["#", t("th.customer"), t("th.phone"), t("th.total"), t("th.status")].map((h) => (
+                    {/* "#" column also acts as the live select-count when any
+                        row is checked — mirrors the mobile "Select all (N)"
+                        affordance so admin always knows what bulk actions
+                        will operate on. Falls back to plain "#" when nothing
+                        is selected. */}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      {selectedOrders.size > 0 ? (
+                        <span className="text-[var(--primary)]">
+                          {lang === "en"
+                            ? `${selectedOrders.size} selected`
+                            : `${toBn(selectedOrders.size)} নির্বাচিত`}
+                        </span>
+                      ) : "#"}
+                    </th>
+                    {[t("th.customer"), t("th.phone"), t("th.total"), t("th.status")].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
@@ -1472,7 +1546,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                               <button onClick={() => openEdit(o.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
                                 <FiEdit2 className="w-3.5 h-3.5" />
                               </button>
-                              {o.status === "trashed" ? (
+                              {isAdmin && (o.status === "trashed" ? (
                                 <button onClick={() => handlePermanentDelete(o.id)} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors" title="Permanently delete">
                                   <FiXCircle className="w-3.5 h-3.5" />
                                 </button>
@@ -1480,7 +1554,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                 <button onClick={() => handleTrashOrder(o.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Trash">
                                   <FiTrash2 className="w-3.5 h-3.5" />
                                 </button>
-                              )}
+                              ))}
                               <button onClick={() => setExpandedId(isExpanded ? null : o.id)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" title="Toggle items">
                                 {isExpanded ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
                               </button>
@@ -1545,6 +1619,32 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
             </div>
           )}
         </div>
+
+        {/* Pagination — shown only when there's more than one page of results.
+            Server returns 15/page; the count + Prev/Next mirror the products
+            page convention so the dashboard feels consistent. */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-1">
+            <p className="text-xs text-gray-400">
+              {((page - 1) * perPage) + 1}–{Math.min(page * perPage, totalOrders)} / {totalOrders}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >{lang === "en" ? "← Prev" : "← আগের"}</button>
+              <span className="px-3 py-1.5 text-xs font-semibold text-[var(--primary)]">
+                {lang === "en" ? `${page} / ${totalPages}` : `${toBn(page)} / ${toBn(totalPages)}`}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >{lang === "en" ? "Next →" : "পরের →"}</button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Order Detail Modal */}

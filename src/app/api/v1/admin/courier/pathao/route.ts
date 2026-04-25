@@ -20,6 +20,18 @@ import {
   type PathaoOrder,
 } from "@/lib/pathao";
 import { formatPhone, isValidBDPhone, checkDeliveryStatus, isSteadfastConfigured, clearKeyCache } from "@/lib/steadfast";
+import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
+
+// Same auto-sync helper as the Steadfast route — see comment there. Kept
+// inline (not in the shared lib) because both routes already import the
+// mapper and a 4-line wrapper isn't worth a third file.
+function buildStatusUpdate(currentOrderStatus: string, courierStatus: string) {
+  const derived = mapCourierStatusToOrderStatus(courierStatus);
+  if (!derived || currentOrderStatus === "trashed" || currentOrderStatus === derived) {
+    return { courierStatus };
+  }
+  return { courierStatus, status: derived };
+}
 
 // Spacing between sequential courier API hits inside bulk loops so we don't
 // trip Pathao/Steadfast rate limits.
@@ -180,7 +192,10 @@ export async function POST(request: NextRequest) {
       try {
         const r = await checkDeliveryStatus(order.consignmentId);
         if (r.status === 200 && r.delivery_status) {
-          await prisma.order.update({ where: { id: order.id }, data: { courierStatus: r.delivery_status } });
+          await prisma.order.update({
+            where: { id: order.id },
+            data: buildStatusUpdate(order.status, r.delivery_status),
+          });
           return jsonResponse({ delivery_status: r.delivery_status, consignment: r.consignment });
         }
         console.error("[courier status] Steadfast (delegated) returned:", r);
@@ -202,7 +217,7 @@ export async function POST(request: NextRequest) {
       if (result.data?.order_status) {
         await prisma.order.update({
           where: { id: order.id },
-          data: { courierStatus: result.data.order_status },
+          data: buildStatusUpdate(order.status, result.data.order_status),
         });
         return jsonResponse({ delivery_status: result.data.order_status, consignment: result.data });
       }

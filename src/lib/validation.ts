@@ -78,6 +78,8 @@ export const createOrderSchema = z.object({
   payment_method: z.enum(["cod", "bkash", "nagad", "bank"]).default("cod"),
   transaction_id: z.string().optional(),
   notes: z.string().optional(),
+  // Language hint so server-side errors come back in the right language.
+  lang: z.enum(["en", "bn"]).optional(),
   items: z.array(
     z.object({
       product_id: z.coerce.number(),

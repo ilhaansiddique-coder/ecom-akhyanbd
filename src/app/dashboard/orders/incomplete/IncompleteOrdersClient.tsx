@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { FiPhone, FiMessageCircle, FiTrash2, FiEye, FiShoppingBag, FiRefreshCw, FiX } from "react-icons/fi";
 
@@ -58,6 +59,9 @@ function ago(iso: string, lang: "en" | "bn"): string {
 
 export default function IncompleteOrdersClient() {
   const { lang } = useLang();
+  // Delete is admin-only — staff lost real captures by misclicking trash.
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const settings = useSiteSettings();
   const [rows, setRows] = useState<IncompleteOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,13 +213,15 @@ export default function IncompleteOrdersClient() {
                     <Link href={convertHref(r)} className="px-3 py-1.5 text-xs rounded-lg bg-[#0f5931] text-white flex items-center gap-1.5">
                       <FiShoppingBag className="w-3.5 h-3.5" /> {lang === "en" ? "Convert" : "কনভার্ট"}
                     </Link>
-                    <button
-                      onClick={() => onDelete(r.id)}
-                      disabled={deletingId === r.id}
-                      className="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg flex items-center gap-1.5 disabled:opacity-40"
-                    >
-                      <FiTrash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => onDelete(r.id)}
+                        disabled={deletingId === r.id}
+                        className="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg flex items-center gap-1.5 disabled:opacity-40"
+                      >
+                        <FiTrash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -263,14 +269,16 @@ export default function IncompleteOrdersClient() {
                             <Link href={convertHref(r)} title={lang === "en" ? "Convert" : "কনভার্ট"} className="p-2 rounded-lg bg-[#0f5931] hover:bg-[#0d4d2a]">
                               <FiShoppingBag className="w-4 h-4 text-white" />
                             </Link>
-                            <button
-                              onClick={() => onDelete(r.id)}
-                              disabled={deletingId === r.id}
-                              title={lang === "en" ? "Delete" : "ডিলিট"}
-                              className="p-2 rounded-lg border border-red-200 hover:bg-red-50 disabled:opacity-40"
-                            >
-                              <FiTrash2 className="w-4 h-4 text-red-600" />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => onDelete(r.id)}
+                                disabled={deletingId === r.id}
+                                title={lang === "en" ? "Delete" : "ডিলিট"}
+                                className="p-2 rounded-lg border border-red-200 hover:bg-red-50 disabled:opacity-40"
+                              >
+                                <FiTrash2 className="w-4 h-4 text-red-600" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
