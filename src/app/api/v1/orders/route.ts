@@ -103,40 +103,71 @@ export async function POST(request: NextRequest) {
         const serverTotal = serverSubtotal + serverShipping - serverDiscount;
 
         // 4. Update stock with optimistic locking
+        //
+        // IMPORTANT: a cart can contain the same productId multiple times
+        // (different variants — e.g. T-shirt size M + size L). We must touch
+        // each product row exactly once, otherwise the second pass's
+        // `version: prod.version` check sees the row already bumped by the
+        // first pass and updateMany returns count=0 → spurious CONFLICT.
+        // Variant rows are still updated per-variantId (those are unique).
+
+        // Variant-stock writes — keyed by variantId, no aggregation needed
+        // beyond summing quantities for the same variantId (defensive; cart
+        // dedupes already but be safe).
+        const variantTotals = new Map<number, { qty: number; prodName: string }>();
         for (const vItem of verifiedItems) {
+          if (!vItem.variantId) continue;
           const prod = pMap.get(vItem.productId);
+          if (!prod?.hasVariations) continue;
+          const cur = variantTotals.get(vItem.variantId);
+          variantTotals.set(vItem.variantId, {
+            qty: (cur?.qty || 0) + vItem.quantity,
+            prodName: prod.name,
+          });
+        }
+        for (const [variantId, { qty, prodName }] of variantTotals) {
+          const prod = [...pMap.values()].find((p: any) => p.variants?.some((v: any) => v.id === variantId));
+          const variant = prod?.variants?.find((v: any) => v.id === variantId);
+          if (!variant) throw new Error(`Variant gone: ${prodName}`);
+          if (variant.unlimitedStock) continue;
+          const vResult = await tx.productVariant.updateMany({
+            where: { id: variantId, version: variant.version, stock: { gte: qty } },
+            data: { stock: { decrement: qty }, version: { increment: 1 } },
+          });
+          if (vResult.count === 0) throw new Error(`CONFLICT:${prodName}`);
+        }
+
+        // Aggregate per-product totals. `varQty` = qty that came from variant
+        // line-items (skips product.stock decrement). `bareQty` = qty for
+        // simple-product line-items (decrements product.stock).
+        const productTotals = new Map<number, { varQty: number; bareQty: number }>();
+        for (const vItem of verifiedItems) {
+          const cur = productTotals.get(vItem.productId) || { varQty: 0, bareQty: 0 };
+          if (vItem.variantId) cur.varQty += vItem.quantity;
+          else cur.bareQty += vItem.quantity;
+          productTotals.set(vItem.productId, cur);
+        }
+        for (const [productId, { varQty, bareQty }] of productTotals) {
+          const prod = pMap.get(productId);
           if (!prod) continue;
-
-          // Decrement variant stock if applicable
-          if (vItem.variantId && prod.hasVariations) {
-            const variant = prod.variants?.find((v: any) => v.id === vItem.variantId);
-            if (variant && !variant.unlimitedStock) {
-              const vResult = await tx.productVariant.updateMany({
-                where: { id: vItem.variantId, version: variant.version, stock: { gte: vItem.quantity } },
-                data: { stock: { decrement: vItem.quantity }, version: { increment: 1 } },
-              });
-              if (vResult.count === 0) throw new Error(`CONFLICT:${prod.name}`);
-            }
-          }
-
-          // Update product soldCount + stock (skip stock decrement if variant handles it)
-          const skipProductStock = prod.unlimitedStock || vItem.variantId;
+          const totalQty = varQty + bareQty;
+          // Skip product.stock decrement if product is unlimited OR every
+          // line-item for this product was variant-keyed (variant rows
+          // already handled the stock).
+          const skipProductStock = prod.unlimitedStock || bareQty === 0;
           const updateResult = await tx.product.updateMany({
             where: {
-              id: vItem.productId,
+              id: productId,
               version: prod.version,
-              ...(skipProductStock ? {} : { stock: { gte: vItem.quantity } }),
+              ...(skipProductStock ? {} : { stock: { gte: bareQty } }),
             },
             data: {
-              ...(skipProductStock ? {} : { stock: { decrement: vItem.quantity } }),
-              soldCount: { increment: vItem.quantity },
+              ...(skipProductStock ? {} : { stock: { decrement: bareQty } }),
+              soldCount: { increment: totalQty },
               version: { increment: 1 },
             },
           });
-
-          if (updateResult.count === 0) {
-            throw new Error(`CONFLICT:${prod.name}`);
-          }
+          if (updateResult.count === 0) throw new Error(`CONFLICT:${prod.name}`);
         }
 
         // 5. Create order with server-verified prices
