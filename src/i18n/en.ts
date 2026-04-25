@@ -248,6 +248,7 @@ export const en: Record<string, string> = {
   "dash.menus": "Menus",
   "dash.blog": "Blog",
   "dash.landingPages": "Landing Pages",
+  "dash.shortlinks": "Shortlinks",
   "dash.settings": "Settings",
   "dash.shippingZones": "Shipping Zones",
   "dash.siteSettings": "Site Settings",

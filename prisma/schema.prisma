@@ -560,3 +560,19 @@ model ProductVariant {
   @@index([productId])
   @@map("product_variants")
 }
+
+// Shortlinks: admin-defined slug → arbitrary URL redirect. Used for shareable
+// links (e.g. /schoolbag → /shop?category=29). Resolved by the catch-all
+// /[slug] route — slug must not collide with any existing top-level static
+// route (validated at create time).
+model Shortlink {
+  id          Int       @id @default(autoincrement())
+  slug        String    @unique
+  targetUrl   String    @map("target_url")
+  hits        Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+  @@index([slug])
+  @@map("shortlinks")
+}

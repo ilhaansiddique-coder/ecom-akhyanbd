@@ -248,6 +248,7 @@ export const bn: Record<string, string> = {
   "dash.menus": "মেনু",
   "dash.blog": "ব্লগ",
   "dash.landingPages": "ল্যান্ডিং পেজ",
+  "dash.shortlinks": "শর্টলিঙ্ক",
   "dash.settings": "সেটিংস",
   "dash.shippingZones": "শিপিং জোন",
   "dash.siteSettings": "সাইট সেটিংস",
