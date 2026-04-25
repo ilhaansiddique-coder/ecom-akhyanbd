@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const page    = Math.max(1, Number(searchParams.get("page")) || 1);
-  const perPage = Math.min(50, Math.max(1, Number(searchParams.get("per_page")) || 20));
+  // Cap raised to 1000 so the dashboard's full-list refetch (per_page=500)
+  // returns every product instead of being silently truncated to 50. The
+  // products client paginates + searches in memory, so it needs the
+  // complete set; the old 50 cap was hiding older products from view.
+  const perPage = Math.min(1000, Math.max(1, Number(searchParams.get("per_page")) || 20));
   const search     = searchParams.get("search");
   const categoryId = searchParams.get("category_id");
   const trash      = searchParams.get("trash") === "1";

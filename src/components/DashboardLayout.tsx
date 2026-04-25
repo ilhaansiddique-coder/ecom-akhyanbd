@@ -33,6 +33,7 @@ import {
   FiFileText,
   FiLayout,
   FiLink,
+  FiRss,
   FiTruck,
   FiSettings,
   FiDroplet,
@@ -166,6 +167,7 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         { label: t("dash.blog"), href: "/dashboard/blog", icon: FiFileText },
         { label: t("dash.landingPages"), href: "/dashboard/landing-pages", icon: FiLayout },
         { label: t("dash.shortlinks") || "Shortlinks", href: "/dashboard/shortlinks", icon: FiLink },
+        { label: t("dash.feeds") || "Product Feeds", href: "/dashboard/feeds", icon: FiRss },
       ],
     },
     {

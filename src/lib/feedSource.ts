@@ -1,0 +1,69 @@
+import { prisma } from "@/lib/prisma";
+import { mapProductToFeedItems, type FeedItem, type FeedDefaults } from "./feedMapper";
+
+/**
+ * Load feed defaults from site_settings + env. Admin can override via
+ * /dashboard/feeds settings panel. Sensible fallbacks for first deploy
+ * so the feed renders something usable on day one.
+ */
+export async function loadFeedDefaults(): Promise<FeedDefaults> {
+  const rows = await prisma.siteSetting.findMany({
+    where: {
+      key: {
+        in: [
+          "feed_brand",
+          "feed_condition",
+          "feed_google_category",
+          "site_url",
+          "site_name",
+        ],
+      },
+    },
+  });
+  const map: Record<string, string> = {};
+  for (const r of rows) if (r.value) map[r.key] = r.value;
+
+  // Site URL: try setting, then env, finally guess.
+  const baseUrl = (
+    map.site_url ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    "https://akhiyanbd.com"
+  ).replace(/\/$/, "");
+
+  return {
+    brand: map.feed_brand || map.site_name || "Akhiyan",
+    condition: (map.feed_condition === "refurbished" || map.feed_condition === "used")
+      ? map.feed_condition as "refurbished" | "used"
+      : "new",
+    googleProductCategory: map.feed_google_category || null,
+    baseUrl,
+    currency: "BDT",
+  };
+}
+
+/**
+ * Pull every feed-eligible product + its variants + active flash sales,
+ * then map each to one or more FeedItem rows. Returns the flat list ready
+ * for whichever format renderer the caller needs.
+ *
+ * Eligibility: isActive=true AND deletedAt is null. Out-of-stock items
+ * are kept (rendered with availability="out of stock") so retargeting
+ * audiences don't churn whenever inventory dips.
+ */
+export async function loadFeedItems(): Promise<FeedItem[]> {
+  const defaults = await loadFeedDefaults();
+  const products = await prisma.product.findMany({
+    where: { isActive: true, deletedAt: null },
+    include: {
+      variants: { orderBy: { sortOrder: "asc" } },
+      category: { select: { name: true } },
+      flashSales: {
+        include: { flashSale: true },
+      },
+    },
+    orderBy: { id: "asc" },
+  });
+
+  return products.flatMap((p) => mapProductToFeedItems(p, defaults));
+}

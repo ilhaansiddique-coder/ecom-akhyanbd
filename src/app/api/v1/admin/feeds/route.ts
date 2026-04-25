@@ -1,0 +1,77 @@
+import { prisma } from "@/lib/prisma";
+import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { requireStaff } from "@/lib/auth-helpers";
+import { loadFeedDefaults, loadFeedItems } from "@/lib/feedSource";
+
+// Lightweight stats for the /dashboard/feeds page. Counts how many products
+// + variant rows the feeds expose, plus the active flash-sale tally so admin
+// can confirm sales are flowing through to ads. Defaults are returned too
+// so the settings panel can hydrate without a second request.
+export async function GET() {
+  try { await requireStaff(); } catch (e) { return e as Response; }
+
+  try {
+    const [items, defaults, totalProducts, activeProducts, activeFlashSales] = await Promise.all([
+      loadFeedItems(),
+      loadFeedDefaults(),
+      prisma.product.count(),
+      prisma.product.count({ where: { isActive: true, deletedAt: null } }),
+      prisma.flashSale.count({
+        where: { isActive: true, startsAt: { lte: new Date() }, endsAt: { gte: new Date() } },
+      }),
+    ]);
+
+    return jsonResponse({
+      data: {
+        defaults,
+        stats: {
+          rowsInFeed: items.length,
+          activeProducts,
+          totalProducts,
+          activeFlashSales,
+          inStock: items.filter((i) => i.availability === "in stock").length,
+          outOfStock: items.filter((i) => i.availability === "out of stock").length,
+          onSale: items.filter((i) => !!i.salePrice).length,
+        },
+      },
+    });
+  } catch (e) {
+    console.error("[Feeds] stats error:", e);
+    return errorResponse("Failed to load feed stats", 500);
+  }
+}
+
+// Update shared defaults (brand, condition, google_product_category).
+export async function PUT(request: Request) {
+  try { await requireStaff(); } catch (e) { return e as Response; }
+  try {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
+
+    const updates: { key: string; value: string }[] = [];
+    if (typeof body.brand === "string") updates.push({ key: "feed_brand", value: body.brand.trim() });
+    if (body.condition === "new" || body.condition === "refurbished" || body.condition === "used") {
+      updates.push({ key: "feed_condition", value: body.condition });
+    }
+    if (typeof body.google_product_category === "string") {
+      updates.push({ key: "feed_google_category", value: body.google_product_category.trim() });
+    }
+    if (typeof body.site_url === "string") {
+      updates.push({ key: "site_url", value: body.site_url.trim().replace(/\/$/, "") });
+    }
+    if (updates.length === 0) return errorResponse("Nothing to update", 400);
+
+    await Promise.all(updates.map((u) =>
+      prisma.siteSetting.upsert({
+        where: { key: u.key },
+        create: { key: u.key, value: u.value },
+        update: { value: u.value },
+      })
+    ));
+
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    console.error("[Feeds] settings save error:", e);
+    return errorResponse("Failed to save settings", 500);
+  }
+}

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { FiPhone, FiMessageCircle, FiTrash2, FiEye, FiShoppingBag, FiRefreshCw, FiX } from "react-icons/fi";
+import { SafeNextImage } from "@/components/SafeImage";
 
 interface CartItemRow {
   product_id?: number;
@@ -67,6 +68,9 @@ export default function IncompleteOrdersClient() {
   const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState<IncompleteOrder | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [convertingId, setConvertingId] = useState<number | null>(null);
+  const [toast, setToast] = useState("");
+  const router = useRouter();
 
   const load = async () => {
     setLoading(true);
@@ -120,23 +124,59 @@ export default function IncompleteOrdersClient() {
 
   const waLink = (r: IncompleteOrder) => `https://wa.me/88${r.phone}?text=${encodeURIComponent(waMsg(r))}`;
 
-  // Convert: send to /dashboard/orders/new (or fallback) prefilled via query
-  const convertHref = (r: IncompleteOrder) => {
-    const params = new URLSearchParams({
-      name: r.name || "",
-      phone: r.phone,
-      email: r.email || "",
-      address: r.address || "",
-      city: r.city || "",
-      zip: r.zip_code || "",
-      notes: r.notes || "",
-      cart: r.cart_items,
-    });
-    return `/dashboard/orders/new?${params.toString()}`;
+  // Convert: server creates the real Order using the captured cart + customer
+  // info, marks this incomplete row converted, fires Purchase to FB CAPI
+  // (defer-aware: stored on the order if defer is ON so admin "confirmed"
+  // status update fires it, else fired immediately). Redirects admin to the
+  // orders list with the new order pre-selected.
+  const onConvert = async (r: IncompleteOrder) => {
+    if (convertingId) return;
+    if (!confirm(
+      lang === "en"
+        ? `Create a real order for ${r.name || r.phone}?\nThis will decrement stock and send the customer a confirmation email.`
+        : `${r.name || r.phone}-এর জন্য একটি অর্ডার তৈরি করবেন?\nএটি স্টক কমাবে এবং কাস্টমারকে কনফার্মেশন ইমেইল পাঠাবে।`
+    )) return;
+    setConvertingId(r.id);
+    try {
+      const res = await fetch(`/api/v1/admin/incomplete-orders/${r.id}/convert`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const j = await res.json();
+      if (!res.ok || !j?.ok) {
+        setToast(j?.message || j?.error || (lang === "en" ? "Convert failed." : "কনভার্ট ব্যর্থ।"));
+        setTimeout(() => setToast(""), 3500);
+        return;
+      }
+      // Optimistically remove the row from the unconverted view + close modal.
+      setRows((p) => p.filter((x) => x.id !== r.id));
+      if (viewing?.id === r.id) setViewing(null);
+      setToast(lang === "en"
+        ? `Order #${j.data.order_id} created.`
+        : `অর্ডার #${j.data.order_id} তৈরি হয়েছে।`);
+      setTimeout(() => setToast(""), 2000);
+      // Take admin to the orders page so they can see the new row + adjust
+      // status (e.g. flip to "confirmed" — that's also what fires the
+      // deferred Purchase CAPI when defer mode is ON).
+      router.push("/dashboard/orders");
+    } catch {
+      setToast(lang === "en" ? "Network error." : "নেটওয়ার্ক সমস্যা।");
+      setTimeout(() => setToast(""), 3500);
+    } finally {
+      setConvertingId(null);
+    }
   };
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      {/* Floating toast for convert success / failure feedback. Auto-clears
+          after a couple of seconds so the admin doesn't have to dismiss. */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 px-4 py-2.5 bg-gray-900 text-white text-sm rounded-lg shadow-lg max-w-sm">
+          {toast}
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
@@ -210,9 +250,16 @@ export default function IncompleteOrdersClient() {
                     <a href={waLink(r)} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs rounded-lg bg-green-50 text-green-700 flex items-center gap-1.5">
                       <FiMessageCircle className="w-3.5 h-3.5" /> WhatsApp
                     </a>
-                    <Link href={convertHref(r)} className="px-3 py-1.5 text-xs rounded-lg bg-[#0f5931] text-white flex items-center gap-1.5">
-                      <FiShoppingBag className="w-3.5 h-3.5" /> {lang === "en" ? "Convert" : "কনভার্ট"}
-                    </Link>
+                    <button
+                      onClick={() => onConvert(r)}
+                      disabled={convertingId === r.id}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-[#0f5931] text-white flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <FiShoppingBag className="w-3.5 h-3.5" />
+                      {convertingId === r.id
+                        ? (lang === "en" ? "Converting…" : "কনভার্ট হচ্ছে…")
+                        : (lang === "en" ? "Convert" : "কনভার্ট")}
+                    </button>
                     {isAdmin && (
                       <button
                         onClick={() => onDelete(r.id)}
@@ -266,9 +313,14 @@ export default function IncompleteOrdersClient() {
                             <a href={waLink(r)} target="_blank" rel="noopener noreferrer" title="WhatsApp" className="p-2 rounded-lg bg-green-50 hover:bg-green-100">
                               <FiMessageCircle className="w-4 h-4 text-green-700" />
                             </a>
-                            <Link href={convertHref(r)} title={lang === "en" ? "Convert" : "কনভার্ট"} className="p-2 rounded-lg bg-[#0f5931] hover:bg-[#0d4d2a]">
+                            <button
+                              onClick={() => onConvert(r)}
+                              disabled={convertingId === r.id}
+                              title={lang === "en" ? "Convert to order" : "অর্ডারে কনভার্ট করুন"}
+                              className="p-2 rounded-lg bg-[#0f5931] hover:bg-[#0d4d2a] disabled:opacity-50"
+                            >
                               <FiShoppingBag className="w-4 h-4 text-white" />
-                            </Link>
+                            </button>
                             {isAdmin && (
                               <button
                                 onClick={() => onDelete(r.id)}
@@ -324,8 +376,27 @@ export default function IncompleteOrdersClient() {
                 <div className="text-xs text-gray-500 mb-2">{lang === "en" ? "Cart" : "কার্ট"}</div>
                 <div className="space-y-2">
                   {parseCart(viewing.cart_items).map((it, i) => (
-                    <div key={i} className="flex justify-between border border-gray-100 rounded-lg px-3 py-2">
-                      <div className="min-w-0">
+                    <div key={i} className="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2">
+                      {/* Product thumb — same convention as the orders page
+                          item rows. Falls back to a placeholder tile when the
+                          captured cart row didn't carry an image (very old
+                          captures, or items added before image support). */}
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-gray-50 shrink-0">
+                        {it.image ? (
+                          <SafeNextImage
+                            src={it.image}
+                            alt={it.name}
+                            fill
+                            sizes="48px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-300">
+                            <FiShoppingBag className="w-5 h-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{it.name}</div>
                         {it.variant_label && <div className="text-xs text-gray-500">{it.variant_label}</div>}
                       </div>

@@ -573,6 +573,36 @@ model Shortlink {
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime? @default(now()) @map("created_at")
   updatedAt   DateTime? @updatedAt @map("updated_at")
+  clicks      ShortlinkClick[]
   @@index([slug])
   @@map("shortlinks")
+}
+
+// One row per click. The lightweight Shortlink.hits counter still gets bumped
+// for fast list-view stats; this table is the detail log used by the
+// analytics page (timeline, country/browser/OS/device/source breakdowns).
+//
+// We intentionally store only a TRUNCATED ip (last octet zeroed for IPv4 /
+// last 80 bits zeroed for IPv6) so we can dedupe loosely + group by network
+// without retaining a full PII identifier.
+model ShortlinkClick {
+  id           Int       @id @default(autoincrement())
+  shortlinkId  Int       @map("shortlink_id")
+  shortlink    Shortlink @relation(fields: [shortlinkId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  ipTrunc      String?   @map("ip_trunc")
+  country      String?
+  referer      String?
+  // Parsed source label: "facebook" / "instagram" / "google" / "direct" / etc.
+  // Derived from referer + utm_source so we can group cleanly on the chart.
+  source       String?
+  utmSource    String?   @map("utm_source")
+  utmMedium    String?   @map("utm_medium")
+  utmCampaign  String?   @map("utm_campaign")
+  browser      String?
+  os           String?
+  device       String?   // "mobile" | "tablet" | "desktop"
+  @@index([shortlinkId])
+  @@index([createdAt])
+  @@map("shortlink_clicks")
 }

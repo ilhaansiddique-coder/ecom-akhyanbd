@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
-import { FiLink, FiCopy, FiCheck, FiTrash2, FiEdit2, FiPlus, FiExternalLink, FiX } from "react-icons/fi";
+import Link from "next/link";
+import { FiLink, FiCopy, FiCheck, FiTrash2, FiEdit2, FiPlus, FiExternalLink, FiX, FiBarChart2 } from "react-icons/fi";
 
 interface Shortlink {
   id: number;
@@ -88,7 +89,7 @@ export default function ShortlinksClient() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="p-3 md:p-6 max-w-6xl mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -127,7 +128,7 @@ export default function ShortlinksClient() {
             {rows.map((r) => {
               const fullUrl = `${origin}/${r.slug}`;
               return (
-                <div key={r.id} className="p-4 space-y-2">
+                <div key={r.id} className="p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -142,24 +143,57 @@ export default function ShortlinksClient() {
                       <p className="text-[11px] text-gray-400 mt-1">{r.hits} {lang === "en" ? "hits" : "হিট"}</p>
                     </div>
                   </div>
+                  {/* Two-row action layout for mobile so 6 buttons (Copy, Open,
+                      Toggle, Analytics, Edit, Delete) never overflow even at
+                      320px. Primary actions on top (Analytics + Copy + Open),
+                      secondary on bottom (Disable, Edit, Delete). All buttons
+                      grow to share width evenly via flex-1. */}
                   <div className="flex items-center gap-1.5 pt-1">
-                    <button onClick={() => copy(r.id, fullUrl)} className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 flex items-center gap-1">
+                    <Link
+                      href={`/dashboard/shortlinks/${r.id}`}
+                      className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-purple-200 bg-purple-50 text-purple-700 flex items-center justify-center gap-1"
+                    >
+                      <FiBarChart2 className="w-3.5 h-3.5" />
+                      {lang === "en" ? "Stats" : "স্ট্যাট"}
+                    </Link>
+                    <button
+                      onClick={() => copy(r.id, fullUrl)}
+                      className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-gray-200 flex items-center justify-center gap-1"
+                    >
                       {copiedId === r.id ? <FiCheck className="w-3 h-3 text-green-600" /> : <FiCopy className="w-3 h-3" />}
                       {lang === "en" ? "Copy" : "কপি"}
                     </button>
-                    <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 flex items-center gap-1">
+                    <a
+                      href={fullUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-gray-200 flex items-center justify-center gap-1"
+                    >
                       <FiExternalLink className="w-3 h-3" />
                       {lang === "en" ? "Open" : "খুলুন"}
                     </a>
-                    <button onClick={() => onToggleActive(r)} className="px-2.5 py-1 text-xs rounded-lg border border-gray-200">
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onToggleActive(r)}
+                      className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-gray-200"
+                    >
                       {r.isActive ? (lang === "en" ? "Disable" : "বন্ধ") : (lang === "en" ? "Enable" : "চালু")}
                     </button>
-                    <button onClick={() => setEditing(r)} className="p-1.5 rounded-lg border border-gray-200">
-                      <FiEdit2 className="w-3.5 h-3.5 text-blue-600" />
+                    <button
+                      onClick={() => setEditing(r)}
+                      className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-gray-200 flex items-center justify-center gap-1 text-blue-600"
+                    >
+                      <FiEdit2 className="w-3.5 h-3.5" />
+                      {lang === "en" ? "Edit" : "এডিট"}
                     </button>
                     {isAdmin && (
-                      <button onClick={() => onDelete(r.id)} className="p-1.5 rounded-lg border border-red-200">
-                        <FiTrash2 className="w-3.5 h-3.5 text-red-600" />
+                      <button
+                        onClick={() => onDelete(r.id)}
+                        className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-red-200 flex items-center justify-center gap-1 text-red-600"
+                      >
+                        <FiTrash2 className="w-3.5 h-3.5" />
+                        {lang === "en" ? "Delete" : "ডিলিট"}
                       </button>
                     )}
                   </div>
@@ -207,6 +241,9 @@ export default function ShortlinksClient() {
                         <button onClick={() => onToggleActive(r)} className="px-2 py-1 text-xs rounded-lg border border-gray-200 hover:bg-gray-50">
                           {r.isActive ? (lang === "en" ? "Disable" : "বন্ধ") : (lang === "en" ? "Enable" : "চালু")}
                         </button>
+                        <Link href={`/dashboard/shortlinks/${r.id}`} title={lang === "en" ? "Analytics" : "অ্যানালিটিকস"} className="p-1.5 rounded-lg hover:bg-purple-50 text-purple-600">
+                          <FiBarChart2 className="w-4 h-4" />
+                        </Link>
                         <button onClick={() => setEditing(r)} title={lang === "en" ? "Edit" : "এডিট"} className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600">
                           <FiEdit2 className="w-4 h-4" />
                         </button>

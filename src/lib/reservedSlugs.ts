@@ -9,7 +9,7 @@
 export const RESERVED_SLUGS = new Set<string>([
   // App routes
   "about", "api", "blog", "cart", "cdlogin", "checkout", "contact",
-  "dashboard", "lp", "order", "orders", "privacy", "products", "refund",
+  "dashboard", "feed", "lp", "order", "orders", "privacy", "products", "refund",
   "search", "shop", "terms", "wishlist", "login", "register", "auth",
   "forgot-password", "reset-password",
   // Generated files

@@ -8,6 +8,7 @@ import { mapApiProduct, type Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
 import ProductCard from "@/components/ProductCard";
 import { ProductGalleryWithVariants, ReviewsSection, TText } from "@/components/ProductDetailClient";
+import OtherProductsList from "@/components/OtherProductsList";
 import type { Metadata } from "next";
 
 // ISR: regenerate every 5 minutes (was 60s — too aggressive, kills static cache).
@@ -219,6 +220,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <Suspense fallback={<RelatedSkeleton />}>
           <RelatedProducts categoryId={raw.category_id as number} excludeId={product.id} />
         </Suspense>
+
+        {/* Other products: cross-category browse so users discover items
+            beyond the current category. Streams independently. */}
+        <Suspense fallback={<RelatedSkeleton />}>
+          <OtherProducts categoryId={raw.category_id as number} excludeId={product.id} />
+        </Suspense>
       </div>
     </section>
   );
@@ -251,6 +258,61 @@ async function RelatedProducts({ categoryId, excludeId }: { categoryId: number; 
           <ProductCard key={p.id} product={p} />
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Other products: cross-category browse strip with infinite scroll ───
+//
+// Surfaces items from categories OTHER than the current product's so users
+// can discover the rest of the catalog without leaving the PDP. The first
+// page (20 items) is server-rendered for fast first paint + SEO; subsequent
+// pages stream in via IntersectionObserver in the client component. Same
+// API endpoint (/api/v1/products) the shop page uses, with the new
+// exclude_category_id + exclude_id filters.
+const OTHER_PER_PAGE = 20;
+
+async function OtherProducts({ categoryId, excludeId }: { categoryId: number; excludeId: number }) {
+  let other: Product[] = [];
+  try {
+    const otherRows = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        id: { not: excludeId },
+        // NOT this category → guarantees no overlap with Related Products.
+        categoryId: { not: categoryId },
+      },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        variants: {
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true },
+        },
+      },
+      // Bestsellers first, then storefront sortOrder. Same ordering as the
+      // client-side fetch (sort_by=sold_count, sort_dir=desc) so page 2
+      // continues seamlessly from where page 1 ended.
+      orderBy: [{ soldCount: "desc" }, { sortOrder: "asc" }],
+      take: OTHER_PER_PAGE,
+    });
+    other = otherRows.map((p) => mapApiProduct(serialize(p)));
+  } catch {}
+
+  if (other.length === 0) return null;
+
+  return (
+    <div className="mt-12">
+      <h2 className="text-xl font-bold text-foreground mb-6">
+        <TText en="Other Products" bn="অন্যান্য পণ্য" />
+      </h2>
+      <OtherProductsList
+        initial={other}
+        excludeCategoryId={categoryId}
+        excludeId={excludeId}
+        perPage={OTHER_PER_PAGE}
+      />
     </div>
   );
 }

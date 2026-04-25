@@ -249,6 +249,7 @@ export const bn: Record<string, string> = {
   "dash.blog": "ব্লগ",
   "dash.landingPages": "ল্যান্ডিং পেজ",
   "dash.shortlinks": "শর্টলিঙ্ক",
+  "dash.feeds": "প্রোডাক্ট ফিড",
   "dash.settings": "সেটিংস",
   "dash.shippingZones": "শিপিং জোন",
   "dash.siteSettings": "সাইট সেটিংস",
