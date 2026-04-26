@@ -29,10 +29,34 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: "Pixel not configured" }, 200);
     }
 
+    // ── City override for Purchase events ──
+    // The form `ct` (browser-supplied) is the shipping zone label, useless
+    // for FB matching. The orders route fires a background Pathao parser
+    // that writes a real district (Dhaka, Chittagong, etc.) to
+    // order.parsedCity within ~1-2s. By the time this /collect call lands
+    // (after sendBeacon survives the post-checkout redirect, ~100-300ms),
+    // parsedCity is usually populated. Override `ct` with it when present.
+    //
+    // Wait briefly (max 2.5s) if the row exists but parsedCity hasn't
+    // landed yet — most cases resolve in < 500ms and we get the better
+    // signal. If still null after the wait, fall back to whatever the
+    // browser sent (no regression vs today's behaviour).
+    let userDataForHash = user_data;
+    if (event_name === "Purchase" && order_id) {
+      try {
+        const parsedCity = await waitForParsedCity(Number(order_id), 2500);
+        if (parsedCity) {
+          userDataForHash = { ...(user_data || {}), ct: parsedCity };
+        }
+      } catch {
+        // Lookup failed — fall through to original user_data.
+      }
+    }
+
     // Build hashed user_data
     const clientIp = getClientIp(request);
     const clientUa = request.headers.get("user-agent") || undefined;
-    const hashedUserData = buildHashedUserData(user_data, clientIp, clientUa);
+    const hashedUserData = buildHashedUserData(userDataForHash, clientIp, clientUa);
 
     // Build event payload
     const eventData: Record<string, unknown> = {
@@ -90,4 +114,36 @@ export async function POST(request: NextRequest) {
     console.error("[FB CAPI] Server error:", error);
     return jsonResponse({ success: true });
   }
+}
+
+/**
+ * Poll order.parsedCity for up to `timeoutMs`. The orders route writes it
+ * in a background task that usually finishes in 500-2000ms — well within
+ * our 2.5s budget. Returns the parsed city string when found, or null on
+ * timeout / row not found / parser failed entirely.
+ *
+ * Polls every 200ms which is short enough to catch fast Pathao responses
+ * and infrequent enough not to hammer Postgres.
+ */
+async function waitForParsedCity(orderId: number, timeoutMs: number): Promise<string | null> {
+  if (!Number.isFinite(orderId) || orderId <= 0) return null;
+  const deadline = Date.now() + timeoutMs;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    attempts++;
+    try {
+      const row = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { parsedCity: true },
+      });
+      if (row?.parsedCity?.trim()) return row.parsedCity.trim();
+      // Row exists but parsedCity is still null — wait + retry.
+    } catch {
+      return null;
+    }
+    if (Date.now() + 200 > deadline) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  console.log(`[FB CAPI] parsedCity poll timeout for order ${orderId} after ${attempts} attempts`);
+  return null;
 }

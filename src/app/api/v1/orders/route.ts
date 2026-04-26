@@ -103,45 +103,69 @@ export async function POST(request: NextRequest) {
       const result = await prisma.$transaction(async (tx: any) => {
         // 1. Fetch products + variants for optimistic locking
         const productIds = data.items.map((i) => i.product_id);
-        const products = await tx.product.findMany({ where: { id: { in: productIds } }, include: { variants: true } });
+        // Only consider ACTIVE + non-deleted products. Anything missing
+        // from this set is treated as a stale cart line and silently
+        // dropped below — the cart sync should normally have pruned them
+        // already, but checkout shouldn't fail if a race slipped one
+        // through (e.g. admin disabled the product mid-session).
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds }, isActive: true, deletedAt: null },
+          include: { variants: true },
+        });
         const pMap = new Map<number, any>(products.map((p: any) => [p.id, p]));
 
-        // 2. Validate stock and build server-side price items (variant-aware)
-        const verifiedItems = data.items.map((item) => {
-          const product = pMap.get(item.product_id);
-          if (!product) throw new Error(`Product not found: ${item.product_id}`);
+        // 2. Validate stock and build server-side price items (variant-aware).
+        //    Stale references (missing product OR missing variant) are
+        //    silently dropped — see comment above. We throw only when
+        //    EVERY line is stale or stock is insufficient.
+        const verifiedItems = data.items
+          .map((item) => {
+            const product = pMap.get(item.product_id);
+            if (!product) return null; // stale → drop
 
-          const variantId = (item as any).variant_id;
-          let price = product.price as number;
-          let variantLabel: string | null = null;
-          let stockSource = product;
+            const variantId = (item as any).variant_id;
+            let price = product.price as number;
+            let variantLabel: string | null = null;
+            let stockSource = product;
 
-          if (variantId && product.hasVariations) {
-            const variant = product.variants?.find((v: any) => v.id === variantId);
-            if (!variant) throw new Error(`Variant not found for ${product.name}`);
-            price = variant.price;
-            variantLabel = variant.label;
-            stockSource = variant;
-          }
+            if (variantId && product.hasVariations) {
+              const variant = product.variants?.find((v: any) => v.id === variantId);
+              if (!variant) return null; // stale variant → drop
+              price = variant.price;
+              variantLabel = variant.label;
+              stockSource = variant;
+            }
 
-          if (!stockSource.unlimitedStock && stockSource.stock < item.quantity) {
-            const label = variantLabel ? `${product.name} (${variantLabel})` : product.name;
-            throw new Error(
-              lang === "en"
-                ? `Not enough stock for ${label}. Available: ${stockSource.stock}`
-                : `${label} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${stockSource.stock}`
-            );
-          }
+            if (!stockSource.unlimitedStock && stockSource.stock < item.quantity) {
+              const label = variantLabel ? `${product.name} (${variantLabel})` : product.name;
+              throw new Error(
+                lang === "en"
+                  ? `Not enough stock for ${label}. Available: ${stockSource.stock}`
+                  : `${label} এর পর্যাপ্ত স্টক নেই। বর্তমান স্টক: ${stockSource.stock}`
+              );
+            }
 
-          return {
-            productId: item.product_id,
-            productName: product.name,
-            variantId: variantId || null,
-            variantLabel,
-            price,
-            quantity: item.quantity,
-          };
-        });
+            return {
+              productId: item.product_id,
+              productName: product.name,
+              variantId: variantId || null,
+              variantLabel,
+              price,
+              quantity: item.quantity,
+            };
+          })
+          .filter((v): v is NonNullable<typeof v> => v !== null);
+
+        // If every line in the cart pointed to a stale product, refuse the
+        // order with a clean message — better than silently creating an
+        // empty order.
+        if (verifiedItems.length === 0) {
+          throw new Error(
+            lang === "en"
+              ? "Your cart contains no available products. Please refresh and try again."
+              : "আপনার কার্টে কোনো পণ্য আর উপলভ্য নেই। পেজ রিফ্রেশ করে আবার চেষ্টা করুন।"
+          );
+        }
 
         // 3. Recalculate totals server-side
         const serverSubtotal = verifiedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -544,6 +568,80 @@ export async function POST(request: NextRequest) {
       }
     } catch (e) {
       console.error("[Spam] Fingerprint attach error:", e);
+    }
+  })();
+
+  // ── Resolve real city via Pathao address parser ──
+  // FIRE-AND-FORGET so the checkout response isn't blocked by Pathao's
+  // latency. The parsed district (e.g. "Dhaka", "Chittagong") gets written
+  // to the order row a few seconds later. /api/v1/collect (which fires FB
+  // CAPI via sendBeacon AFTER the redirect) reads order.parsedCity and
+  // overrides the user_data.ct field so Facebook gets a real city instead
+  // of the shipping-zone label.
+  //
+  // Why this design instead of awaiting the parse:
+  //   - Zero added latency on checkout response
+  //   - sendBeacon /collect call happens 100-300ms after this returns; the
+  //     parse usually finishes in 500-2000ms, well before the deferred
+  //     Purchase fires (defer ON case) and even fast enough for the
+  //     immediate fire to catch most orders
+  //   - Worst case: parsedCity is still null when /collect runs → CAPI
+  //     uses the form city (today's behaviour) → no regression
+  // Zone-label fallback: ONLY for "Inside Dhaka" zones. Outside-Dhaka
+  // customers shouldn't be tagged as Dhaka — Pathao result (or raw form
+  // value) is more accurate. Detection logic:
+  //   - "outside" indicator present (ভিতরে নয়, বাহিরে/বাইরে/outside)
+  //     → return null (don't fake)
+  //   - any "Dhaka" mention without an outside indicator → "Dhaka"
+  //   - everything else → null
+  const guessCityFromZone = (city: string): string | null => {
+    const c = (city || "").toLowerCase();
+    if (!c) return null;
+    // Outside indicators short-circuit. Bangla "বাহিরে"/"বাইরে" + English
+    // "outside". Catches "ঢাকার বাহিরে", "Outside Dhaka", etc.
+    if (/বাহিরে|বাইরে|outside/i.test(c)) return null;
+    // Has any Dhaka mention (BN/EN/dhakar variant) → safe to default.
+    if (/ঢাকা|dhaka|dhakar/i.test(c)) return "Dhaka";
+    return null;
+  };
+
+  void (async () => {
+    try {
+      const { parsePathaoAddress } = await import("@/lib/pathao");
+      if (!isValidBDPhone(rawPhone)) {
+        // Even with a bad phone, try to surface a sane city for FB matching.
+        const fallback = guessCityFromZone(data.city || "");
+        if (fallback) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { parsedCity: fallback },
+          });
+        }
+        return;
+      }
+      const r = await parsePathaoAddress(rawAddress, rawPhone);
+      const district = r?.district_name?.trim();
+      // Resolve in priority order: Pathao district → zone-label heuristic.
+      // Only writes when we have SOMETHING usable; null preserved otherwise
+      // so /collect knows to leave the form city untouched.
+      const resolved = district || guessCityFromZone(data.city || "");
+      if (!resolved) return;
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { parsedCity: resolved },
+      });
+    } catch (e) {
+      console.error("[Order parsedCity] background error:", e instanceof Error ? e.message : e);
+      // Best-effort fallback even on hard failure.
+      try {
+        const fallback = guessCityFromZone(data.city || "");
+        if (fallback) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { parsedCity: fallback },
+          });
+        }
+      } catch {}
     }
   })();
 

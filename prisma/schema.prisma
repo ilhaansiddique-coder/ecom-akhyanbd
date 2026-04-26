@@ -161,6 +161,12 @@ model Order {
   customerEmail   String?   @map("customer_email")
   customerAddress String    @map("customer_address")
   city            String?
+  // Real district name parsed from the customer's address via Pathao at
+  // order time (background task). Used by /api/v1/collect to override the
+  // FB CAPI `ct` field with a usable city instead of the shipping-zone
+  // label customers select on the form. Nullable — populates a few seconds
+  // after order creation, may be null if Pathao parser is unavailable.
+  parsedCity      String?   @map("parsed_city")
   zipCode         String?   @map("zip_code")
   subtotal        Float
   shippingCost    Float     @default(0) @map("shipping_cost")

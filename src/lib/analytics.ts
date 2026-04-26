@@ -428,6 +428,9 @@ export function trackPurchase(data: {
   value: number;
   order_id?: string;
   shipping?: number;
+  /** Real district name (parsed via Pathao on the server). Pushed to dataLayer
+   *  so GA4 / Google Ads see the proper city instead of shipping-zone labels. */
+  city?: string;
 }, userData?: UserData) {
   if (typeof window === "undefined") return;
   if (isExcludedPath()) return;
@@ -498,6 +501,9 @@ export function trackPurchase(data: {
     value: data.value,
     shipping: data.shipping,
     items,
+    // Real city from Pathao parser (populated server-side at order time).
+    // Falls back to undefined so GTM tags can apply their own defaults.
+    customer_city: data.city || undefined,
   });
 }
 

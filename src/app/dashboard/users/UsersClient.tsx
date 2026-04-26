@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
@@ -51,17 +51,44 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
+  // Pagination — match orders/products convention. Server returns 20/page.
+  // Pagination only renders when totalPages > 1 (≤20 = no controls).
+  const perPage = 20;
+  const [page, setPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(initialData?.total ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalUsers / perPage));
+
   const showToast = (message: string, type: "success" | "error" = "success") =>
     setToast({ message, type });
 
   const fetchAll = useCallback((background = false) => {
     if (!background) setLoading(true);
-    const params = roleFilter ? `role=${roleFilter}` : "";
-    api.admin.getUsers(params)
-      .then((res) => setUsers(res.data || res || []))
+    const qs = new URLSearchParams();
+    qs.set("page", String(page));
+    if (roleFilter) qs.set("role", roleFilter);
+    if (search.trim()) qs.set("search", search.trim());
+    api.admin.getUsers(qs.toString())
+      .then((res) => {
+        const list = res.data || res || [];
+        setUsers(list);
+        const total = res?.meta?.total ?? res?.total ?? list.length;
+        setTotalUsers(Number(total) || 0);
+      })
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
-  }, [roleFilter]);
+  }, [roleFilter, search, page]);
+
+  // Re-fetch on filter/search/page change. Debounce search 250ms.
+  // Skip first run when SSR seeded items so we don't double-load.
+  const skipFirstRef = useRef(!!initialData?.items?.length);
+  useEffect(() => {
+    if (skipFirstRef.current) { skipFirstRef.current = false; return; }
+    const h = setTimeout(() => fetchAll(), 250);
+    return () => clearTimeout(h);
+  }, [roleFilter, search, page, fetchAll]);
+
+  // Reset page on filter change.
+  useEffect(() => { setPage(1); }, [roleFilter, search]);
 
   const openCreate = () => {
     setEditId(null);
@@ -117,10 +144,9 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
     }
   };
 
-  const filtered = users.filter((u) => {
-    const q = search.toLowerCase();
-    return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.toLowerCase().includes(q);
-  });
+  // Search filtered server-side now. Defensive role check still local so
+  // optimistic role updates leave the view immediately.
+  const filtered = users.filter((u) => !roleFilter || u.role === roleFilter);
 
   const inputCls = theme.input;
   const labelCls = theme.label;
@@ -205,6 +231,30 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
             </div>
           )}
         </div>
+
+        {/* Pagination — only shows when total > perPage */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-1">
+            <p className="text-xs text-gray-400">
+              {((page - 1) * perPage) + 1}–{Math.min(page * perPage, totalUsers)} / {totalUsers}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >{lang === "en" ? "← Prev" : "← আগের"}</button>
+              <span className="px-3 py-1.5 text-xs font-semibold text-[var(--primary)]">
+                {lang === "en" ? `${page} / ${totalPages}` : `${toBn(page)} / ${toBn(totalPages)}`}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >{lang === "en" ? "Next →" : "পরের →"}</button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Modal */}

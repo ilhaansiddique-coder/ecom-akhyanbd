@@ -65,6 +65,9 @@ const emptyForm = {
   price: "",
   original_price: "",
   image: "",
+  // Additional product images shown alongside `image` in the PDP gallery.
+  // Stored as JSON-stringified array in DB; empty until admin adds them.
+  images: [] as string[],
   badge: "",
   weight: "",
   stock: "",
@@ -79,6 +82,27 @@ const emptyForm = {
 };
 
 type FormState = typeof emptyForm;
+
+/**
+ * Product.images is a `String?` column holding a JSON-stringified array of
+ * image URLs (e.g. `["uploads/a.webp","uploads/b.webp"]`). The admin list
+ * endpoint passes it through unchanged. Parse defensively — accept both
+ * already-parsed arrays (forward-compatible) and JSON strings.
+ */
+function parseProductImages(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((u): u is string => typeof u === "string" && !!u.trim());
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((u): u is string => typeof u === "string" && !!u.trim());
+      }
+    } catch {}
+  }
+  return [];
+}
 
 // slugify removed — now using useAutoSlug hook with backend transliteration
 
@@ -205,6 +229,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       price: String(p.price),
       original_price: p.original_price != null ? String(p.original_price) : "",
       image: p.image || "",
+      images: parseProductImages((p as any).images),
       badge: p.badge || "",
       weight: p.weight || "",
       stock: String(p.stock),
@@ -237,6 +262,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       price: String(p.price),
       original_price: p.original_price != null ? String(p.original_price) : "",
       image: p.image || "",
+      images: parseProductImages((p as any).images),
       badge: p.badge || "",
       weight: p.weight || "",
       stock: String(p.stock),
@@ -315,6 +341,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       category_id: f.category_id ? Number(f.category_id) : null,
       brand_id: f.brand_id ? Number(f.brand_id) : null,
       image: f.image || undefined,
+      // Filter out empties so the DB never gets `[""]`. The server JSON-
+      // stringifies on its end (admin/products/route.ts).
+      images: (f.images || []).filter((u) => !!(u && u.trim())),
       badge: f.badge || undefined,
       weight: f.weight || undefined,
       is_active: f.is_active,
@@ -1028,6 +1057,60 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                     )}
                   </div>
                 </div>
+
+                {/* ── Additional product images ──
+                    Optional gallery thumbnails shown beneath the main image
+                    on the PDP. Click "Add image" to pick from MediaGallery;
+                    click the × to remove a single thumb. Saved as a JSON
+                    string in Product.images. */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={labelCls}>
+                      {lang === "en" ? "Additional Images" : "অতিরিক্ত ছবি"}
+                      <span className="text-[10px] text-gray-400 font-normal ml-1.5">
+                        {lang === "en" ? "(shown in PDP gallery)" : "(গ্যালারিতে দেখাবে)"}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setGalleryTarget("additional"); setGalleryOpen(true); }}
+                      className="px-2.5 py-1 text-[10px] font-medium text-[var(--primary)] border border-[var(--primary)]/30 rounded-lg hover:bg-[var(--primary)]/10 flex items-center gap-1"
+                    >
+                      <FiImage className="w-3 h-3" />
+                      {lang === "en" ? "Add image" : "ছবি যোগ করুন"}
+                    </button>
+                  </div>
+                  {form.images.length === 0 ? (
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl py-4 px-3 text-center text-[11px] text-gray-400">
+                      {lang === "en" ? "No additional images yet." : "এখনো কোনো অতিরিক্ত ছবি নেই।"}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {form.images.map((img, idx) => (
+                        // Wrap in a div, not a button — child × is itself a
+                        // button. The × is ALWAYS visible (no hover-only)
+                        // so it works on touch devices too. Matches the
+                        // main-image preview convention.
+                        <div key={`${idx}-${img}`} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
+                          <SafeImg src={resolveImg(img)} alt={`Image ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setForm((prev) => ({ ...prev, images: prev.images.filter((_, i) => i !== idx) }));
+                            }}
+                            className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-sm"
+                            title={lang === "en" ? "Remove" : "মুছুন"}
+                            aria-label={lang === "en" ? "Remove image" : "ছবি মুছুন"}
+                          >
+                            <FiX className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Variable toggle moved to modal header (see Modal headerAction prop above). */}
                 {/* Variations Detail (shown when toggle is on) */}
                 {form.has_variations && (
@@ -1212,6 +1295,12 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
         onSelect={(url) => {
           if (galleryTarget === "product") {
             setForm((prev) => ({ ...prev, image: url }));
+          } else if (galleryTarget === "additional") {
+            // Append to additional-images list, dedup by URL so accidental
+            // double-clicks in MediaGallery don't bloat the array.
+            setForm((prev) => prev.images.includes(url)
+              ? prev
+              : { ...prev, images: [...prev.images, url] });
           } else if (galleryTarget.startsWith("variant-")) {
             const idx = Number(galleryTarget.split("-")[1]);
             if (!isNaN(idx) && idx >= 0 && idx < form.variants.length) {

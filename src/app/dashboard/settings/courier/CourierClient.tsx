@@ -272,23 +272,20 @@ export default function CourierClient({ initialData }: { initialData?: Record<st
                 </div>
               </div>
 
-              {/* Merchant panel session token — used for the auto address-parser
-                  on the order send modal. Different from OAuth client_secret.
-                  Get it from merchant.pathao.com → DevTools → Network →
-                  any request → Authorization header (after "Bearer "). */}
-              <div>
-                <label className={labelCls}>
-                  Merchant Panel Token
-                  <span className="ml-2 text-xs font-normal text-gray-400">(for auto address matching — paste from merchant.pathao.com session)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={form.pathao_web_token || ""}
-                  onChange={(e) => setForm(p => ({ ...p, pathao_web_token: e.target.value }))}
-                  className={inputCls + " font-mono text-xs"}
-                  placeholder="eyJhbGciOiJSUzI1NiIs..."
-                />
-                <p className="mt-1 text-xs text-gray-400">Expires every ~3 months — re-paste when auto-match stops working.</p>
+              {/* Merchant panel session token used to be pasted manually here
+                  (it powers the auto address-parser). The site now logs into
+                  merchant.pathao.com automatically using the email + password
+                  above and refreshes the JWT in the background — admins
+                  don't need to touch it. The DB field still exists as a
+                  last-resort manual override; it's just hidden from the UI.
+                  See src/lib/pathaoMerchantAuth.ts for the resolution chain. */}
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2.5 text-xs text-green-700 flex items-start gap-2">
+                <span className="text-base leading-none">✓</span>
+                <span>
+                  <strong>Auto address-matching:</strong> the site logs into your
+                  Pathao merchant panel automatically using the email + password
+                  above. No JWT token to paste or maintain.
+                </span>
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4">

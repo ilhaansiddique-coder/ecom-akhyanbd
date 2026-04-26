@@ -94,7 +94,23 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     badgeColor: (raw.badge_color as string) || undefined,
     description: (raw.description as string) || "",
     descriptionBn: (raw.description_bn as string) || (raw.description as string) || "",
-    images: Array.isArray(raw.images) && raw.images.length > 0 ? (raw.images as string[]).map(resolveImage) : [],
+    // The Product.images column is `String?` in Prisma — admin saves a
+    // JSON-stringified array (e.g. `["uploads/a.webp","uploads/b.webp"]`).
+    // Handle both shapes defensively: array (already parsed) or string
+    // (raw from DB). Filter out empty/null entries.
+    images: (() => {
+      const raw_images = raw.images;
+      let arr: unknown[] = [];
+      if (Array.isArray(raw_images)) {
+        arr = raw_images;
+      } else if (typeof raw_images === "string" && raw_images.trim()) {
+        try { const p = JSON.parse(raw_images); if (Array.isArray(p)) arr = p; } catch {}
+      }
+      return arr
+        .map((u) => (typeof u === "string" ? u.trim() : ""))
+        .filter((u): u is string => !!u)
+        .map(resolveImage);
+    })(),
     stock: Number(raw.stock) || 0,
     unlimitedStock: Boolean(raw.unlimited_stock),
     hasVariations: raw.has_variations || false,

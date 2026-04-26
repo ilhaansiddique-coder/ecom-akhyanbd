@@ -12,8 +12,11 @@ interface DateRangePickerProps {
 
 function usePresets() {
   const { t } = useLang();
+  // Negative `days` values are sentinels for non-rolling-window ranges
+  // (handled in getPresetRange below). -3 = yesterday only (single day).
   return [
     { label: t("date.today"), days: 0 },
+    { label: t("date.yesterday"), days: -3 },
     { label: t("date.last7"), days: 7 },
     { label: t("date.last30"), days: 30 },
     { label: t("date.last90"), days: 90 },
@@ -41,6 +44,11 @@ function getPresetRange(days: number): { from: string; to: string } {
   const today = new Date();
   const to = toDateStr(today);
   if (days === 0) return { from: to, to };
+  // Yesterday only — single day, both endpoints set to yesterday's date.
+  if (days === -3) {
+    const yest = toDateStr(new Date(today.getTime() - 86400000));
+    return { from: yest, to: yest };
+  }
   if (days === -1) {
     return { from: toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)), to };
   }
@@ -153,10 +161,10 @@ function MiniCalendar({
               onMouseEnter={() => onDateHover(cell.date)}
               className={`
                 relative h-8 flex items-center justify-center text-xs cursor-pointer transition-all
-                ${inRange && !isEndpoint ? "bg-[#0f5931]/10" : ""}
-                ${isEndpoint ? "bg-[#0f5931] text-white rounded-lg font-semibold shadow-sm" : ""}
+                ${inRange && !isEndpoint ? "bg-[var(--primary)]/10" : ""}
+                ${isEndpoint ? "bg-[var(--primary)] text-white rounded-lg font-semibold shadow-sm" : ""}
                 ${!isEndpoint && !inRange ? "hover:bg-gray-100 rounded-lg" : ""}
-                ${isToday && !isEndpoint ? "font-bold text-[#0f5931]" : ""}
+                ${isToday && !isEndpoint ? "font-bold text-[var(--primary)]" : ""}
                 ${inRange && isStart && !isEnd ? "rounded-l-lg rounded-r-none" : ""}
                 ${inRange && isEnd && !isStart ? "rounded-r-lg rounded-l-none" : ""}
                 ${inRange && isStart && isEnd ? "rounded-lg" : ""}
@@ -164,7 +172,7 @@ function MiniCalendar({
             >
               <span className="relative z-10">{toBn(cell.day)}</span>
               {isToday && !isEndpoint && (
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#0f5931]" />
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--primary)]" />
               )}
             </div>
           );
@@ -255,7 +263,7 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
         onClick={() => setOpen(!open)}
         className={`w-full md:w-auto flex items-center gap-2 px-3.5 py-2.5 border rounded-xl text-sm transition-all duration-200 min-w-0 ${
           hasFilter
-            ? "border-[#0f5931] bg-[#0f5931]/5 text-[#0f5931] font-medium shadow-sm shadow-[#0f5931]/10"
+            ? "border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)] font-medium shadow-sm shadow-[var(--primary)]/10"
             : "border-gray-200 text-gray-500 hover:border-gray-300 hover:shadow-sm"
         }`}
       >
@@ -313,7 +321,7 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
                       }}
                       className={`px-2.5 py-2 rounded-lg text-xs font-medium transition-all duration-150 md:w-full md:text-left ${
                         isActive
-                          ? "bg-[#0f5931] text-white shadow-sm"
+                          ? "bg-[var(--primary)] text-white shadow-sm"
                           : "bg-gray-100 md:bg-transparent text-gray-600 hover:bg-white hover:shadow-sm"
                       }`}
                     >
@@ -389,7 +397,7 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
                   )}
                   <button
                     onClick={() => setOpen(false)}
-                    className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 text-xs font-medium text-white bg-[#0f5931] hover:bg-[#12693a] rounded-lg transition-colors shadow-sm"
+                    className="flex-1 sm:flex-none px-4 py-2 sm:py-1.5 text-xs font-medium text-white bg-[var(--primary)] hover:opacity-90 rounded-lg transition-opacity shadow-sm"
                   >
                     {t("date.done")}
                   </button>

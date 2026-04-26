@@ -15,10 +15,10 @@ export default async function OrdersPage() {
       prisma.order.findMany({
         include: { items: { include: { product: { select: { image: true } } } } },
         orderBy: { createdAt: "desc" },
-        // Match the API's per-page (admin/orders/route.ts → perPage = 15) so
+        // Match the API's per-page (admin/orders/route.ts → perPage = 20) so
         // the SSR-seeded page 1 lines up exactly with what the client sees
         // when it clicks "Next" — no overlap, no skipped rows.
-        take: 15,
+        take: 20,
         where: { status: { not: "trashed" } },
       }),
       prisma.order.count({ where: { status: { not: "trashed" } } }),

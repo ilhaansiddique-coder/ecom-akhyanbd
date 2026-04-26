@@ -309,7 +309,23 @@ export function ProductGalleryWithVariants({
   return (
     <>
       <div className="relative">
-        <ProductGallery mainImage={mainImage} images={images} alt={alt} overrideImage={variantImage} />
+        <ProductGallery
+          mainImage={mainImage}
+          images={images}
+          alt={alt}
+          overrideImage={variantImage}
+          // Surface every variant image as a thumbnail too. Dedupe + ordering
+          // is handled inside ProductGallery; we just need to hand it the raw
+          // list of {id, image, label}. Filter out variants without images so
+          // the strip stays clean for variable products with mixed coverage.
+          variantImages={
+            hasVariations
+              ? (variants || [])
+                  .filter((v) => !!v.image)
+                  .map((v) => ({ id: v.id, image: v.image!, label: v.label }))
+              : undefined
+          }
+        />
         {galleryOverlay}
       </div>
       <div>

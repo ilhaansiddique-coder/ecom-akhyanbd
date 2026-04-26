@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const perPage = 15;
+  // 20/page → matches orders/products convention. Pagination only renders
+  // when totalPages > 1.
+  const perPage = 20;
   const role = searchParams.get("role");
   const search = searchParams.get("search");
 

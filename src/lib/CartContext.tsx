@@ -61,42 +61,69 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, hydrated]);
 
-  // Image re-hydration. Persisted cart items can carry empty / stale image
-  // refs (item added before product image existed, or admin re-uploaded).
-  // After hydration, look up any item whose image is missing or pointing at
-  // the placeholder, batch-fetch from /api/v1/products/by-ids, and patch the
-  // image (variant image first, then product image). Runs once per missing
-  // set so it doesn't loop.
-  const patchedRef = useRef<Set<string>>(new Set());
+  // Cart sync — runs once after hydration. Two jobs in one network call:
+  //
+  //   1. PRUNE stale items. A persisted cart can reference a product that
+  //      admin since deleted / disabled, or a variant that was removed.
+  //      The by-ids endpoint filters to active+non-deleted products only,
+  //      so any cart id missing from the response is gone-for-good and
+  //      we drop it silently. Same for variant ids that no longer exist.
+  //      This stops checkout from throwing "Product not found: 41".
+  //
+  //   2. RE-HYDRATE missing images. Items added long ago can carry empty
+  //      or placeholder image refs; we patch them from the live product /
+  //      variant image while we have the response.
+  //
+  // Runs once per cart-id-set so it doesn't re-fire on every state change.
+  // Re-fires when a NEW id appears (user added a fresh product).
+  const syncedRef = useRef<string>("");
   useEffect(() => {
-    if (!hydrated || items.length === 0) return;
-    const needsImg = items.filter((i) => {
-      const key = `${i.id}-${i.variantId ?? "x"}`;
-      if (patchedRef.current.has(key)) return false;
-      const img = (i.image || "").trim();
-      return !img || img === "/placeholder.svg" || img.endsWith("/placeholder.svg");
-    });
-    if (needsImg.length === 0) return;
-    const ids = Array.from(new Set(needsImg.map((i) => i.id)));
-    needsImg.forEach((i) => patchedRef.current.add(`${i.id}-${i.variantId ?? "x"}`));
+    if (!hydrated || items.length === 0) {
+      syncedRef.current = "";
+      return;
+    }
+    const ids = Array.from(new Set(items.map((i) => i.id))).sort((a, b) => a - b);
+    const sig = ids.join(",");
+    if (sig === syncedRef.current) return;
+    syncedRef.current = sig;
+
     fetch(`/api/v1/products/by-ids?ids=${ids.join(",")}`)
       .then((r) => (r.ok ? r.json() : { items: [] }))
       .then((data: { items: Array<{ id: number; image: string; variants?: Array<{ id: number; image?: string }> }> }) => {
         const byId = new Map(data.items.map((p) => [p.id, p]));
-        setItems((prev) => prev.map((it) => {
-          const img = (it.image || "").trim();
-          if (img && img !== "/placeholder.svg" && !img.endsWith("/placeholder.svg")) return it;
-          const p = byId.get(it.id);
-          if (!p) return it;
-          const variantImg = it.variantId
-            ? p.variants?.find((v) => v.id === it.variantId)?.image
-            : undefined;
-          const fresh = variantImg || p.image;
-          if (!fresh) return it;
-          return { ...it, image: fresh };
-        }));
+        setItems((prev) => {
+          const next: CartItem[] = [];
+          for (const it of prev) {
+            const p = byId.get(it.id);
+            if (!p) {
+              // Product deleted or disabled — drop it. No toast: the
+              // cart drawer simply re-renders without that line. User
+              // can still see what's left.
+              continue;
+            }
+            // If the cart references a variant, make sure that variant
+            // still exists + is active. Otherwise drop the line.
+            if (it.variantId != null) {
+              const variantStillExists = p.variants?.some((v) => v.id === it.variantId);
+              if (!variantStillExists) continue;
+            }
+            // Patch missing/stale image while we're here.
+            const img = (it.image || "").trim();
+            const needsImg = !img || img === "/placeholder.svg" || img.endsWith("/placeholder.svg");
+            if (!needsImg) {
+              next.push(it);
+              continue;
+            }
+            const variantImg = it.variantId
+              ? p.variants?.find((v) => v.id === it.variantId)?.image
+              : undefined;
+            const fresh = variantImg || p.image;
+            next.push(fresh ? { ...it, image: fresh } : it);
+          }
+          return next;
+        });
       })
-      .catch(() => {});
+      .catch(() => {/* network blip — try again on next mount */});
   }, [hydrated, items]);
 
   // Cart key: same product + same variant = same cart item

@@ -153,9 +153,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const [pendingPayment, setPendingPayment] = useState<Record<number, string>>({});
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
-  // Pagination — server returns 15 per page (admin/orders/route.ts).
+  // Pagination — server returns 20 per page (admin/orders/route.ts).
   // Match that here so page math lines up with what the API actually slices.
-  const perPage = 15;
+  // Pagination controls only render when totalPages > 1, i.e. when total
+  // orders exceeds 20 — under that, no Prev/Next clutter.
+  const perPage = 20;
   const [page, setPage] = useState(1);
   // Seed from SSR so pagination controls render immediately on first paint
   // without waiting for the client-side re-fetch (skipFirstFetchRef).

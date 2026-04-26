@@ -496,6 +496,7 @@ export const en: Record<string, string> = {
   "date.filter": "Date Filter",
   "date.quickSelect": "Quick Select",
   "date.today": "Today",
+  "date.yesterday": "Yesterday",
   "date.last7": "Last 7 days",
   "date.last30": "Last 30 days",
   "date.last90": "Last 90 days",

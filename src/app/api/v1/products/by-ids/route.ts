@@ -20,12 +20,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
+  // Filter to ACTIVE + non-deleted products only. The cart uses absence
+  // from this response as the signal to prune stale items, so admins
+  // disabling or trashing a product must propagate through here as
+  // "missing" — same behaviour the storefront product page uses.
   const products = await prisma.product.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, isActive: true, deletedAt: null },
     select: {
       id: true,
       name: true,
-      nameBn: true,
       image: true,
       variants: {
         where: { isActive: true },
@@ -38,7 +41,6 @@ export async function GET(req: NextRequest) {
     items: products.map((p) => ({
       id: p.id,
       name: p.name,
-      name_bn: p.nameBn,
       image: p.image,
       variants: p.variants,
     })),

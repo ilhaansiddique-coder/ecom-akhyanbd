@@ -306,6 +306,9 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       // Purchase — fire BEFORE router.push so sendBeacon flushes to /api/v1/collect
       // before the navigation aborts in-flight fetches. Mirrors checkout/page.tsx.
       const orderIdNum = res.id || res.data?.id;
+      // City: server overrides FB CAPI `ct` from order.parsedCity (background
+      // Pathao parse). Browser pixel uses form value — dedup happens via
+      // event_id so this just needs to match server's pre-override hash.
       trackPurchase({
         content_ids: items.map((i) => i.product_id),
         content_name: items.map((i) => i.product_name).join(", "),
@@ -314,6 +317,7 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         value: res.total || total,
         order_id: String(orderIdNum || ""),
         shipping,
+        city: form.city || undefined,
       }, {
         em: form.email || undefined,
         ph: form.phone || undefined,

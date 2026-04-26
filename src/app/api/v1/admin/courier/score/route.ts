@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 import { isSteadfastConfigured, checkCourierScore as steadfastScore, formatPhone, clearKeyCache } from "@/lib/steadfast";
 import { hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
+import { getMerchantPanelToken, clearMerchantPanelTokenCache } from "@/lib/pathaoMerchantAuth";
 
 /**
  * Unified courier fraud-score check.
@@ -50,16 +51,16 @@ async function scoreSteadfast(phone: string): Promise<ProviderResult> {
 async function scorePathao(phone: string): Promise<ProviderResult> {
   // Pathao Aladdin doesn't expose a fraud endpoint — use merchant panel
   // /user/success which returns total + successful delivery counts + rating.
-  const tokenRow = await prisma.siteSetting.findUnique({ where: { key: "pathao_web_token" } });
-  const token = tokenRow?.value?.trim();
+  // Token is auto-refreshed via pathaoMerchantAuth (no manual paste needed).
+  const token = await getMerchantPanelToken();
   if (!token) {
-    return { provider: "pathao", ok: false, total_parcels: 0, total_delivered: 0, total_cancelled: 0, success_ratio: "0.0%", error: "Pathao web token missing" };
+    return { provider: "pathao", ok: false, total_parcels: 0, total_delivered: 0, total_cancelled: 0, success_ratio: "0.0%", error: "Pathao auto-login failed" };
   }
-  try {
-    const upstream = await fetch("https://merchant.pathao.com/api/v1/user/success", {
+  const callOnce = (jwt: string) =>
+    fetch("https://merchant.pathao.com/api/v1/user/success", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${jwt}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Origin": "https://merchant.pathao.com",
@@ -68,8 +69,21 @@ async function scorePathao(phone: string): Promise<ProviderResult> {
       body: JSON.stringify({ phone: formatPhone(phone) }),
       signal: AbortSignal.timeout(15000),
     });
-    if (upstream.status === 401) {
-      return { provider: "pathao", ok: false, total_parcels: 0, total_delivered: 0, total_cancelled: 0, success_ratio: "0.0%", error: "Pathao web token expired" };
+  try {
+    let upstream = await callOnce(token);
+    // Stale-token recovery — same pattern as parse + customer-history.
+    if (upstream.status === 401 || upstream.status === 403) {
+      clearMerchantPanelTokenCache();
+      try {
+        await prisma.siteSetting.deleteMany({
+          where: { key: { in: ["pathao_web_token_auto", "pathao_web_token_auto_exp"] } },
+        });
+      } catch {}
+      const fresh = await getMerchantPanelToken();
+      if (!fresh) {
+        return { provider: "pathao", ok: false, total_parcels: 0, total_delivered: 0, total_cancelled: 0, success_ratio: "0.0%", error: "Pathao auto-login failed" };
+      }
+      upstream = await callOnce(fresh);
     }
     const json = await upstream.json().catch(() => ({}));
     if (!upstream.ok) {

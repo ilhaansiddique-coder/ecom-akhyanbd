@@ -335,7 +335,13 @@ export default function CheckoutPage() {
 
       setOrderPlaced(true);
 
-      // Track Purchase before clearing cart / redirecting
+      // City: form value here is the shipping-zone label, not a real city.
+      // Browser pixel uses it as-is (deduplication is via event_id, so the
+      // hashed `ct` value just needs to MATCH between browser + server, not
+      // be high-quality). FB CAPI override happens server-side — see
+      // /api/v1/collect: it polls order.parsedCity (populated by background
+      // Pathao parse from /api/v1/orders) and overrides `ct` with the real
+      // district before sending to Facebook.
       trackPurchase({
         content_ids: items.map((i) => i.id),
         content_name: items.map((i) => i.name).join(", "),
@@ -344,6 +350,7 @@ export default function CheckoutPage() {
         value: res.total || totalPrice,
         order_id: String(res.id || ""),
         shipping: effectiveShipping,
+        city: city || undefined,
       }, {
         em: email || undefined,
         ph: phone || undefined,

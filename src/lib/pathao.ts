@@ -473,15 +473,22 @@ export interface PathaoParsedAddress {
  * can't be matched to a district+zone.
  */
 export async function parsePathaoAddress(address: string, phone: string): Promise<PathaoParsedAddress | null> {
-  const tokenRow = await prisma.siteSetting.findUnique({ where: { key: "pathao_web_token" } });
-  const token = tokenRow?.value?.trim();
-  if (!token || !address.trim()) return null;
+  if (!address.trim()) return null;
+  // Token resolution (auto-refresh first, manual paste as last resort) lives
+  // in pathaoMerchantAuth.ts. Importing dynamically to avoid a circular dep
+  // on the tx layer.
+  const { getMerchantPanelToken, clearMerchantPanelTokenCache } = await import("./pathaoMerchantAuth");
+  const token = await getMerchantPanelToken();
+  if (!token) return null;
 
-  try {
-    const res = await fetch("https://merchant.pathao.com/api/v1/address-parser", {
+  // One-shot retry: if the cached token is stale (returns 401/403),
+  // bust the cache and try once more so the next attempt forces a
+  // fresh login.
+  const callOnce = async (jwt: string) => {
+    return fetch("https://merchant.pathao.com/api/v1/address-parser", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${jwt}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Origin": "https://merchant.pathao.com",
@@ -490,11 +497,39 @@ export async function parsePathaoAddress(address: string, phone: string): Promis
       body: JSON.stringify({ address: address.trim(), recipient_identifier: phone.trim() }),
       signal: AbortSignal.timeout(15000),
     });
+  };
+
+  try {
+    let res = await callOnce(token);
+    if (res.status === 401 || res.status === 403) {
+      // Stale token — clear cache + DB rows so the next fetch forces a fresh login.
+      clearMerchantPanelTokenCache();
+      try {
+        await prisma.siteSetting.deleteMany({
+          where: { key: { in: ["pathao_web_token_auto", "pathao_web_token_auto_exp"] } },
+        });
+      } catch {}
+      const fresh = await getMerchantPanelToken();
+      if (!fresh || fresh === token) return null;
+      res = await callOnce(fresh);
+    }
     if (!res.ok) return null;
     const j = await res.json();
-    const d = j?.data;
+    const d = j?.data as PathaoParsedAddress | undefined;
     if (!d?.district_id || !d?.zone_id) return null;
-    return d as PathaoParsedAddress;
+
+    // Re-score: Pathao sometimes picks a generic area (e.g. "Bazar") when
+    // a more specific one is actually mentioned ("Chowdhuri Market area").
+    // Pull the full area list for the matched zone + run our local fuzzy
+    // scorer; override Pathao's pick only if our top match clearly wins.
+    try {
+      const { rescoreArea } = await import("./pathaoAreaRescore");
+      const areas = await listPathaoAreas(d.zone_id).catch(() => []);
+      const refined = rescoreArea(address.trim(), d, areas);
+      return refined;
+    } catch {
+      return d;
+    }
   } catch {
     return null;
   }

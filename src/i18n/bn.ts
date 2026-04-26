@@ -496,6 +496,7 @@ export const bn: Record<string, string> = {
   "date.filter": "তারিখ ফিল্টার",
   "date.quickSelect": "দ্রুত নির্বাচন",
   "date.today": "আজ",
+  "date.yesterday": "গতকাল",
   "date.last7": "গত ৭ দিন",
   "date.last30": "গত ৩০ দিন",
   "date.last90": "গত ৯০ দিন",

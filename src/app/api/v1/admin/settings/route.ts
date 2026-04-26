@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { clearSmtpCache } from "@/lib/email";
+import { clearSmtpCache, clearEmailBrandCache } from "@/lib/email";
 
 export async function GET(_request: NextRequest) {
   let admin;
@@ -75,6 +75,8 @@ export async function PUT(request: NextRequest) {
 
     revalidateAll("settings");
     clearSmtpCache();
+    // Bust email brand cache so next email picks up new theme/lang/site_name.
+    clearEmailBrandCache();
     return jsonResponse({ message: "Settings updated", changed: changed.length });
   } catch (error) {
     console.error("Settings PUT error:", error);

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       where,
       select: {
         id: true, name: true, slug: true, price: true, originalPrice: true,
-        image: true, badge: true, weight: true, stock: true, unlimitedStock: true,
+        image: true, images: true, badge: true, weight: true, stock: true, unlimitedStock: true,
         soldCount: true, isActive: true, isFeatured: true,
         hasVariations: true, variationType: true,
         customShipping: true, shippingCost: true, description: true,
