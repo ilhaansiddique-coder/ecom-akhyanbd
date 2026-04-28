@@ -20,15 +20,20 @@ import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
 
 // Build the data payload for `prisma.order.update` when a courier-status
 // poll returns a new value. Always sets `courierStatus`; conditionally sets
-// `status` to "delivered" / "cancelled" if the courier marks the parcel as
-// such — but never overrides a "trashed" order (those are deliberately
-// removed by admin and shouldn't resurrect via courier sync).
-function buildStatusUpdate(currentOrderStatus: string, courierStatus: string) {
+// `status` to "shipped" / "delivered" / "cancelled" based on the courier
+// state — but never overrides a "trashed" order. Also stamps `courierSentAt`
+// once (on first transition to "shipped") so daily dispatch analytics stay
+// accurate even if status is later updated again.
+function buildStatusUpdate(currentOrderStatus: string, courierStatus: string, currentCourierSentAt?: Date | null) {
   const derived = mapCourierStatusToOrderStatus(courierStatus);
   if (!derived || currentOrderStatus === "trashed" || currentOrderStatus === derived) {
     return { courierStatus };
   }
-  return { courierStatus, status: derived };
+  // Stamp courierSentAt once on first "shipped" transition — never overwrite.
+  const sentAtPatch = derived === "shipped" && !currentCourierSentAt
+    ? { courierSentAt: new Date() }
+    : {};
+  return { courierStatus, status: derived, ...sentAtPatch };
 }
 
 // Spacing between sequential courier API hits inside bulk loops so we don't
@@ -196,7 +201,7 @@ export async function POST(request: NextRequest) {
         if (r.data?.order_status) {
           await prisma.order.update({
             where: { id: order.id },
-            data: buildStatusUpdate(order.status, r.data.order_status),
+            data: buildStatusUpdate(order.status, r.data.order_status, order.courierSentAt),
           });
           return jsonResponse({ delivery_status: r.data.order_status, consignment: r.data });
         }
@@ -218,7 +223,7 @@ export async function POST(request: NextRequest) {
       if (result.status === 200 && result.delivery_status) {
         await prisma.order.update({
           where: { id: order.id },
-          data: buildStatusUpdate(order.status, result.delivery_status),
+          data: buildStatusUpdate(order.status, result.delivery_status, order.courierSentAt),
         });
         return jsonResponse({
           delivery_status: result.delivery_status,
@@ -278,7 +283,13 @@ export async function POST(request: NextRequest) {
         if (res.status === 200 && res.consignment) {
           await prisma.order.update({
             where: { id: order.id },
-            data: { courierSent: true, courierType: "steadfast", consignmentId: String(res.consignment.consignment_id), courierStatus: "pending" },
+            data: {
+              courierSent: true, courierType: "steadfast",
+              consignmentId: String(res.consignment.consignment_id),
+              courierStatus: "pending",
+              status: "shipped",
+              courierSentAt: order.courierSentAt ?? new Date(),
+            },
           });
           results.push({ order_id: order.id, status: "success", consignment_id: String(res.consignment.consignment_id) });
         } else {
@@ -331,6 +342,8 @@ export async function POST(request: NextRequest) {
               courierSent: true,
               consignmentId: String(res.consignment.consignment_id),
               courierStatus: "pending",
+              status: "shipped",
+              courierSentAt: order.courierSentAt ?? new Date(),
             },
           });
           results.push({ order_id: orderId, status: "success", consignment_id: res.consignment.consignment_id });
@@ -379,6 +392,8 @@ export async function POST(request: NextRequest) {
             courierSent: true,
             consignmentId: String(res.consignment.consignment_id),
             courierStatus: "pending",
+            status: "shipped",
+            courierSentAt: order.courierSentAt ?? new Date(),
           },
           include: { items: true },
         });

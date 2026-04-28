@@ -3,14 +3,87 @@ import MotionFadeIn from "@/components/MotionFadeIn";
 import ContactForm from "@/components/ContactForm";
 import ContactInfo from "@/components/ContactInfo";
 import { TText } from "@/components/ProductDetailClient";
+import { prisma } from "@/lib/prisma";
+import { toBilingual, type Bilingual } from "@/lib/bilingual";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "যোগাযোগ",
-  description: "যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন।",
+export const dynamic = "force-dynamic";
+
+interface ContactContent {
+  heroBadge: Bilingual;
+  heroTitle: Bilingual;
+  heroSubtitle: Bilingual;
+  formTitle: Bilingual;
+  formNameLabel: Bilingual;
+  formEmailLabel: Bilingual;
+  formPhoneLabel: Bilingual;
+  formSubjectLabel: Bilingual;
+  formMessageLabel: Bilingual;
+  formSubmitText: Bilingual;
+  formSuccessText: Bilingual;
+  infoTitle: Bilingual;
+  infoSubtitle: Bilingual;
+  hoursTitle: Bilingual;
+  hoursText: Bilingual;
+}
+
+const DEFAULT_CONTACT: ContactContent = {
+  heroBadge: { en: "Talk to us", bn: "আমাদের সাথে কথা বলুন" },
+  heroTitle: { en: "Contact Us", bn: "যোগাযোগ" },
+  heroSubtitle: { en: "Have a question? We're here to help.", bn: "কোনো প্রশ্ন আছে? আমরা সাহায্যের জন্য আছি।" },
+  formTitle: { en: "Send us a message", bn: "আমাদের একটি বার্তা পাঠান" },
+  formNameLabel: { en: "Your Name", bn: "আপনার নাম" },
+  formEmailLabel: { en: "Email", bn: "ইমেইল" },
+  formPhoneLabel: { en: "Phone", bn: "ফোন" },
+  formSubjectLabel: { en: "Subject", bn: "বিষয়" },
+  formMessageLabel: { en: "Message", bn: "বার্তা" },
+  formSubmitText: { en: "Send Message", bn: "বার্তা পাঠান" },
+  formSuccessText: { en: "Thank you! We received your message.", bn: "ধন্যবাদ! আমরা আপনার বার্তা পেয়েছি।" },
+  infoTitle: { en: "Get in touch", bn: "যোগাযোগ করুন" },
+  infoSubtitle: { en: "Reach us through any channel below", bn: "নিচের যেকোনো মাধ্যমে আমাদের কাছে পৌঁছান" },
+  hoursTitle: { en: "Business Hours", bn: "অফিস সময়" },
+  hoursText: { en: "Saturday – Thursday: 9 AM – 9 PM\nFriday: Closed", bn: "শনিবার – বৃহস্পতিবার: সকাল ৯টা – রাত ৯টা\nশুক্রবার: বন্ধ" },
 };
 
-export default function ContactPage() {
+function normalize(raw: unknown): ContactContent {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    heroBadge: toBilingual(r.heroBadge ?? DEFAULT_CONTACT.heroBadge),
+    heroTitle: toBilingual(r.heroTitle ?? DEFAULT_CONTACT.heroTitle),
+    heroSubtitle: toBilingual(r.heroSubtitle ?? DEFAULT_CONTACT.heroSubtitle),
+    formTitle: toBilingual(r.formTitle ?? DEFAULT_CONTACT.formTitle),
+    formNameLabel: toBilingual(r.formNameLabel ?? DEFAULT_CONTACT.formNameLabel),
+    formEmailLabel: toBilingual(r.formEmailLabel ?? DEFAULT_CONTACT.formEmailLabel),
+    formPhoneLabel: toBilingual(r.formPhoneLabel ?? DEFAULT_CONTACT.formPhoneLabel),
+    formSubjectLabel: toBilingual(r.formSubjectLabel ?? DEFAULT_CONTACT.formSubjectLabel),
+    formMessageLabel: toBilingual(r.formMessageLabel ?? DEFAULT_CONTACT.formMessageLabel),
+    formSubmitText: toBilingual(r.formSubmitText ?? DEFAULT_CONTACT.formSubmitText),
+    formSuccessText: toBilingual(r.formSuccessText ?? DEFAULT_CONTACT.formSuccessText),
+    infoTitle: toBilingual(r.infoTitle ?? DEFAULT_CONTACT.infoTitle),
+    infoSubtitle: toBilingual(r.infoSubtitle ?? DEFAULT_CONTACT.infoSubtitle),
+    hoursTitle: toBilingual(r.hoursTitle ?? DEFAULT_CONTACT.hoursTitle),
+    hoursText: toBilingual(r.hoursText ?? DEFAULT_CONTACT.hoursText),
+  };
+}
+
+async function getContent(): Promise<ContactContent> {
+  try {
+    const setting = await prisma.siteSetting.findUnique({ where: { key: "page_contact" } });
+    if (setting?.value) return normalize(JSON.parse(setting.value));
+  } catch { /* */ }
+  return DEFAULT_CONTACT;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const c = await getContent();
+  return {
+    title: c.heroTitle.bn || c.heroTitle.en,
+    description: c.heroSubtitle.bn || c.heroSubtitle.en,
+  };
+}
+
+export default async function ContactPage() {
+  const c = await getContent();
   return (
     <div className="min-h-screen bg-background">
       {/* Hero */}
@@ -23,11 +96,13 @@ export default function ContactPage() {
           <MotionFadeIn>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/15 rounded-full text-white/90 text-sm mb-6 backdrop-blur-sm">
               <FiMail className="w-4 h-4" />
-              <TText en="Talk to us" bn="আমাদের সাথে কথা বলুন" />
+              <TText en={c.heroBadge.en} bn={c.heroBadge.bn} />
             </span>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4"><TText en="Contact" bn="যোগাযোগ" /></h1>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
+              <TText en={c.heroTitle.en} bn={c.heroTitle.bn} />
+            </h1>
             <p className="text-white/80 text-lg max-w-xl mx-auto leading-relaxed">
-              <TText en="Reach out for any question, suggestion or order-related matter." bn="যেকোনো প্রশ্ন, পরামর্শ বা অর্ডার সংক্রান্ত বিষয়ে আমাদের সাথে যোগাযোগ করুন।" />
+              <TText en={c.heroSubtitle.en} bn={c.heroSubtitle.bn} />
             </p>
           </MotionFadeIn>
         </div>
@@ -40,7 +115,9 @@ export default function ContactPage() {
             {/* Form */}
             <MotionFadeIn className="lg:col-span-2">
               <div className="bg-white border border-border rounded-2xl p-6 md:p-8 shadow-sm">
-                <h2 className="text-2xl font-bold text-foreground mb-6"><TText en="Send Message" bn="বার্তা পাঠান" /></h2>
+                <h2 className="text-2xl font-bold text-foreground mb-6">
+                  <TText en={c.formTitle.en} bn={c.formTitle.bn} />
+                </h2>
                 <ContactForm />
               </div>
             </MotionFadeIn>

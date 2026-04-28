@@ -40,6 +40,10 @@ const RoutePrewarmer = dynamic(() => import("./RoutePrewarmer"), { ssr: false })
 // loading.tsx skeletons we removed, with a far less jarring affordance.
 const NavigationProgress = dynamic(() => import("./NavigationProgress"), { ssr: false });
 
+// Admin/staff "back to dashboard" banner — only visible to logged-in
+// admin/staff on storefront pages.
+const AdminQuickBar = dynamic(() => import("./AdminQuickBar"), { ssr: false });
+
 /**
  * Tiny wrapper that reads `?preview=1` and conditionally mounts the bridge.
  * Isolated so the useSearchParams call can be wrapped in <Suspense> without
@@ -54,9 +58,11 @@ function PreviewBridgeGate() {
 export default function ClientLayout({
   children,
   initialSettings,
+  initialLang,
 }: {
   children: React.ReactNode;
   initialSettings?: Record<string, string | null>;
+  initialLang?: "en" | "bn";
 }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -68,7 +74,7 @@ export default function ClientLayout({
   const isCheckout = pathname === "/checkout" || pathname.startsWith("/checkout/");
 
   return (
-    <LanguageProvider>
+    <LanguageProvider initialLang={initialLang}>
     <SiteSettingsProvider initialSettings={initialSettings}>
     <ThemeStyleSync />
     {!isDashboard && <RoutePrewarmer />}
@@ -84,6 +90,10 @@ export default function ClientLayout({
     <FingerprintCollector />
     <AuthProvider>
     <CartProvider>
+      {/* Admin/staff quick-jump banner — only renders for logged-in admin/staff
+          on storefront pages. Sits above the navbar so it's the first thing
+          they see when bouncing back to the customer-facing site. */}
+      {!isDashboard && <AdminQuickBar />}
       {!isDashboard && !isLandingPage && (
         <Navbar
           onSearchOpen={() => setSearchOpen(true)}

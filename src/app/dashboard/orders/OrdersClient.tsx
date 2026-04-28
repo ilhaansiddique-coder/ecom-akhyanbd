@@ -138,6 +138,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   const STATUS_OPTIONS = useStatusOptions();
   const PAYMENT_OPTIONS = usePaymentOptions();
   const PAYMENT_LABELS = usePaymentLabels();
+  const fmtScore = (s: string) => s.endsWith(".0%") ? s.replace(".0%", "%") : s;
   const [orders, setOrders] = useState<Order[]>(initialData?.items ?? []);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -1078,11 +1079,15 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   // filter still needed is a defensive status check so an order whose status
   // was just changed inline (optimistic setOrders) leaves the current view
   // immediately, before the next debounced re-fetch lands.
-  const filtered = orders.filter((o) => {
-    if (statusFilter && o.status !== statusFilter) return false;
-    if (!statusFilter && o.status === "trashed") return false;
-    return true;
-  });
+  // Deduplicate by ID first — guards against the race where createOrder
+  // prepends a new row and a concurrent fetchAll returns the same row,
+  // and against React StrictMode double-invoking the mount effect.
+  const filtered = Array.from(new Map(orders.map((o) => [o.id, o])).values())
+    .filter((o) => {
+      if (statusFilter && o.status !== statusFilter) return false;
+      if (!statusFilter && o.status === "trashed") return false;
+      return true;
+    });
 
   const inputCls = theme.input;
   const selectCls = theme.selectSmall;
@@ -1153,7 +1158,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         { value: "pending",    label: lang === "en" ? "Pending" : "পেন্ডিং",       dot: "bg-yellow-400" },
                         { value: "confirmed",  label: lang === "en" ? "Confirmed" : "কনফার্মড",     dot: "bg-blue-400" },
                         { value: "processing", label: lang === "en" ? "Processing" : "প্রসেসিং",   dot: "bg-indigo-400" },
-                        { value: "shipped",    label: lang === "en" ? "Shipped" : "শিপড",           dot: "bg-purple-400" },
+                        { value: "shipped",    label: lang === "en" ? "Courier Sent" : "কুরিয়ার পাঠানো হয়েছে", dot: "bg-purple-400" },
                         { value: "delivered",  label: lang === "en" ? "Delivered" : "ডেলিভারড",    dot: "bg-green-400" },
                         { value: "cancelled",  label: lang === "en" ? "Cancelled" : "বাতিল",       dot: "bg-red-400" },
                       ].map(({ value, label, dot }) => (
@@ -1267,7 +1272,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
               <div className="px-4 pb-3 space-y-1.5 text-[11px]">
                 {/* Payment row */}
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className={`px-1.5 py-0.5 rounded font-medium ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                  <span className={`px-1.5 py-0.5 rounded font-medium inline-block w-[70px] truncate ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
                     {o.payment_status === "paid" ? t("status.paid") : t("status.unpaid")}
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 inline-flex items-center gap-1">
@@ -1284,7 +1289,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         : "bg-red-100 text-red-700 hover:bg-red-200"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                     }`}>
-                    {scoreLoading === o.id ? "..." : o.courier_score || "Score"}
+                    {scoreLoading === o.id ? "..." : o.courier_score ? fmtScore(o.courier_score) : "Score"}
                   </button>
                 </div>
                 {/* Address */}
@@ -1299,7 +1304,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 {/* Items */}
                 {o.items && o.items.length > 0 && (
                   <div className="space-y-1 pt-1.5 mt-1 border-t border-gray-100">
-                    {o.items.map((item) => {
+                    {Array.from(new Map(o.items.map((i) => [i.id, i])).values()).map((item) => {
                       const img = itemImage(item);
                       return (
                       <div key={item.id} className="flex items-center gap-2">
@@ -1368,7 +1373,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <div>
                   {o.courier_sent ? (
                     <div className="flex items-center gap-1.5">
-                      <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
+                      <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate ${
                         o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                         o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                         o.courier_status === "cancelled" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
@@ -1383,8 +1388,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       style={{ backgroundColor: "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)", color: "var(--primary, #0f5931)" }}
                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; e.currentTarget.style.color = "#fff"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)"; e.currentTarget.style.color = "var(--primary, #0f5931)"; }}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
-                      <FiTruck className="w-3 h-3" /> {courierLoading === o.id ? "..." : "Send"}
+                      className="w-[70px] flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
+                      <FiTruck className="w-3 h-3 shrink-0" /> {courierLoading === o.id ? "..." : "Send"}
                     </button>
                   )}
                 </div>
@@ -1415,21 +1420,21 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       <input type="checkbox" checked={selectedOrders.size > 0 && selectedOrders.size >= filtered.length}
                         onChange={toggleSelectAll} className="w-4 h-4 accent-[var(--primary)]" />
                     </th>
-                    {/* "#" column also acts as the live select-count when any
-                        row is checked — mirrors the mobile "Select all (N)"
-                        affordance so admin always knows what bulk actions
-                        will operate on. Falls back to plain "#" when nothing
-                        is selected. */}
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
                       {selectedOrders.size > 0 ? (
                         <span className="text-[var(--primary)]">
-                          {lang === "en"
-                            ? `${selectedOrders.size} selected`
-                            : `${toBn(selectedOrders.size)} নির্বাচিত`}
+                          {lang === "en" ? `${selectedOrders.size} selected` : `${toBn(selectedOrders.size)} নির্বাচিত`}
                         </span>
-                      ) : "#"}
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          #
+                          <span className="px-1.5 py-0.5 rounded bg-[var(--primary)]/10 text-[var(--primary)] text-[10px] font-bold leading-none">
+                            {toBn(totalOrders)}
+                          </span>
+                        </span>
+                      )}
                     </th>
-                    {[t("th.customer"), t("th.phone"), t("th.total"), t("th.status")].map((h) => (
+                    {[t("th.customer"), t("th.total"), t("th.status")].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
@@ -1465,10 +1470,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             <input type="checkbox" checked={selectedOrders.has(o.id)} onChange={() => toggleSelectOrder(o.id)} className="w-4 h-4 accent-[var(--primary)]" />
                           </td>
                           <td className="px-4 py-3 text-gray-500 font-medium">#{toBn(o.id)}</td>
-                          <td className="px-4 py-3 font-medium text-gray-800 max-w-32 truncate">{o.customer_name}</td>
-                          <td className="px-4 py-3">{(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
-                            <a href={`tel:${ph}`} onClick={(e) => e.stopPropagation()} className="text-blue-600 hover:underline">{ph}</a>
-                          ) : <span className="text-gray-500">—</span>; })()}</td>
+                          <td className="px-4 py-3 max-w-40">
+                            <p className="font-medium text-gray-800 truncate">{o.customer_name}</p>
+                            {(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
+                              <a href={`tel:${ph}`} onClick={(e) => e.stopPropagation()} className="text-xs text-blue-600 hover:underline mt-0.5 block">{ph}</a>
+                            ) : null; })()}
+                          </td>
                           <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">৳{toBn(o.total)}</td>
                           <td className="px-4 py-3">
                             <InlineSelect
@@ -1487,14 +1494,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                           <td className="px-4 py-3">
                             {o.courier_sent ? (
                               <div className="flex items-center gap-1.5">
-                                <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
+                                <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate ${
                                   o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                                   o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                                   o.courier_status === "cancelled" ? "bg-red-100 text-red-700" :
                                   "bg-blue-100 text-blue-700"
-                                }`}>
-                                  {o.courier_status || "sent"}
-                                </span>
+                                }`}>{o.courier_status || "sent"}</span>
                                 <button type="button" onClick={() => handleCheckCourierStatus(o.id)} disabled={courierLoading === o.id}
                                   className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Refresh status">
                                   <FiRefreshCw className={`w-3 h-3 ${courierLoading === o.id ? "animate-spin" : ""}`} />
@@ -1505,22 +1510,22 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                 style={{ backgroundColor: "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)", color: "var(--primary, #0f5931)" }}
                                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--primary, #0f5931)"; e.currentTarget.style.color = "#fff"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "color-mix(in oklab, var(--primary, #0f5931) 12%, transparent)"; e.currentTarget.style.color = "var(--primary, #0f5931)"; }}
-                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
-                                <FiTruck className="w-3 h-3" />
+                                className="w-[70px] flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50">
+                                <FiTruck className="w-3 h-3 shrink-0" />
                                 {courierLoading === o.id ? "..." : "Send"}
                               </button>
                             )}
                           </td>
                           <td className="px-4 py-3">
                             <button type="button" onClick={() => handleCheckScore(o.id)} disabled={scoreLoading === o.id}
-                              className={`text-xs px-2 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
+                              className={`text-xs px-2 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                                 o.courier_score
                                   ? parseFloat(o.courier_score) >= 70 ? "bg-green-100 text-green-700 hover:bg-green-200"
                                   : parseFloat(o.courier_score) >= 40 ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                                   : "bg-red-100 text-red-700 hover:bg-red-200"
                                 : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                               }`} title="Click to check score">
-                              {scoreLoading === o.id ? "..." : o.courier_score || "Check"}
+                              {scoreLoading === o.id ? "..." : o.courier_score ? fmtScore(o.courier_score) : "Check"}
                             </button>
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
@@ -1537,8 +1542,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                               <span className="text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                            {new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <p className="text-xs text-gray-500">{new Date(o.created_at).toLocaleDateString(lang === "en" ? "en-US" : "bn-BD")}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{new Date(o.created_at).toLocaleTimeString(lang === "en" ? "en-US" : "bn-BD", { hour: "2-digit", minute: "2-digit" })}</p>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
@@ -1571,7 +1577,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                                   <div className="bg-gray-50/80 border-t border-gray-100 px-6 py-4">
                                     {o.items && o.items.length > 0 && (
                                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {o.items.map((item) => {
+                                        {Array.from(new Map(o.items.map((i) => [i.id, i])).values()).map((item) => {
                                           const img = itemImage(item);
                                           return (
                                           <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-gray-100 shadow-sm">
@@ -1665,8 +1671,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                       </p>
                       {/* Status badges */}
                       <div className="flex flex-wrap gap-2">
-                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${stColor}`}>{stLabel}</span>
-                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium inline-block w-[70px] truncate ${stColor}`}>{stLabel}</span>
+                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium inline-block w-[70px] truncate ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
                           {o.payment_status === "paid" ? t("status.paid") : t("status.unpaid")}
                         </span>
                         <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gray-100 text-gray-700">
@@ -1836,7 +1842,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             </div>
                             <div className="flex items-center gap-3 text-sm">
                               <span className="text-gray-500">Status:</span>
-                              <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium ${
+                              <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate ${
                                 o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                                 o.courier_status === "cancelled" || o.courier_status === "partial_delivered" ? "bg-red-100 text-red-700" :
                                 "bg-blue-100 text-blue-700"

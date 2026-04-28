@@ -4,24 +4,42 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 
-export async function GET(_request: NextRequest) {
+/** Parse YYYY-MM-DD (BD, UTC+6) → UTC Date at BD midnight */
+function bdMidnightUtc(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  // BD midnight = UTC midnight - 6 h
+  return new Date(Date.UTC(y, m - 1, d) - 6 * 60 * 60 * 1000);
+}
+
+export async function GET(request: NextRequest) {
   let admin;
   try { admin = await requireStaff(); } catch (e) { return e as Response; }
 
   try {
-    // Compute "today" in Bangladesh timezone (UTC+6) without relying on Intl
-    // ICU tz data — Hostinger's Node ships small-icu, so timeZone:'Asia/Dhaka'
-    // can silently fall back to UTC and shift the day boundary 6 hours.
-    // Using plain offset math (BD has no DST) so counts always match what the
-    // shop owner sees on their wall clock.
+    const { searchParams } = request.nextUrl;
+    const fromParam = searchParams.get("from"); // YYYY-MM-DD BD
+    const toParam   = searchParams.get("to");   // YYYY-MM-DD BD
+
+    // BD timezone offset (UTC+6, no DST)
     const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
     const nowMs = Date.now();
-    // Floor "now shifted into BD" to the nearest day, then shift back to a
-    // real UTC instant. This yields BD midnight as a UTC Date.
     const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
     const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
 
-    // Build last 7 days as BD-midnight markers
+    // Build date range filter for order queries
+    let dateFilter: { gte?: Date; lt?: Date } | undefined;
+    if (fromParam || toParam) {
+      dateFilter = {};
+      if (fromParam) dateFilter.gte = bdMidnightUtc(fromParam);
+      if (toParam) {
+        // Inclusive end — use start of NEXT BD day
+        const [y, m, d] = toParam.split("-").map(Number);
+        dateFilter.lt = new Date(Date.UTC(y, m - 1, d + 1) - BD_OFFSET_MS);
+      }
+    }
+    const createdAtFilter = dateFilter ? { createdAt: dateFilter } : {};
+
+    // Build last 7 days as BD-midnight markers (bar chart)
     const days: Date[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today.getTime() - i * 86400000);
@@ -33,6 +51,7 @@ export async function GET(_request: NextRequest) {
       todayOrders,
       revenueResult,
       todayRevenueResult,
+      cancelledRevResult,
       totalCustomers,
       totalProducts,
       activeProducts,
@@ -43,100 +62,147 @@ export async function GET(_request: NextRequest) {
       lowStockProducts,
       ordersByStatus,
       revenueByStatus,
-      // Daily orders for last 7 days
+      shippedCount,
+      shippedRevAgg,
+      todayShippedCount,
+      todayShippedRevAgg,
+      shippedCustomerGroups,
       ...dailyCounts
     ] = await Promise.all([
-      prisma.order.count({ where: { status: { not: "trashed" } } }),
+      // Total non-trashed orders (scoped to date if filter set)
+      prisma.order.count({ where: { status: { not: "trashed" }, ...createdAtFilter } }),
+      // Today's orders (always fixed to today, not date-filter)
       prisma.order.count({ where: { createdAt: { gte: today }, status: { not: "trashed" } } }),
-      prisma.order.aggregate({ _sum: { total: true }, where: { status: { notIn: ["cancelled", "trashed"] } } }),
-      prisma.order.aggregate({ _sum: { total: true }, where: { createdAt: { gte: today }, status: { notIn: ["cancelled", "trashed"] } } }),
+      // Revenue excl. cancelled + trashed + delivery (date-scoped)
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: { notIn: ["cancelled", "trashed"] }, ...createdAtFilter },
+      }),
+      // Today's revenue (always fixed to today)
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { createdAt: { gte: today }, status: { notIn: ["cancelled", "trashed"] } },
+      }),
+      // Cancelled orders revenue — always excludes shipping charge
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "cancelled", ...createdAtFilter },
+      }),
       prisma.user.count({ where: { role: "customer" } }),
       prisma.product.count(),
       prisma.product.count({ where: { isActive: true } }),
-      prisma.order.count({ where: { status: "pending" } }),
+      prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),
       prisma.product.count({ where: { stock: { lt: 10 } } }),
       prisma.order.findMany({
         take: 10,
-        where: { status: { not: "trashed" } },
+        where: { status: { not: "trashed" }, ...createdAtFilter },
         orderBy: { createdAt: "desc" },
         include: { items: true },
       }),
-      prisma.product.findMany({
-        take: 10,
-        orderBy: { soldCount: "desc" },
-      }),
-      prisma.product.findMany({
-        where: { stock: { lt: 10 } },
-        orderBy: { stock: "asc" },
-      }),
+      prisma.product.findMany({ take: 10, orderBy: { soldCount: "desc" } }),
+      prisma.product.findMany({ where: { stock: { lt: 10 } }, orderBy: { stock: "asc" } }),
+      // Order counts by status (date-scoped)
       prisma.order.groupBy({
         by: ["status"],
         _count: { _all: true },
+        ...(dateFilter ? { where: { createdAt: dateFilter } } : {}),
       }),
+      // Revenue by status excl. cancelled/trashed (date-scoped)
       prisma.order.groupBy({
         by: ["status"],
-        _sum: { total: true },
+        _sum: { total: true, shippingCost: true },
+        where: { status: { notIn: ["cancelled", "trashed"] }, ...createdAtFilter },
       }),
-      // 7 daily count queries
+      // ── Courier-sent ("actual sales") stats ──────────────────────────────────
+      // Shipped order count (date-scoped)
+      prisma.order.count({ where: { status: "shipped", ...createdAtFilter } }),
+      // Shipped revenue excl. shipping cost (date-scoped)
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "shipped", ...createdAtFilter },
+      }),
+      // Today's shipped orders (always fixed to today)
+      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
+      // Today's shipped revenue excl. shipping (always fixed to today)
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "shipped", createdAt: { gte: today } },
+      }),
+      // Unique customers (by phone) from shipped orders (date-scoped)
+      prisma.order.groupBy({
+        by: ["customerPhone"],
+        where: { status: "shipped", ...createdAtFilter },
+      }),
+      // Daily bar chart — always last 7 days (not date-scoped)
       ...days.map((day) => {
         const next = new Date(day);
         next.setDate(next.getDate() + 1);
-        return prisma.order.count({
-          where: { createdAt: { gte: day, lt: next } },
-        });
+        return prisma.order.count({ where: { createdAt: { gte: day, lt: next } } });
       }),
     ]);
 
     // Build order counts map
     const orderCounts: Record<string, number> = {};
-    for (const g of ordersByStatus) {
-      orderCounts[g.status] = g._count._all;
-    }
+    for (const g of ordersByStatus) orderCounts[g.status] = g._count._all;
 
-    // Build revenue map
+    // Build revenue map for non-cancelled statuses
     const revMap: Record<string, number> = {};
     for (const g of revenueByStatus) {
-      revMap[g.status] = Number(g._sum.total || 0);
+      revMap[g.status] = Number(g._sum.total || 0) - Number(g._sum.shippingCost || 0);
     }
 
-    // Build daily orders array
+    // Cancelled revenue: product total minus shipping (never add delivery charge to cancelled)
+    const cancelledRevenue = Number(cancelledRevResult._sum.total || 0) - Number(cancelledRevResult._sum.shippingCost || 0);
+
     const dailyOrders = days.map((day, i) => ({
-      date: day.toISOString().slice(5, 10), // "MM-DD"
+      date: day.toISOString().slice(5, 10),
       count: dailyCounts[i] as number,
     }));
 
+    const shippedRevenue = Number(shippedRevAgg._sum.total || 0) - Number(shippedRevAgg._sum.shippingCost || 0);
+    const todayShippedRevenue = Number(todayShippedRevAgg._sum.total || 0) - Number(todayShippedRevAgg._sum.shippingCost || 0);
+
     return jsonResponse({
       stats: serialize({
-        totalOrders,
-        todayOrders,
-        totalRevenue: Number(revenueResult._sum.total || 0),
-        todayRevenue: Number(todayRevenueResult._sum.total || 0),
-        totalCustomers,
-        totalProducts,
-        activeProducts,
-        pendingOrders,
-        lowStockCount,
+        // snake_case to match Stats interface in DashboardHomeClient
+        total_orders: totalOrders,
+        today_orders: todayOrders,
+        total_revenue: Number(revenueResult._sum.total || 0) - Number(revenueResult._sum.shippingCost || 0),
+        today_revenue: Number(todayRevenueResult._sum.total || 0) - Number(todayRevenueResult._sum.shippingCost || 0),
+        total_customers: totalCustomers,
+        total_products: totalProducts,
+        active_products: activeProducts,
+        pending_orders: pendingOrders,
+        low_stock_count: lowStockCount,
+        low_stock: lowStockCount,
+        cancelled_revenue: cancelledRevenue,
+        // Courier-sent ("actual sales") stats
+        shipped_orders: shippedCount,
+        shipped_revenue: shippedRevenue,
+        today_shipped: todayShippedCount,
+        today_shipped_revenue: todayShippedRevenue,
+        shipped_customers: shippedCustomerGroups.length,
       }),
       order_counts: {
-        pending: orderCounts.pending || 0,
+        pending:   orderCounts.pending   || 0,
         confirmed: orderCounts.confirmed || 0,
         processing: orderCounts.processing || 0,
-        shipped: orderCounts.shipped || 0,
+        shipped:   orderCounts.shipped   || 0,
         delivered: orderCounts.delivered || 0,
         cancelled: orderCounts.cancelled || 0,
       },
       revenue_by_status: {
-        pending: revMap.pending || 0,
+        pending:   revMap.pending   || 0,
         confirmed: revMap.confirmed || 0,
         processing: revMap.processing || 0,
-        shipped: revMap.shipped || 0,
+        shipped:   revMap.shipped   || 0,
         delivered: revMap.delivered || 0,
-        cancelled: revMap.cancelled || 0,
+        cancelled: cancelledRevenue,
       },
       daily_orders: dailyOrders,
       recent_orders: recentOrders.map(serialize),
-      top_products: topProducts.map(serialize),
-      low_stock: lowStockProducts.map(serialize),
+      top_products:  topProducts.map(serialize),
+      low_stock:     lowStockProducts.map(serialize),
     });
   } catch (error) {
     console.error("Dashboard error:", error);

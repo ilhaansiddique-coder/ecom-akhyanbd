@@ -9,6 +9,7 @@ import { useCart } from "@/lib/CartContext";
 import { useLang } from "@/lib/LanguageContext";
 import { useSiteSettings, useOption } from "@/lib/SiteSettingsContext";
 import { toBn } from "@/utils/toBn";
+import { toBilingual } from "@/lib/bilingual";
 
 interface NavbarProps {
   onSearchOpen: () => void;
@@ -68,13 +69,41 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
   const siteName = settings.site_name || t("hero.title");
   const siteTagline = settings.site_tagline || t("footer.tagline");
 
+  // Read topbar text from page_header_footer JSON, fall back to translations
+  let topbarText1 = t("nav.topbar.delivery");
+  let topbarText2 = t("nav.topbar.order");
+  let topbarEnabledFromHF: boolean | null = null;
+  try {
+    const raw = settings.page_header_footer;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const tb = (parsed?.topbar && typeof parsed.topbar === "object" ? parsed.topbar : {}) as Record<string, unknown>;
+      if (tb.text1) {
+        const b = toBilingual(tb.text1);
+        topbarText1 = lang === "en" ? (b.en || b.bn) : (b.bn || b.en);
+      }
+      if (tb.text2) {
+        const b = toBilingual(tb.text2);
+        topbarText2 = lang === "en" ? (b.en || b.bn) : (b.bn || b.en);
+      }
+      if (typeof tb.enabled === "boolean") topbarEnabledFromHF = tb.enabled;
+    }
+  } catch { /* */ }
+
   // Customizer-driven layout / visibility
   const layout      = useOption<string>("header.layout");      // "classic" | "centered" | "minimal"
   const sticky      = useOption<boolean>("header.sticky");
-  const showTopbar  = useOption<boolean>("header.show_topbar") && layout !== "minimal";
+  const showTopbarOption = useOption<boolean>("header.show_topbar") && layout !== "minimal";
+  // page_header_footer.topbar.enabled overrides the customizer flag when set
+  const showTopbar = topbarEnabledFromHF !== null ? (topbarEnabledFromHF && layout !== "minimal") : showTopbarOption;
   const showSearch  = useOption<boolean>("header.show_search");
   const showCart    = useOption<boolean>("header.show_cart");
   const showLogin   = useOption<boolean>("header.show_login");
+  // Default to true so installs without the keys still show brand text/tagline
+  const showBrandTextRaw = useOption<boolean>("header.show_brand_text");
+  const showTaglineRaw   = useOption<boolean>("header.show_tagline");
+  const showBrandText = showBrandTextRaw === undefined ? true : !!showBrandTextRaw;
+  const showTagline   = showTaglineRaw === undefined ? true : !!showTaglineRaw;
   const isCentered  = layout === "centered";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -107,10 +136,10 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
             </a>
           )}
           <p className="text-white/90 text-xs">
-            {t("nav.topbar.delivery")}
+            {topbarText1}
           </p>
           <p className="text-white/90 text-xs">
-            {t("nav.topbar.order")}
+            {topbarText2}
           </p>
         </div>
       </div>
@@ -131,14 +160,18 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 shrink-0">
               <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={48} height={38} className="h-9 lg:h-11" style={{ width: "auto" }} priority unoptimized={!!settings.site_logo} />
-              <div className="hidden sm:block">
-                <h1 className="text-base lg:text-lg font-bold text-primary leading-tight tracking-tight">
-                  {siteName}
-                </h1>
-                <p className="text-[10px] lg:text-[11px] text-text-muted -mt-0.5">
-                  {siteTagline}
-                </p>
-              </div>
+              {showBrandText && (
+                <div className="hidden sm:block">
+                  <h1 className="text-base lg:text-lg font-bold text-primary leading-tight tracking-tight">
+                    {siteName}
+                  </h1>
+                  {showTagline && siteTagline && (
+                    <p className="text-[10px] lg:text-[11px] text-text-muted -mt-0.5">
+                      {siteTagline}
+                    </p>
+                  )}
+                </div>
+              )}
             </Link>
 
             {/* Desktop Menu */}

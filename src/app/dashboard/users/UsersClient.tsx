@@ -7,13 +7,14 @@ import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
-import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiCheckCircle, FiChevronDown, FiX } from "react-icons/fi";
 import Modal from "@/components/Modal";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
 import InlineSelect from "@/components/InlineSelect";
 import StatusFilter from "@/components/StatusFilter";
 import { useLang } from "@/lib/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 
 interface User {
   id: number;
@@ -51,6 +52,16 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
+  // Current admin's id — used to disable self-selection in bulk ops.
+  const { user: currentAdmin } = useAuth();
+  const currentAdminId = currentAdmin?.id;
+
+  // Bulk selection state.
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkRoleOpen, setBulkRoleOpen] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
+
   // Pagination — match orders/products convention. Server returns 20/page.
   // Pagination only renders when totalPages > 1 (≤20 = no controls).
   const perPage = 20;
@@ -78,17 +89,96 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
       .finally(() => setLoading(false));
   }, [roleFilter, search, page]);
 
-  // Re-fetch on filter/search/page change. Debounce search 250ms.
-  // Skip first run when SSR seeded items so we don't double-load.
-  const skipFirstRef = useRef(!!initialData?.items?.length);
+  // Skip the *very first* run of each effect when SSR seeded items so we
+  // don't double-fetch on mount. Any subsequent dep change MUST refetch —
+  // including a role filter change while the search box is empty.
+  const filterMountRef = useRef(!!initialData?.items?.length);
+  const searchMountRef = useRef(!!initialData?.items?.length);
+
+  // Filter/page change → fetch immediately (no debounce — single click).
+  // Splitting from search means clicking the role filter never gets
+  // swallowed by the search debounce when the search box is empty.
   useEffect(() => {
-    if (skipFirstRef.current) { skipFirstRef.current = false; return; }
+    if (filterMountRef.current) { filterMountRef.current = false; return; }
+    fetchAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleFilter, page]);
+
+  // Search → debounced 250ms (keystrokes).
+  useEffect(() => {
+    if (searchMountRef.current) { searchMountRef.current = false; return; }
     const h = setTimeout(() => fetchAll(), 250);
     return () => clearTimeout(h);
-  }, [roleFilter, search, page, fetchAll]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // Reset page on filter change.
   useEffect(() => { setPage(1); }, [roleFilter, search]);
+
+  // Clear selection whenever the visible list changes (filter / page / fetch).
+  useEffect(() => { setSelectedIds([]); }, [roleFilter, search, page, users]);
+
+  // Close the bulk-role popover on outside click.
+  useEffect(() => {
+    if (!bulkRoleOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-bulk-role]")) setBulkRoleOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [bulkRoleOpen]);
+
+  const toggleSelect = (id: number) => {
+    if (id === currentAdminId) return; // never select self
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const selectableIds = filtered
+      .map((u) => u.id)
+      .filter((id) => id !== currentAdminId);
+    const allSelected =
+      selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+    setSelectedIds(allSelected ? [] : selectableIds);
+  };
+
+  const handleBulkRoleChange = async (role: "customer" | "staff" | "admin") => {
+    setBulkRoleOpen(false);
+    if (selectedIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.admin.bulkUsers("update_role", selectedIds, role);
+      setUsers((prev) =>
+        prev.map((u) => (selectedIds.includes(u.id) ? { ...u, role } : u))
+      );
+      setSelectedIds([]);
+      showToast(t("toast.updated") || "Updated");
+    } catch {
+      showToast(t("toast.error"), "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.admin.bulkUsers("delete", selectedIds);
+      setUsers((prev) => prev.filter((u) => !selectedIds.includes(u.id)));
+      setTotalUsers((n) => Math.max(0, n - selectedIds.length));
+      setSelectedIds([]);
+      setBulkConfirmDelete(false);
+      showToast(t("toast.deleted") || "Deleted");
+    } catch {
+      showToast(t("toast.error"), "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const openCreate = () => {
     setEditId(null);
@@ -161,6 +251,13 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
         onCancel={() => setDeleteId(null)}
         loading={deleting}
       />
+      <ConfirmDialog
+        open={bulkConfirmDelete}
+        message={`Delete ${selectedIds.length} user${selectedIds.length === 1 ? "" : "s"}? This cannot be undone.`}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkConfirmDelete(false)}
+        loading={bulkLoading}
+      />
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -184,6 +281,71 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
           </button>
         </div>
 
+        {/* ── Bulk Action Toolbar ── */}
+        {selectedIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-wrap items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3"
+          >
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.length} selected
+            </span>
+            <div className="flex-1" />
+            {/* Bulk role change */}
+            <div className="relative" data-bulk-role>
+              <button
+                type="button"
+                onClick={() => setBulkRoleOpen((o) => !o)}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 bg-white rounded-xl text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <FiCheckCircle className="w-4 h-4 text-gray-500" />
+                Change Role
+                <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${bulkRoleOpen ? "rotate-180" : ""}`} />
+              </button>
+              {bulkRoleOpen && (
+                <div className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-100 rounded-xl shadow-xl min-w-44 py-1">
+                  {[
+                    { value: "customer", label: t("user.customer"), dot: "bg-blue-400" },
+                    { value: "staff", label: t("user.staff"), dot: "bg-emerald-400" },
+                    { value: "admin", label: t("user.admin"), dot: "bg-purple-400" },
+                  ].map(({ value, label, dot }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleBulkRoleChange(value as "customer" | "staff" | "admin")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Bulk delete */}
+            <button
+              type="button"
+              onClick={() => setBulkConfirmDelete(true)}
+              disabled={bulkLoading}
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-red-200 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              <FiTrash2 className="w-4 h-4" />
+              Delete
+            </button>
+            {/* Clear */}
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <FiX className="w-4 h-4" />
+              Clear
+            </button>
+          </motion.div>
+        )}
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {loading ? (
             <TableSkeleton />
@@ -192,6 +354,19 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filtered.length > 0 &&
+                          filtered.filter((u) => u.id !== currentAdminId).every((u) => selectedIds.includes(u.id)) &&
+                          filtered.some((u) => u.id !== currentAdminId)
+                        }
+                        onChange={toggleSelectAll}
+                        className={theme.checkbox}
+                        aria-label="Select all"
+                      />
+                    </th>
                     {["#", t("th.name"), t("th.email"), t("th.phone"), t("th.role"), t("th.date"), ""].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
@@ -199,9 +374,23 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="py-12 text-center text-gray-400">{t("user.empty")}</td></tr>
+                    <tr><td colSpan={8} className="py-12 text-center text-gray-400">{t("user.empty")}</td></tr>
                   ) : filtered.map((u) => (
-                    <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={u.id}
+                      className={`transition-colors ${selectedIds.includes(u.id) ? "bg-primary/5" : "hover:bg-gray-50"}`}
+                    >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(u.id)}
+                          onChange={() => toggleSelect(u.id)}
+                          disabled={u.id === currentAdminId}
+                          className={`${theme.checkbox} disabled:opacity-30 disabled:cursor-not-allowed`}
+                          aria-label={`Select ${u.name}`}
+                          title={u.id === currentAdminId ? "You cannot select yourself" : ""}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-gray-500">{toBn(u.id)}</td>
                       <td className="px-4 py-3 font-medium text-gray-800">{u.name}</td>
                       <td className="px-4 py-3 text-gray-500 max-w-44 truncate">{u.email}</td>

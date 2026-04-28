@@ -20,19 +20,26 @@ import { setNumberLang } from "@/utils/toBn";
 
 const dicts: Record<Lang, Record<string, string>> = { bn, en };
 
-export function LanguageProvider({ children }: { children: ReactNode }) {
+export function LanguageProvider({
+  children,
+  initialLang,
+}: {
+  children: ReactNode;
+  /**
+   * Server-resolved active language for this request. When provided, it
+   * trumps every other source on first render — guarantees zero flash
+   * because the html `lang` attribute (set by the root layout) already
+   * matches this value.
+   */
+  initialLang?: Lang;
+}) {
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith("/dashboard") || pathname?.startsWith("/cdlogin");
-  // Pick the initial language SYNCHRONOUSLY from the route so the first paint
-  // is already in the right language. Dashboard → English by default, public
-  // storefront → Bengali. Without this, state starts as "bn" and flips to "en"
-  // after the settings fetch resolves, causing a visible BN→EN flash on every
-  // dashboard load.
-  // Read cached preference synchronously so first paint matches the value the
-  // settings fetch will resolve to. Without this, every refresh flashes the
-  // hardcoded default ("en" for dashboard / "bn" for storefront) before the
-  // fetch resolves and switches to the user's actual saved preference.
+  // Initial-render priority: server-resolved > localStorage cache > route default.
+  // Server-resolved wins because the surrounding HTML was already rendered with
+  // it; matching here prevents the BN ↔ EN flash on every dashboard refresh.
   const [lang, setLangState] = useState<Lang>(() => {
+    if (initialLang === "en" || initialLang === "bn") return initialLang;
     const fallback: Lang = isDashboard ? "en" : "bn";
     if (typeof window === "undefined") return fallback;
     try {

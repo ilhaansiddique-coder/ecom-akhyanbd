@@ -41,8 +41,9 @@ export async function GET(request: NextRequest) {
         hasVariations: true, variationType: true,
         customShipping: true, shippingCost: true, description: true,
         createdAt: true,
-        category: { select: { id: true, name: true } },
-        brand:    { select: { id: true, name: true } },
+        category:   { select: { id: true, name: true } },
+        categories: { select: { id: true, name: true } },
+        brand:      { select: { id: true, name: true } },
         variants: {
           orderBy: { sortOrder: "asc" },
           select: { id: true, label: true, price: true, originalPrice: true, sku: true, stock: true, unlimitedStock: true, image: true, isActive: true, sortOrder: true },
@@ -90,17 +91,24 @@ export async function POST(request: NextRequest) {
     const data = parsed.data;
     const slug = await uniqueSlug(data.name, "product", data.slug);
 
-    // If no category selected, use the first available or create "uncategorized"
-    let categoryId = data.category_id;
-    if (!categoryId) {
+    // Resolve selected category IDs — prefer category_ids array, fall back to single category_id
+    const rawCatIds: number[] = data.category_ids?.length
+      ? data.category_ids
+      : data.category_id ? [data.category_id] : [];
+
+    // If nothing selected, fall back to first available or create "uncategorized"
+    let primaryCategoryId: number | null = rawCatIds[0] ?? null;
+    if (!primaryCategoryId) {
       const firstCat = await prisma.category.findFirst({ orderBy: { id: "asc" } });
       if (firstCat) {
-        categoryId = firstCat.id;
+        primaryCategoryId = firstCat.id;
+        rawCatIds.unshift(firstCat.id);
       } else {
         const uncategorized = await prisma.category.create({
           data: { name: "অশ্রেণীভুক্ত", slug: "uncategorized", isActive: true },
         });
-        categoryId = uncategorized.id;
+        primaryCategoryId = uncategorized.id;
+        rawCatIds.unshift(uncategorized.id);
       }
     }
 
@@ -108,7 +116,8 @@ export async function POST(request: NextRequest) {
       data: {
         name: data.name,
         slug,
-        categoryId,
+        categoryId: primaryCategoryId,
+        categories: rawCatIds.length ? { connect: rawCatIds.map((id) => ({ id })) } : undefined,
         brandId: data.brand_id ?? null,
         description: data.description,
         price: data.price,
@@ -144,7 +153,7 @@ export async function POST(request: NextRequest) {
           },
         } : {}),
       },
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      include: { category: true, categories: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
     });
 
     revalidateAll("products");

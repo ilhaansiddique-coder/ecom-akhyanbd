@@ -46,12 +46,17 @@ export async function PUT(
     const data = parsed.data;
     const slug = await uniqueSlug(data.name, "product", data.slug, Number(id));
 
+    const rawCatIds: number[] = data.category_ids?.length
+      ? data.category_ids
+      : data.category_id ? [data.category_id] : [];
+
     const product = await prisma.product.update({
       where: { id: Number(id) },
       data: {
         name: data.name,
         slug,
-        categoryId: data.category_id ?? undefined,
+        categoryId: rawCatIds[0] ?? null,
+        categories: { set: rawCatIds.map((id) => ({ id })) },
         brandId: data.brand_id ?? null,
         description: data.description,
         price: data.price,
@@ -72,7 +77,7 @@ export async function PUT(
         shippingCost: data.shipping_cost != null ? Number(data.shipping_cost) : null,
         sortOrder: data.sort_order ?? 0,
       },
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      include: { category: true, categories: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
     });
 
     // Handle variants: delete old, create new
@@ -97,7 +102,7 @@ export async function PUT(
       // Re-fetch with variants
       const updated = await prisma.product.findUnique({
         where: { id: Number(id) },
-        include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+        include: { category: true, categories: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
       });
       revalidateAll("products");
       bumpVersion("products");

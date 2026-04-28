@@ -25,12 +25,15 @@ import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
 // Same auto-sync helper as the Steadfast route — see comment there. Kept
 // inline (not in the shared lib) because both routes already import the
 // mapper and a 4-line wrapper isn't worth a third file.
-function buildStatusUpdate(currentOrderStatus: string, courierStatus: string) {
+function buildStatusUpdate(currentOrderStatus: string, courierStatus: string, currentCourierSentAt?: Date | null) {
   const derived = mapCourierStatusToOrderStatus(courierStatus);
   if (!derived || currentOrderStatus === "trashed" || currentOrderStatus === derived) {
     return { courierStatus };
   }
-  return { courierStatus, status: derived };
+  const sentAtPatch = derived === "shipped" && !currentCourierSentAt
+    ? { courierSentAt: new Date() }
+    : {};
+  return { courierStatus, status: derived, ...sentAtPatch };
 }
 
 // Spacing between sequential courier API hits inside bulk loops so we don't
@@ -194,7 +197,7 @@ export async function POST(request: NextRequest) {
         if (r.status === 200 && r.delivery_status) {
           await prisma.order.update({
             where: { id: order.id },
-            data: buildStatusUpdate(order.status, r.delivery_status),
+            data: buildStatusUpdate(order.status, r.delivery_status, order.courierSentAt),
           });
           return jsonResponse({ delivery_status: r.delivery_status, consignment: r.consignment });
         }
@@ -217,7 +220,7 @@ export async function POST(request: NextRequest) {
       if (result.data?.order_status) {
         await prisma.order.update({
           where: { id: order.id },
-          data: buildStatusUpdate(order.status, result.data.order_status),
+          data: buildStatusUpdate(order.status, result.data.order_status, order.courierSentAt),
         });
         return jsonResponse({ delivery_status: result.data.order_status, consignment: result.data });
       }
@@ -328,7 +331,13 @@ export async function POST(request: NextRequest) {
         if (item?.consignment_id) {
           await prisma.order.update({
             where: { id: order.id },
-            data: { courierSent: true, courierType: "pathao", consignmentId: String(item.consignment_id), courierStatus: item.order_status || "pending" },
+            data: {
+              courierSent: true, courierType: "pathao",
+              consignmentId: String(item.consignment_id),
+              courierStatus: item.order_status || "pending",
+              status: "shipped",
+              courierSentAt: order.courierSentAt ?? new Date(),
+            },
           });
           const m = matchInfo.find(x => x.order_id === order.id);
           results.push({ order_id: order.id, status: "success", consignment_id: String(item.consignment_id), matched: m?.matched });
@@ -349,7 +358,13 @@ export async function POST(request: NextRequest) {
           if (r.data?.consignment_id) {
             await prisma.order.update({
               where: { id: order.id },
-              data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+              data: {
+                courierSent: true, courierType: "pathao",
+                consignmentId: String(r.data.consignment_id),
+                courierStatus: r.data.order_status || "pending",
+                status: "shipped",
+                courierSentAt: order.courierSentAt ?? new Date(),
+              },
             });
             results.push({ order_id: order.id, status: "success", consignment_id: String(r.data.consignment_id) });
           } else {
@@ -390,7 +405,13 @@ export async function POST(request: NextRequest) {
         if (r.data?.consignment_id) {
           await prisma.order.update({
             where: { id: order.id },
-            data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+            data: {
+              courierSent: true, courierType: "pathao",
+              consignmentId: String(r.data.consignment_id),
+              courierStatus: r.data.order_status || "pending",
+              status: "shipped",
+              courierSentAt: order.courierSentAt ?? new Date(),
+            },
           });
           results.push({ order_id: orderId, status: "success", consignment_id: String(r.data.consignment_id) });
         } else {
@@ -420,7 +441,13 @@ export async function POST(request: NextRequest) {
       if (r.data?.consignment_id) {
         const updated = await prisma.order.update({
           where: { id: order.id },
-          data: { courierSent: true, courierType: "pathao", consignmentId: String(r.data.consignment_id), courierStatus: r.data.order_status || "pending" },
+          data: {
+            courierSent: true, courierType: "pathao",
+            consignmentId: String(r.data.consignment_id),
+            courierStatus: r.data.order_status || "pending",
+            status: "shipped",
+            courierSentAt: order.courierSentAt ?? new Date(),
+          },
           include: { items: true },
         });
         return jsonResponse({

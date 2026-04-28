@@ -141,6 +141,7 @@ export const productSchema = z.object({
   // ── Optional ──
   slug: strOpt,
   category_id: numOpt,
+  category_ids: z.array(z.coerce.number()).optional(),
   brand_id: numOpt,
   description: strOpt,
   original_price: numOpt,
@@ -263,6 +264,14 @@ export const blogPostSchema = z.object({
   excerpt: z.string().nullable().optional(),
   content: z.string().min(1),
   image: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  tags: z.string().nullable().optional(),
+  read_time: z.coerce.number().int().nullable().optional(),
+  featured: z.boolean().default(false),
+  meta_title: z.string().nullable().optional(),
+  meta_description: z.string().nullable().optional(),
+  meta_keywords: z.string().nullable().optional(),
+  og_image: z.string().nullable().optional(),
   is_published: z.boolean().default(false),
   published_at: z.string().nullable().optional(),
 });

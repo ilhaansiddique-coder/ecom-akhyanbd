@@ -67,6 +67,7 @@ function isYouTube(url?: string | null): boolean {
 export default function LandingPageClient({ page }: { page: PageData }) {
   const router = useRouter();
   const siteContactMode = useOption<string>("widget.contact_mode"); // "whatsapp" | "phone"
+  const sitePhone = useOption<string>("phone") || "";
   // Per-page override wins unless set to "inherit" (the default).
   const contactMode = page.contact_mode && page.contact_mode !== "inherit" ? page.contact_mode : siteContactMode;
   // Falls back to the global theme primary CSS variable so customizer color
@@ -941,7 +942,9 @@ export default function LandingPageClient({ page }: { page: PageData }) {
         <div className="max-w-7xl mx-auto px-6 md:px-8 text-center">
           <div className="text-lg font-bold mb-3" style={{ color }}>{page.title}</div>
           <div className="flex items-center justify-center gap-4 text-sm text-gray-500 mb-4">
-            <a href="tel:+8801731492117" className="flex items-center gap-1 hover:text-gray-700"><FiPhone className="w-3.5 h-3.5" /> +8801731492117</a>
+            {sitePhone && (
+              <a href={`tel:${sitePhone}`} className="flex items-center gap-1 hover:text-gray-700"><FiPhone className="w-3.5 h-3.5" /> {sitePhone}</a>
+            )}
           </div>
           <p className="text-xs text-gray-400">সারা বাংলাদেশে হোম ডেলিভারি • ক্যাশ অন ডেলিভারি</p>
         </div>

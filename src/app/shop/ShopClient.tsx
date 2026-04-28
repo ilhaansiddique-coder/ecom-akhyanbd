@@ -11,17 +11,38 @@ import InlineSelect from "@/components/InlineSelect";
 import { useLang } from "@/lib/LanguageContext";
 import { toBn } from "@/utils/toBn";
 import { useChannel } from "@/lib/useChannel";
+import type { Bilingual } from "@/lib/bilingual";
 
 type SortOption = "default" | "price_asc" | "price_desc" | "newest" | "popular";
+
+interface ShopPageContent {
+  heroBadge: Bilingual;
+  heroTitle: Bilingual;
+  heroSubtitle: Bilingual;
+  filtersTitle: Bilingual;
+  categoryLabel: Bilingual;
+  brandLabel: Bilingual;
+  priceLabel: Bilingual;
+  sortLabel: Bilingual;
+  emptyTitle: Bilingual;
+  emptyDescription: Bilingual;
+  loadMoreText: Bilingual;
+}
 
 interface ShopClientProps {
   initialProducts: Product[];
   initialTotal: number;
   pageSize: number;
   apiCategories: { id: number; name: string; slug: string }[];
+  content?: ShopPageContent;
 }
 
-export default function ShopClient({ initialProducts, initialTotal, pageSize, apiCategories }: ShopClientProps) {
+const pickL = (b: Bilingual | undefined, lang: string): string => {
+  if (!b) return "";
+  return lang === "en" ? (b.en || b.bn) : (b.bn || b.en);
+};
+
+export default function ShopClient({ initialProducts, initialTotal, pageSize, apiCategories, content }: ShopClientProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { lang } = useLang();
@@ -172,7 +193,12 @@ export default function ShopClient({ initialProducts, initialTotal, pageSize, ap
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-8">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{lang === "en" ? "All Products" : "সকল পণ্য"}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                {content ? pickL(content.heroTitle, lang) : (lang === "en" ? "All Products" : "সকল পণ্য")}
+              </h1>
+              {content && (
+                <p className="text-text-muted text-base mt-1">{pickL(content.heroSubtitle, lang)}</p>
+              )}
               <p className="text-text-muted text-sm mt-1" suppressHydrationWarning>
                 {lang === "en" ? `${filtered.length} products found` : `${toBn(filtered.length)}টি পণ্য পাওয়া গেছে`}
               </p>
@@ -213,7 +239,12 @@ export default function ShopClient({ initialProducts, initialTotal, pageSize, ap
 
           {filtered.length === 0 && (
             <div className="text-center py-16 text-text-muted">
-              <p className="text-lg">{lang === "en" ? "No products found" : "কোনো পণ্য পাওয়া যায়নি"}</p>
+              <p className="text-lg">
+                {content ? pickL(content.emptyTitle, lang) : (lang === "en" ? "No products found" : "কোনো পণ্য পাওয়া যায়নি")}
+              </p>
+              {content && (
+                <p className="text-sm mt-1">{pickL(content.emptyDescription, lang)}</p>
+              )}
               <button onClick={() => { setActiveCategory("all"); }} className="mt-4 px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors">
                 {lang === "en" ? "View All Products" : "সব পণ্য দেখুন"}
               </button>

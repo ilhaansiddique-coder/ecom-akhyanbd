@@ -83,7 +83,7 @@ export default function InlineSelect({ value, options, onChange, fullWidth, plac
       className={`flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white hover:border-gray-300 focus:border-[#0f5931] focus:outline-none transition-colors ${fullWidth ? "w-full" : "min-w-32"}`}
     >
       {selected?.color && <span className={`w-2 h-2 rounded-full shrink-0 ${selected.color}`} />}
-      <span className="flex-1 text-left text-gray-700">{selected?.label || placeholder || "—"}</span>
+      <span className="flex-1 text-left text-gray-700 whitespace-nowrap truncate">{selected?.label || placeholder || "—"}</span>
       <FiChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
     </button>
   );

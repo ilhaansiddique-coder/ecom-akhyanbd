@@ -26,13 +26,21 @@ function buildCachedQuery(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { isActive: true, deletedAt: null };
-  if (categoryId) where.categoryId = Number(categoryId);
+  if (categoryId) {
+    const catId = Number(categoryId);
+    where.OR = [
+      { categoryId: catId },
+      { categories: { some: { id: catId } } },
+    ];
+  }
   if (brandId) where.brandId = Number(brandId);
   if (isFeatured === "1" || isFeatured === "true") where.isFeatured = true;
   // Exclusion filters power the PDP "Other Products" infinite-scroll strip
   // by letting the client ask for products from any category EXCEPT the
   // current one, paginated.
-  if (excludeCategoryId) where.categoryId = { ...(where.categoryId ? {} : {}), not: Number(excludeCategoryId) };
+  // Exclude products whose primary category matches; M2M-only links are kept
+  // (the PDP "Other Products" strip can still show multi-category products).
+  if (excludeCategoryId) where.categoryId = { not: Number(excludeCategoryId) };
   if (excludeId) where.id = { not: Number(excludeId) };
 
   const cacheKey = `products:${page}:${perPage}:${categoryId}:${brandId}:${isFeatured}:${sortBy}:${sortDir}:x${excludeCategoryId || ""}:i${excludeId || ""}`;

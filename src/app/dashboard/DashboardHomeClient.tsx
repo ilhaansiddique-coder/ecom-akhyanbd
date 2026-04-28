@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
@@ -25,6 +25,7 @@ import {
   FiCalendar,
 } from "react-icons/fi";
 import DashboardLayout from "@/components/DashboardLayout";
+import DateRangePicker from "@/components/DateRangePicker";
 import { useLang } from "@/lib/LanguageContext";
 // Normal imports (not dynamic ssr:false) — file is already "use client" so
 // recharts only ships on client anyway, and the dynamic wrapper caused a
@@ -55,12 +56,12 @@ const statusColors: Record<string, string> = {
 };
 const statusLabelsBn: Record<string, string> = {
   pending: "অপেক্ষমাণ", processing: "প্রসেসিং", on_hold: "অন হোল্ড",
-  confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি সম্পন্ন",
+  confirmed: "নিশ্চিত", shipped: "কুরিয়ার পাঠানো হয়েছে", delivered: "ডেলিভারি সম্পন্ন",
   cancelled: "বাতিল", trashed: "ট্র্যাশ",
 };
 const statusLabelsEn: Record<string, string> = {
   pending: "Pending", processing: "Processing", on_hold: "On Hold",
-  confirmed: "Confirmed", shipped: "Shipped", delivered: "Delivered",
+  confirmed: "Confirmed", shipped: "Courier Sent", delivered: "Delivered",
   cancelled: "Cancelled", trashed: "Trashed",
 };
 const getStatusLabel = (status: string, lang: string) => ({
@@ -98,42 +99,29 @@ interface Stats {
   pending_orders: number;
   low_stock: number;
   low_stock_count: number;
+  cancelled_revenue?: number;
+  // Courier-sent ("actual sales") stats
+  shipped_orders?: number;
+  shipped_revenue?: number;
+  today_shipped?: number;
+  today_shipped_revenue?: number;
+  shipped_customers?: number;
 }
 interface OrderCounts {
   pending: number; confirmed: number; processing: number;
   shipped: number; delivered: number; cancelled: number;
 }
 interface DailyOrder { date: string; count: number; }
-interface TopProduct {
-  id: number;
-  name: string;
-  sold: number;
-  revenue: number;
-  image?: string;
-}
-interface LowStockItem {
-  id: number;
-  name: string;
-  stock: number;
-  image?: string;
-}
+interface TopProduct { id: number; name: string; sold: number; revenue: number; image?: string; }
+interface LowStockItem { id: number; name: string; stock: number; image?: string; }
 
+/** Simple stat card for the bottom row (today / customers / low-stock) */
 function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-  delay,
-  raw,
-  href,
+  icon: Icon, label, value, color, delay, raw, href,
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  color: string;
-  delay: number;
-  raw?: boolean;
-  href?: string;
+  label: string; value: string | number; color: string;
+  delay: number; raw?: boolean; href?: string;
 }) {
   const inner = (
     <>
@@ -148,11 +136,7 @@ function StatCard({
   );
   const baseCls = "bg-white rounded-2xl border border-gray-100 p-4 md:p-5 flex items-center gap-3 md:gap-4 shadow-sm";
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.4 }}
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4 }}>
       {href ? (
         <Link href={href} className={`${baseCls} block hover:border-[var(--primary)] hover:shadow-md transition-all cursor-pointer`}>
           <div className="flex items-center gap-3 md:gap-4 w-full">{inner}</div>
@@ -164,7 +148,105 @@ function StatCard({
   );
 }
 
+/** Combined card: shows both order count (top) and revenue (bottom) for a status */
+function CombinedStatCard({
+  countIcon: CIcon, revenueIcon: RIcon,
+  countLabel, revenueLabel,
+  count, revenue,
+  color, delay, href,
+}: {
+  countIcon: React.ComponentType<{ className?: string }>;
+  revenueIcon: React.ComponentType<{ className?: string }>;
+  countLabel: string; revenueLabel: string;
+  count: number; revenue: number;
+  color: string; delay: number; href?: string;
+}) {
+  const inner = (
+    <div className="flex flex-col gap-0">
+      {/* Count row */}
+      <div className="flex items-center gap-3 p-4 md:p-5">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+          <CIcon className="w-5 h-5 text-white" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-xl md:text-2xl font-bold text-gray-800">{toBn(count)}</div>
+          <div className="text-xs text-gray-500 mt-0.5 truncate">{countLabel}</div>
+        </div>
+      </div>
+      {/* Divider */}
+      <div className="mx-4 border-t border-gray-100" />
+      {/* Revenue row */}
+      <div className="flex items-center gap-3 p-4 md:p-5">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color} opacity-80`}>
+          <RIcon className="w-5 h-5 text-white" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-base md:text-lg font-bold text-gray-800 truncate">৳{toBn(revenue)}</div>
+          <div className="text-xs text-gray-500 mt-0.5 truncate">{revenueLabel}</div>
+        </div>
+      </div>
+    </div>
+  );
+  const baseCls = "bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden";
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4 }}>
+      {href ? (
+        <Link href={href} className={`${baseCls} block hover:border-[var(--primary)] hover:shadow-md transition-all cursor-pointer`}>
+          {inner}
+        </Link>
+      ) : (
+        <div className={baseCls}>{inner}</div>
+      )}
+    </motion.div>
+  );
+}
+
 const PIE_COLORS = ["#eab308", "#3b82f6", "#6366f1", "#8b5cf6", "var(--primary)", "#ef4444"];
+
+/**
+ * Wraps a Recharts <ResponsiveContainer> so it only mounts AFTER the parent
+ * <div> has been measured. Skips Recharts' first-paint warning where
+ * ResponsiveContainer reads `clientWidth` of a not-yet-laid-out grid item
+ * and gets -1, then logs "width(-1) and height(-1)".
+ *
+ * The wrapper renders an empty placeholder div with the requested fixed
+ * height; once a ResizeObserver reports a positive width, the chart renders.
+ * After that the chart's own internal observer keeps it sized correctly.
+ */
+function MeasuredChart({ height = 256, children }: { height?: number; children: React.ReactNode }) {
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    // Trigger a layout flush so the next render can measure correctly.
+    node.getBoundingClientRect();
+  }, []);
+  const [ready, setReady] = useState(false);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    if (typeof ResizeObserver === "undefined") {
+      setReady(true);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setReady(true);
+          ro.disconnect();
+          break;
+        }
+      }
+    });
+    ro.observe(node);
+    // Belt + suspenders: in case observer is slow, also flip after first paint.
+    requestAnimationFrame(() => setReady(true));
+  }, []);
+  return (
+    <div ref={containerRef} style={{ width: "100%", height, minWidth: 0 }}>
+      <div ref={ref} style={{ width: "100%", height: "100%" }}>
+        {ready ? children : null}
+      </div>
+    </div>
+  );
+}
 
 interface DashboardInitialData {
   stats: Stats | null;
@@ -174,6 +256,14 @@ interface DashboardInitialData {
   recentOrders: Order[];
   topProducts: TopProduct[];
   lowStockItems: LowStockItem[];
+  initialFrom?: string;
+  initialTo?: string;
+}
+
+/** Return today's date in YYYY-MM-DD using BD time (UTC+6) */
+function bdToday(): string {
+  const nowBD = new Date(Date.now() + 6 * 60 * 60 * 1000);
+  return nowBD.toISOString().slice(0, 10);
 }
 
 function AdminDashboard({ initialData }: { initialData?: DashboardInitialData }) {
@@ -188,88 +278,225 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(initialData?.lowStockItems ?? []);
   const [loading, setLoading] = useState(!initialData);
 
+  // ── Date filter — default to today ──
+  const [fromDate, setFromDate] = useState(initialData?.initialFrom ?? bdToday());
+  const [toDate, setToDate] = useState(initialData?.initialTo ?? bdToday());
+  const [filtering, setFiltering] = useState(false);
+
+  const applyData = useCallback((res: any) => {
+    setStats(res.stats || null);
+    setOrderCounts(res.order_counts || emptyOrderCounts);
+    setRevByStatus(res.revenue_by_status || emptyOrderCounts);
+    setDailyOrders(res.daily_orders || []);
+    setRecentOrders(res.recent_orders || []);
+    setTopProducts((res.top_products || []).map((p: any) => ({
+      id: p.id, name: p.name,
+      sold: p.sold_count ?? p.sold ?? 0,
+      revenue: (p.sold_count ?? p.sold ?? 0) * (p.price ?? 0),
+      image: p.image,
+    })));
+    setLowStockItems(res.low_stock || []);
+  }, []);
+
+  // Initial load — always default to today
   useEffect(() => {
-    if (initialData) return; // server already loaded
-    api.admin.dashboard()
-      .then((res) => {
-        setStats(res.stats || null);
-        setOrderCounts(res.order_counts || {});
-        setRevByStatus(res.revenue_by_status || {});
-        setDailyOrders(res.daily_orders || []);
-        setRecentOrders(res.recent_orders || []);
-        setTopProducts((res.top_products || []).map((p: any) => ({
-          id: p.id, name: p.name,
-          sold: p.sold_count ?? p.sold ?? 0,
-          revenue: (p.sold_count ?? p.sold ?? 0) * (p.price ?? 0),
-          image: p.image,
-        })));
-        setLowStockItems(res.low_stock || []);
-      })
+    if (initialData) return; // SSR already provides today-scoped data
+    const today = bdToday();
+    api.admin.dashboard(`from=${today}&to=${today}`)
+      .then(applyData)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  // Fetch when date range changes
+  const fetchFiltered = useCallback(async (from: string, to: string) => {
+    setFiltering(true);
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to)   params.set("to",   to);
+      const res = await api.admin.dashboard(params.toString());
+      applyData(res);
+    } catch {}
+    finally { setFiltering(false); }
+  }, [applyData]);
+
   if (loading) return <StatsSkeleton />;
 
-  // Today (local) in YYYY-MM-DD for date-filter URL params
-  const todayStr = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+  const todayStr = bdToday();
+  const cancelledRev = stats?.cancelled_revenue ?? revByStatus.cancelled ?? 0;
 
-  const row1 = [
-    { icon: FiShoppingBag, label: t("dash.totalOrders"), value: stats?.total_orders ?? 0, color: "bg-[var(--primary)]", href: "/dashboard/orders" },
-    { icon: FiClock, label: t("dash.pendingOrders"), value: orderCounts.pending, color: "bg-yellow-500", href: "/dashboard/orders?status=pending" },
-    { icon: FiCheckCircle, label: t("dash.confirmed"), value: orderCounts.confirmed, color: "bg-blue-500", href: "/dashboard/orders?status=confirmed" },
-    { icon: FiXCircle, label: t("dash.cancelled"), value: orderCounts.cancelled, color: "bg-red-500", href: "/dashboard/orders?status=cancelled" },
+  const combinedCards = [
+    {
+      countIcon: FiShoppingBag, revenueIcon: FiDollarSign,
+      countLabel: lang === "en" ? "Total Orders"     : "মোট অর্ডার",
+      revenueLabel: lang === "en" ? "Total Revenue"  : "মোট আয়",
+      count: stats?.total_orders ?? 0,
+      revenue: stats?.total_revenue ?? 0,
+      color: "bg-[var(--primary)]",
+      href: "/dashboard/orders",
+    },
+    {
+      countIcon: FiClock, revenueIcon: FiDollarSign,
+      countLabel: lang === "en" ? "Pending Orders"    : "মুলতুবি অর্ডার",
+      revenueLabel: lang === "en" ? "Pending Revenue" : "মুলতুবি আয়",
+      count: orderCounts.pending,
+      revenue: revByStatus.pending,
+      color: "bg-yellow-500",
+      href: "/dashboard/orders?status=pending",
+    },
+    {
+      countIcon: FiCheckCircle, revenueIcon: FiDollarSign,
+      countLabel: lang === "en" ? "Confirmed Orders"    : "নিশ্চিত অর্ডার",
+      revenueLabel: lang === "en" ? "Confirmed Revenue" : "নিশ্চিত আয়",
+      count: orderCounts.confirmed,
+      revenue: revByStatus.confirmed,
+      color: "bg-blue-500",
+      href: "/dashboard/orders?status=confirmed",
+    },
+    {
+      countIcon: FiXCircle, revenueIcon: FiDollarSign,
+      countLabel: lang === "en" ? "Cancelled Orders"  : "বাতিল অর্ডার",
+      revenueLabel: lang === "en" ? "Cancelled Amount (excl. shipping)" : "বাতিল পরিমাণ (ডেলিভারি বাদে)",
+      count: orderCounts.cancelled,
+      revenue: cancelledRev,
+      color: "bg-red-500",
+      href: "/dashboard/orders?status=cancelled",
+    },
   ];
+
   const row2 = [
-    { icon: FiDollarSign, label: t("dash.totalRevenue"), value: `৳${toBn(stats?.total_revenue ?? 0)}`, color: "bg-emerald-500", raw: true },
-    { icon: FiDollarSign, label: t("dash.pendingRev"), value: `৳${toBn(revByStatus.pending)}`, color: "bg-yellow-500", raw: true },
-    { icon: FiDollarSign, label: t("dash.confirmedRev"), value: `৳${toBn(revByStatus.confirmed)}`, color: "bg-blue-500", raw: true },
-    { icon: FiDollarSign, label: t("dash.cancelledAmt"), value: `৳${toBn(revByStatus.cancelled)}`, color: "bg-red-500", raw: true },
-  ];
-  const row3 = [
-    { icon: FiCalendar, label: t("dash.todayOrders"), value: stats?.today_orders ?? 0, color: "bg-indigo-500", href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
-    { icon: FiTrendingUp, label: t("dash.todayRevenue"), value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true, href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
+    { icon: FiCalendar, label: lang === "en" ? "Today's Orders"  : "আজকের অর্ডার",  value: stats?.today_orders ?? 0, color: "bg-indigo-500", href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
+    { icon: FiTrendingUp, label: lang === "en" ? "Today's Revenue" : "আজকের আয়",    value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true },
     { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500", href: "/dashboard/users" },
     { icon: FiAlertCircle, label: t("dash.lowStock"), value: stats?.low_stock_count ?? stats?.low_stock ?? 0, color: "bg-orange-500", href: "/dashboard/products?filter=low_stock" },
   ];
 
   const pieData = [
-    { name: lang === "en" ? "Pending" : "অপেক্ষমাণ", value: orderCounts.pending },
-    { name: lang === "en" ? "Confirmed" : "নিশ্চিত", value: orderCounts.confirmed },
-    { name: lang === "en" ? "Processing" : "প্রসেসিং", value: orderCounts.processing },
-    { name: lang === "en" ? "Shipped" : "শিপড", value: orderCounts.shipped },
-    { name: lang === "en" ? "Delivered" : "ডেলিভারি", value: orderCounts.delivered },
-    { name: lang === "en" ? "Cancelled" : "বাতিল", value: orderCounts.cancelled },
+    { name: lang === "en" ? "Pending"    : "অপেক্ষমাণ",              value: orderCounts.pending },
+    { name: lang === "en" ? "Confirmed"  : "নিশ্চিত",               value: orderCounts.confirmed },
+    { name: lang === "en" ? "Processing" : "প্রসেসিং",              value: orderCounts.processing },
+    { name: lang === "en" ? "Courier Sent" : "কুরিয়ার পাঠানো হয়েছে", value: orderCounts.shipped },
+    { name: lang === "en" ? "Delivered"  : "ডেলিভারি",              value: orderCounts.delivered },
+    { name: lang === "en" ? "Cancelled"  : "বাতিল",                 value: orderCounts.cancelled },
   ].filter(d => d.value > 0);
 
   return (
     <div className="space-y-6">
-      {/* Row 1: Order Counts */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {row1.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={i * 0.05} href={s.href} />)}
+
+      {/* ── Date Filter Bar ── */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-gray-700 shrink-0">
+            <FiCalendar className="w-4 h-4 text-[var(--primary)]" />
+            <span className="text-sm font-bold">{lang === "en" ? "Filter by Date" : "তারিখ ফিল্টার"}</span>
+          </div>
+          <DateRangePicker
+            from={fromDate}
+            to={toDate}
+            onChange={(f, t) => {
+              setFromDate(f);
+              setToDate(t);
+              fetchFiltered(f, t);
+            }}
+          />
+          {filtering && (
+            <span className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+          )}
+        </div>
+      </motion.div>
+
+      {/* ── Combined stat cards (count + revenue per status) ── */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
+        {combinedCards.map((c, i) => (
+          <CombinedStatCard
+            key={i}
+            countIcon={c.countIcon}
+            revenueIcon={c.revenueIcon}
+            countLabel={c.countLabel}
+            revenueLabel={c.revenueLabel}
+            count={c.count}
+            revenue={c.revenue}
+            color={c.color}
+            delay={i * 0.05}
+            href={c.href}
+          />
+        ))}
       </div>
 
-      {/* Row 2: Revenue Breakdown */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {row2.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.2 + i * 0.05} raw={s.raw} />)}
+      {/* ── Actual Sales (courier-sent) combined cards ── */}
+      <div className={`transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <div className="w-2 h-2 rounded-full bg-teal-500" />
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+            {lang === "en" ? "Actual Sales — Courier Sent" : "প্রকৃত বিক্রয় — কুরিয়ার পাঠানো"}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Courier Sent count + revenue */}
+          <CombinedStatCard
+            countIcon={FiPackage}
+            revenueIcon={FiDollarSign}
+            countLabel={lang === "en" ? "Courier Sent Orders" : "কুরিয়ার পাঠানো অর্ডার"}
+            revenueLabel={lang === "en" ? "Sales Revenue (excl. shipping)" : "বিক্রয় আয় (ডেলিভারি বাদে)"}
+            count={stats?.shipped_orders ?? 0}
+            revenue={stats?.shipped_revenue ?? 0}
+            color="bg-teal-500"
+            delay={0.05}
+            href="/dashboard/orders?status=shipped"
+          />
+          {/* Card 2: Today's courier count + today's revenue */}
+          <CombinedStatCard
+            countIcon={FiCalendar}
+            revenueIcon={FiDollarSign}
+            countLabel={lang === "en" ? "Today's Courier" : "আজকের কুরিয়ার"}
+            revenueLabel={lang === "en" ? "Today's Sales" : "আজকের বিক্রয়"}
+            count={stats?.today_shipped ?? 0}
+            revenue={stats?.today_shipped_revenue ?? 0}
+            color="bg-indigo-500"
+            delay={0.1}
+            href={`/dashboard/orders?status=shipped&from=${todayStr}&to=${todayStr}`}
+          />
+          {/* Card 3: Customers + avg order value */}
+          <CombinedStatCard
+            countIcon={FiUsers}
+            revenueIcon={FiTrendingUp}
+            countLabel={lang === "en" ? "Customers (Shipped)" : "গ্রাহক (কুরিয়ার)"}
+            revenueLabel={lang === "en" ? "Avg Order Value" : "গড় অর্ডার মূল্য"}
+            count={stats?.shipped_customers ?? 0}
+            revenue={(stats?.shipped_orders ?? 0) > 0
+              ? Math.round((stats?.shipped_revenue ?? 0) / (stats?.shipped_orders ?? 1))
+              : 0}
+            color="bg-violet-500"
+            delay={0.15}
+          />
+          {/* Card 4: Delivered count + delivered revenue */}
+          <CombinedStatCard
+            countIcon={FiPackage}
+            revenueIcon={FiDollarSign}
+            countLabel={lang === "en" ? "Delivered Orders" : "ডেলিভারি সম্পন্ন"}
+            revenueLabel={lang === "en" ? "Delivered Revenue" : "ডেলিভারি আয়"}
+            count={orderCounts.delivered}
+            revenue={revByStatus.delivered}
+            color="bg-emerald-500"
+            delay={0.2}
+            href="/dashboard/orders?status=delivered"
+          />
+        </div>
       </div>
 
-      {/* Row 3: Business Health */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {row3.map((s, i) => <StatCard key={i} icon={s.icon} label={s.label} value={s.value} color={s.color} delay={0.4 + i * 0.05} raw={s.raw} href={s.href} />)}
-      </div>
 
       {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className={`grid lg:grid-cols-2 gap-6 transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
         {/* Bar Chart — Last 7 Days */}
+        {/* min-w-0 on grid item: lets it shrink below its content's intrinsic
+            width so ResponsiveContainer can measure a real width instead of -1. */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
-          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm min-w-0">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.weeklyOrders")}</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <MeasuredChart height={256}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <RechartsBarChart data={dailyOrders} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} allowDecimals={false} />
@@ -277,18 +504,18 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
                 <Bar dataKey="count" fill="var(--primary)" radius={[6, 6, 0, 0]} />
               </RechartsBarChart>
             </ResponsiveContainer>
-          </div>
+          </MeasuredChart>
         </motion.div>
 
         {/* Pie Chart — Status Breakdown */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
-          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm min-w-0">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.statusBreakdown")}</h2>
           {pieData.length === 0 ? (
             <p className="text-sm text-gray-400 py-16 text-center">{t("empty.orders")}</p>
           ) : (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <MeasuredChart height={256}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <RechartsPieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value"
                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
@@ -299,7 +526,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
                   <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
                 </RechartsPieChart>
               </ResponsiveContainer>
-            </div>
+            </MeasuredChart>
           )}
         </motion.div>
       </div>
@@ -559,8 +786,8 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                             <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
                               {(["pending", "processing", "confirmed", "shipped", "delivered"] as const).map((step, i) => {
                                 const stepLabels: Record<string, string> = lang === "en"
-                                  ? { pending: "Pending", processing: "Processing", confirmed: "Confirmed", shipped: "Shipped", delivered: "Delivered" }
-                                  : { pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি" };
+                                  ? { pending: "Pending", processing: "Processing", confirmed: "Confirmed", shipped: "Courier Sent", delivered: "Delivered" }
+                                  : { pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "কুরিয়ার পাঠানো হয়েছে", delivered: "ডেলিভারি" };
                                 const stepOrder = ["pending", "processing", "confirmed", "shipped", "delivered"];
                                 const currentIdx = stepOrder.indexOf(order.status);
                                 const isCancelled = order.status === "cancelled";

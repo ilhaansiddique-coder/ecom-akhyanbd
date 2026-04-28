@@ -30,7 +30,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
   processing: { label: "প্রসেসিং", color: "bg-indigo-100 text-indigo-800" },
   on_hold: { label: "অন হোল্ড", color: "bg-orange-100 text-orange-800" },
   confirmed: { label: "নিশ্চিত", color: "bg-blue-100 text-blue-800" },
-  shipped: { label: "শিপড", color: "bg-purple-100 text-purple-800" },
+  shipped: { label: "কুরিয়ার পাঠানো হয়েছে", color: "bg-purple-100 text-purple-800" },
   delivered: { label: "ডেলিভারি সম্পন্ন", color: "bg-green-100 text-green-800" },
   cancelled: { label: "বাতিল", color: "bg-red-100 text-red-800" },
 };
@@ -124,7 +124,7 @@ export default function OrderConfirmationPage() {
                   const isActive = i <= currentIdx;
                   const isCurrent = i === currentIdx;
                   const stepLabels: Record<string, string> = {
-                    pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "শিপড", delivered: "ডেলিভারি"
+                    pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "কুরিয়ার পাঠানো হয়েছে", delivered: "ডেলিভারি"
                   };
                   return (
                     <div key={step} className="flex items-center" style={{ flex: i < steps.length - 1 ? 1 : "none" }}>

@@ -22,8 +22,9 @@ const productSelect = {
   hasVariations: true, variationType: true,
   customShipping: true, shippingCost: true, description: true,
   createdAt: true,
-  category: { select: { id: true, name: true } },
-  brand:    { select: { id: true, name: true } },
+  category:   { select: { id: true, name: true } },
+  categories: { select: { id: true, name: true } },
+  brand:      { select: { id: true, name: true } },
   variants: {
     orderBy: { sortOrder: "asc" as const },
     select: { id: true, label: true, price: true, originalPrice: true, sku: true, stock: true, unlimitedStock: true, image: true, isActive: true, sortOrder: true },
@@ -90,6 +91,7 @@ export default async function ProductsPage() {
       original_price: p.originalPrice != null ? Number(p.originalPrice) : null,
       is_active: p.isActive,
       is_featured: p.isFeatured,
+      categories: p.categories ?? [],
       variants: p.variants.map((v) => ({
         ...v,
         price: Number(v.price),

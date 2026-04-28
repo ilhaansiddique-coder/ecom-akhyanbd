@@ -106,7 +106,7 @@ export const api = {
 
   // ============ ADMIN API ============
   admin: {
-    dashboard: () => fetchAPI("/admin/dashboard"),
+    dashboard: (params?: string) => fetchAPI(`/admin/dashboard${params ? `?${params}` : ""}`),
     stats: () => fetchAPI("/admin/dashboard"),
     recentOrders: () => fetchAPI("/admin/dashboard"),
     topProducts: () => fetchAPI("/admin/dashboard"),
@@ -144,6 +144,11 @@ export const api = {
     createUser: (data: Record<string, unknown>) => fetchAPI("/admin/users", { method: "POST", body: JSON.stringify(data) }),
     updateUser: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     deleteUser: (id: number) => fetchAPI(`/admin/users/${id}`, { method: "DELETE" }),
+    bulkUsers: (action: "delete" | "update_role", ids: number[], role?: "customer" | "staff" | "admin") =>
+      fetchAPI(`/admin/users/bulk`, {
+        method: "POST",
+        body: JSON.stringify(role ? { action, ids, role } : { action, ids }),
+      }),
     searchCustomers: (q: string) => fetchAPI(`/admin/customers/search?q=${encodeURIComponent(q)}`),
 
     // Reviews

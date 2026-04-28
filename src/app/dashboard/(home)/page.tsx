@@ -18,59 +18,86 @@ export default async function DashboardServerPage() {
   }
 
   try {
+    // BD timezone (UTC+6, no DST). Computed first — referenced by all queries.
+    const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
+    const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
+    // BD date string e.g. "2026-04-28" (add 6 h to get UTC midnight of the BD day)
+    const todayStr = new Date(today.getTime() + BD_OFFSET_MS).toISOString().slice(0, 10);
+
     const [
       totalOrders,
       pendingOrders,
       revenueAgg,
+      cancelledRevAgg,
       totalProducts,
       totalCustomers,
       recentOrdersRaw,
+      shippedCount,
+      shippedRevAgg,
+      todayShippedCount,
+      todayShippedRevAgg,
+      shippedCustomerGroups,
     ] = await Promise.all([
-      prisma.order.count({ where: { status: { not: "trashed" } } }),
-      prisma.order.count({ where: { status: "pending" } }),
-      prisma.order.aggregate({ _sum: { total: true } }),
+      // All date-filterable order queries scoped to today (default view)
+      prisma.order.count({ where: { status: { not: "trashed" }, createdAt: { gte: today } } }),
+      prisma.order.count({ where: { status: "pending", createdAt: { gte: today } } }),
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
+      }),
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "cancelled", createdAt: { gte: today } },
+      }),
       prisma.product.count(),
       prisma.user.count({ where: { role: "customer" } }),
       prisma.order.findMany({
         take: 10,
         orderBy: { createdAt: "desc" },
-        where: { status: { not: "trashed" } },
+        where: { status: { not: "trashed" }, createdAt: { gte: today } },
         include: { items: true },
       }),
+      // Courier-sent ("actual sales") stats — today-scoped for SSR default
+      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "shipped", createdAt: { gte: today } },
+      }),
+      // todayShipped / todayShippedRevenue — always today (same as above when default=today)
+      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
+      prisma.order.aggregate({
+        _sum: { total: true, shippingCost: true },
+        where: { status: "shipped", createdAt: { gte: today } },
+      }),
+      prisma.order.groupBy({ by: ["customerPhone"], where: { status: "shipped", createdAt: { gte: today } } }),
     ]);
 
-    // Order counts by status
+    // Order counts by status (today-scoped)
     const statusCountsRaw = await prisma.order.groupBy({
       by: ["status"],
       _count: { id: true },
+      where: { createdAt: { gte: today } },
     });
     const orderCounts = { pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 } as Record<string, number>;
     for (const s of statusCountsRaw) {
       if (s.status in orderCounts) orderCounts[s.status] = s._count.id;
     }
 
-    // Revenue by status
+    // Revenue by status (non-cancelled, today-scoped)
     const revByStatusRaw = await prisma.order.groupBy({
       by: ["status"],
-      _sum: { total: true },
+      _sum: { total: true, shippingCost: true },
+      where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
     });
-    const revByStatus = { pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 } as Record<string, number>;
+    const cancelledRevenue = Number(cancelledRevAgg._sum.total ?? 0) - Number(cancelledRevAgg._sum.shippingCost ?? 0);
+    const revByStatus = { pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: cancelledRevenue } as Record<string, number>;
     for (const s of revByStatusRaw) {
-      if (s.status in revByStatus) revByStatus[s.status] = Number(s._sum.total ?? 0);
+      if (s.status in revByStatus) revByStatus[s.status] = Number(s._sum.total ?? 0) - Number(s._sum.shippingCost ?? 0);
     }
 
-    // Today stats — BD timezone (UTC+6, no DST). Hostinger Node has small-icu
-    // so we avoid Intl tz lookups and use plain offset math instead.
-    const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
-    const nowMs = Date.now();
-    const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
-    const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
-    const [todayOrders, todayRevAgg] = await Promise.all([
-      prisma.order.count({ where: { createdAt: { gte: today }, status: { not: "trashed" } } }),
-      prisma.order.aggregate({ where: { createdAt: { gte: today }, status: { not: "trashed" } }, _sum: { total: true } }),
-    ]);
-
-    // Low stock
+    // Low stock (always real-time, no date filter)
     const lowStockRaw = await prisma.product.findMany({
       where: { stock: { lte: 5 }, unlimitedStock: false },
       take: 10,
@@ -78,7 +105,7 @@ export default async function DashboardServerPage() {
       select: { id: true, name: true, stock: true, image: true },
     });
 
-    // Top products by sold count
+    // Top products by sold count (always all-time)
     const topProductsRaw = await prisma.product.findMany({
       orderBy: { soldCount: "desc" },
       take: 5,
@@ -103,16 +130,25 @@ export default async function DashboardServerPage() {
       count: dailyCounts[i],
     }));
 
+    const totalRevenue = Number(revenueAgg._sum.total ?? 0) - Number(revenueAgg._sum.shippingCost ?? 0);
+
     const stats = {
       total_orders: totalOrders,
-      today_orders: todayOrders,
-      total_revenue: Number(revenueAgg._sum.total ?? 0),
-      today_revenue: Number(todayRevAgg._sum.total ?? 0),
+      today_orders: totalOrders,          // same value — both scoped to today
+      total_revenue: totalRevenue,
+      today_revenue: totalRevenue,         // same value
+      cancelled_revenue: cancelledRevenue,
       total_customers: totalCustomers,
       total_products: totalProducts,
       pending_orders: pendingOrders,
       low_stock: lowStockRaw.length,
       low_stock_count: lowStockRaw.length,
+      // Courier-sent ("actual sales") stats
+      shipped_orders: shippedCount,
+      shipped_revenue: Number(shippedRevAgg._sum.total ?? 0) - Number(shippedRevAgg._sum.shippingCost ?? 0),
+      today_shipped: todayShippedCount,
+      today_shipped_revenue: Number(todayShippedRevAgg._sum.total ?? 0) - Number(todayShippedRevAgg._sum.shippingCost ?? 0),
+      shipped_customers: shippedCustomerGroups.length,
     };
 
     const recentOrders = recentOrdersRaw.map((o) => ({
@@ -157,6 +193,8 @@ export default async function DashboardServerPage() {
           recentOrders: recentOrders as any,
           topProducts,
           lowStockItems,
+          initialFrom: todayStr,
+          initialTo: todayStr,
         }}
       />
     );

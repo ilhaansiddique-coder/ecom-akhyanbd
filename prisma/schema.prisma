@@ -57,7 +57,8 @@ model Category {
   createdAt   DateTime? @default(now()) @map("created_at")
   updatedAt   DateTime? @updatedAt @map("updated_at")
 
-  products Product[]
+  products         Product[]
+  categoryProducts Product[] @relation("ProductCategories")
 
   @@map("categories")
 }
@@ -80,7 +81,7 @@ model Product {
   id            Int       @id @default(autoincrement())
   name          String
   slug          String    @unique
-  categoryId    Int       @map("category_id")
+  categoryId    Int?      @map("category_id")
   brandId       Int?      @map("brand_id")
   description   String?
   price         Float
@@ -105,7 +106,8 @@ model Product {
   createdAt     DateTime? @default(now()) @map("created_at")
   updatedAt     DateTime? @updatedAt @map("updated_at")
 
-  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category    Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categories  Category[]         @relation("ProductCategories")
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
   variants    ProductVariant[]
   flashSales  FlashSaleProduct[]
@@ -179,6 +181,7 @@ model Order {
   orderToken      String?   @unique @map("order_token")
   notes              String?
   courierSent        Boolean   @default(false) @map("courier_sent")
+  courierSentAt      DateTime? @map("courier_sent_at") // Set once when first dispatched to courier — never overwritten. Use for daily shipment analytics.
   courierType        String?   @map("courier_type") // "steadfast" | "pathao"
   consignmentId      String?   @map("consignment_id")
   courierStatus      String?   @map("courier_status")
@@ -475,22 +478,32 @@ model LandingPage {
 }
 
 model BlogPost {
-  id          Int       @id @default(autoincrement())
-  title       String
-  slug        String    @unique
-  excerpt     String?
-  content     String
-  image       String?
-  authorId    Int?      @map("author_id")
-  isPublished Boolean   @default(false) @map("is_published")
-  publishedAt DateTime? @map("published_at")
-  createdAt   DateTime? @default(now()) @map("created_at")
-  updatedAt   DateTime? @updatedAt @map("updated_at")
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?
+  content         String
+  image           String?
+  category        String?
+  tags            String?   @db.Text
+  readTime        Int?      @map("read_time")
+  featured        Boolean   @default(false)
+  metaTitle       String?   @map("meta_title")
+  metaDescription String?   @map("meta_description") @db.Text
+  metaKeywords    String?   @map("meta_keywords") @db.Text
+  ogImage         String?   @map("og_image")
+  authorId        Int?      @map("author_id")
+  isPublished     Boolean   @default(false) @map("is_published")
+  publishedAt     DateTime? @map("published_at")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
 
   author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([isPublished])
   @@index([slug])
+  @@index([featured])
+  @@index([category])
   @@map("blog_posts")
 }
 

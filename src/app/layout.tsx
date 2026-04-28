@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
+import { headers } from "next/headers";
 import ClientLayout from "@/components/ClientLayout";
 import HeadScripts from "@/components/HeadScripts";
 import { prisma } from "@/lib/prisma";
 import { buildThemeCss } from "@/lib/theme-tokens";
+import { autoCaptureSiteUrl } from "@/lib/auto-site-url";
 
 // Font loading strategy (perf-tuned for mobile LCP):
 //   - PRIMARY body font (Hind Siliguri) stays on display: "block" + preload:
@@ -122,6 +124,12 @@ export default async function RootLayout({
   // Load all site settings server-side so the SiteSettingsContext hydrates synchronously.
   // This eliminates the logo flash on reload caused by the previous client-side fetch.
   const settings = await loadSiteSettings();
+
+  // Auto-capture the production site URL from the request host the first time
+  // a non-local request reaches us. Fixes localhost-link-in-emails forever
+  // without requiring the admin to set NEXT_PUBLIC_SITE_URL or APP_URL by hand.
+  // Idempotent + non-blocking — a no-op once set.
+  void autoCaptureSiteUrl();
   const fbDomainVerification = settings.fb_domain_verification || null;
   const siteName = settings.site_name || "Site";
   const siteLogoUrl = settings.site_logo
@@ -134,8 +142,20 @@ export default async function RootLayout({
   // Rendered into <head> so it overrides the defaults in globals.css before paint (no FOUC).
   const themeCss = buildThemeCss(settings);
 
+  // Resolve the active language SERVER-SIDE so initial paint already matches
+  // the user's saved preference. Without this, every dashboard refresh would
+  // flash Bangla → English (or vice-versa) as the client useEffect catches up.
+  // Path comes from middleware via the x-pathname header.
+  const reqHeaders = await headers();
+  const pathname = reqHeaders.get("x-pathname") || "";
+  const isDashboardPath = pathname.startsWith("/dashboard");
+  const dashboardLang = (settings.dashboard_language === "en" ? "en" : settings.dashboard_language === "bn" ? "bn" : "en");
+  const siteLang = (settings.site_language === "en" ? "en" : "bn");
+  const initialLang: "en" | "bn" = isDashboardPath ? dashboardLang as "en" | "bn" : siteLang;
+  const langClass = initialLang === "en" ? "lang-en" : "lang-bn";
+
   return (
-    <html lang="bn" className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased lang-bn`} data-scroll-behavior="smooth" suppressHydrationWarning>
+    <html lang={initialLang} className={`${hindSiliguri.variable} ${playfairDisplay.variable} ${manrope.variable} ${bricolage.variable} antialiased ${langClass}`} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {fbDomainVerification && (
           <meta name="facebook-domain-verification" content={fbDomainVerification} />
@@ -150,6 +170,7 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://connect.facebook.net" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
+        <link rel="dns-prefetch" href="https://www.clarity.ms" />
         <style id="theme-tokens" dangerouslySetInnerHTML={{ __html: themeCss }} />
       </head>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
@@ -174,7 +195,7 @@ export default async function RootLayout({
             ...(sameAs.length > 0 && { sameAs }),
           }}
         />
-        <ClientLayout initialSettings={settings}>{children}</ClientLayout>
+        <ClientLayout initialSettings={settings} initialLang={initialLang}>{children}</ClientLayout>
       </body>
     </html>
   );

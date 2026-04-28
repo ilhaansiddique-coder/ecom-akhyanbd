@@ -16,12 +16,12 @@ const colors = {
 };
 
 // ─── Inputs ───
-const input = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none transition-colors";
-const inputSearch = "w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none";
+const input = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-primary focus:outline-none transition-colors";
+const inputSearch = "w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:border-primary focus:outline-none";
 const textarea = `${input} resize-none`;
-const select = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none bg-white";
-const selectSmall = "px-3 py-1.5 border border-gray-200 rounded-xl text-sm focus:border-[#0f5931] focus:outline-none bg-white";
-const checkbox = "w-4 h-4 accent-[#0f5931] rounded";
+const select = "w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-primary focus:outline-none bg-white";
+const selectSmall = "px-3 py-1.5 border border-gray-200 rounded-xl text-sm focus:border-primary focus:outline-none bg-white";
+const checkbox = "w-4 h-4 accent-primary rounded";
 
 // ─── Labels ───
 const label = "block text-xs font-medium text-gray-600 mb-1";
@@ -29,13 +29,13 @@ const sectionTitle = "text-xs font-bold text-gray-400 uppercase tracking-wide";
 
 // ─── Buttons ───
 const btn = {
-  primary: "px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50",
-  primaryFull: "flex-1 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors disabled:opacity-50",
+  primary: "px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors disabled:opacity-50",
+  primaryFull: "flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors disabled:opacity-50",
   cancel: "flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors",
   danger: "px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors",
   ghost: "px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors",
-  outline: "px-4 py-2 border border-[#0f5931] text-[#0f5931] rounded-xl text-sm font-medium hover:bg-[#0f5931] hover:text-white transition-colors disabled:opacity-50",
-  add: "flex items-center gap-2 px-4 py-2.5 bg-[#0f5931] text-white rounded-xl text-sm font-semibold hover:bg-[#12693a] transition-colors",
+  outline: "px-4 py-2 border border-primary text-primary rounded-xl text-sm font-medium hover:bg-primary hover:text-white transition-colors disabled:opacity-50",
+  add: "flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors",
   icon: {
     edit: "p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors",
     delete: "p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors",
@@ -102,7 +102,7 @@ const divider = "border-t border-gray-100";
 const upload = {
   zone: (active: boolean) =>
     `relative border-2 border-dashed rounded-xl transition-colors ${
-      active ? "border-[#0f5931] bg-green-50/50" : "border-gray-200 hover:border-gray-300"
+      active ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
     }`,
   changeBtn: "cursor-pointer px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-600 transition-colors",
   deleteBtn: "px-2.5 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-medium text-red-600 transition-colors",
@@ -110,7 +110,7 @@ const upload = {
 
 // ─── Text ───
 const text = {
-  price: "font-semibold text-[#0f5931] whitespace-nowrap",
+  price: "font-semibold text-primary whitespace-nowrap",
   muted: "text-gray-500",
   small: "text-xs text-gray-400",
 };

@@ -22,6 +22,7 @@ function usePresets() {
     { label: t("date.last90"), days: 90 },
     { label: t("date.thisMonth"), days: -1 },
     { label: t("date.lastMonth"), days: -2 },
+    { label: t("date.allTime"), days: -99 },
   ];
 }
 
@@ -57,6 +58,8 @@ function getPresetRange(days: number): { from: string; to: string } {
     const last = new Date(today.getFullYear(), today.getMonth(), 0);
     return { from: toDateStr(first), to: toDateStr(last) };
   }
+  // All time — no date constraint
+  if (days === -99) return { from: "", to: "" };
   return { from: toDateStr(new Date(today.getTime() - days * 86400000)), to };
 }
 

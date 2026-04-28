@@ -47,6 +47,8 @@ import {
   FiMail,
   FiGlobe,
   FiShield,
+  FiInfo,
+  FiRefreshCw,
 } from "react-icons/fi";
 
 interface NavItem {
@@ -92,7 +94,7 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         label: t("dash.productMgmt"),
         icon: FiBox,
         items: [
-          { label: t("dash.products"), href: "/dashboard/products", icon: FiBox },
+          { label: t("dash.allProducts"), href: "/dashboard/products", icon: FiBox },
           { label: t("dash.categories"), href: "/dashboard/categories", icon: FiTag },
           { label: t("dash.brands"), href: "/dashboard/brands", icon: FiAward },
         ],
@@ -101,7 +103,7 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
         label: t("dash.orderMgmt"),
         icon: FiShoppingBag,
         items: [
-          { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
+          { label: t("dash.allOrders"), href: "/dashboard/orders", icon: FiShoppingBag },
           { label: t("dash.incompleteOrders") || "Incomplete Orders", href: "/dashboard/orders/incomplete", icon: FiShoppingBag },
           { label: t("dash.spamDetection") || "Spam Detection", href: "/dashboard/spam", icon: FiShield },
         ],
@@ -155,21 +157,30 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
       items: [
         { label: t("dash.flashSales"), href: "/dashboard/flash-sales", icon: FiZap },
         { label: t("dash.coupons"), href: "/dashboard/coupons", icon: FiPercent },
+        { label: t("dash.shortlinks") || "Shortlinks", href: "/dashboard/shortlinks", icon: FiLink },
       ],
     },
     {
       label: t("dash.content"),
       icon: FiLayout,
       items: [
-        { label: t("dash.homepageContent") || "Homepage", href: "/dashboard/homepage", icon: FiLayout },
-        { label: t("dash.banners"), href: "/dashboard/banners", icon: FiImage },
-        { label: t("dash.menus"), href: "/dashboard/menus", icon: FiMenuIcon },
+        { label: "Header & Footer", href: "/dashboard/content/header-footer", icon: FiLayout },
+        { label: "Home", href: "/dashboard/homepage", icon: FiHome },
+        { label: "Shop", href: "/dashboard/content/shop", icon: FiShoppingBag },
+        { label: "About Us", href: "/dashboard/content/about", icon: FiInfo },
+        { label: "Contact Us", href: "/dashboard/content/contact", icon: FiMail },
         { label: t("dash.blog"), href: "/dashboard/blog", icon: FiFileText },
-        { label: t("dash.landingPages"), href: "/dashboard/landing-pages", icon: FiLayout },
-        { label: t("dash.shortlinks") || "Shortlinks", href: "/dashboard/shortlinks", icon: FiLink },
-        { label: t("dash.feeds") || "Product Feeds", href: "/dashboard/feeds", icon: FiRss },
+        { label: "Email", href: "/dashboard/content/email", icon: FiMail },
+        { label: "Privacy", href: "/dashboard/content/privacy", icon: FiShield },
+        { label: "Terms", href: "/dashboard/content/terms", icon: FiFileText },
+        { label: "Refund", href: "/dashboard/content/refund", icon: FiRefreshCw },
       ],
     },
+    // Promoted out of Content — top-level menu items (no submenu).
+    { label: t("dash.banners"), icon: FiImage, href: "/dashboard/banners" },
+    { label: t("dash.menus"), icon: FiMenuIcon, href: "/dashboard/menus" },
+    { label: t("dash.landingPages"), icon: FiLayout, href: "/dashboard/landing-pages" },
+    { label: t("dash.feeds") || "Product Feeds", icon: FiRss, href: "/dashboard/feeds" },
     {
       label: t("dash.settings"),
       icon: FiSettings,
@@ -435,27 +446,36 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
               >
                 <group.icon className="w-5 h-5" />
               </div>
-              {/* Flyout menu */}
-              <div className="absolute left-full top-0 ml-3 py-2 bg-[var(--primary)] rounded-xl shadow-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] min-w-[200px]">
-                <div className="px-3.5 py-2 text-white/50 text-[10px] font-bold uppercase tracking-wider border-b border-white/10 mb-1">{group.label}</div>
-                {group.items.map((item) => {
-                  const isItemActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                        isItemActive
-                          ? "text-white bg-white/15"
-                          : "text-white/70 hover:text-white hover:bg-white/10"
-                      }`}
-                    >
-                      <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-                <div className="absolute top-3 -left-1.5 w-3 h-3 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
+              {/* Flyout menu — vertically centered on icon, clamped to viewport, scrolls if too tall */}
+              <div
+                className="absolute left-full ml-3 bg-[var(--primary)] rounded-xl shadow-xl border border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] min-w-[200px] flex flex-col"
+                style={{
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  maxHeight: "calc(100vh - 2rem)",
+                }}
+              >
+                <div className="px-3.5 py-2 text-white/50 text-[10px] font-bold uppercase tracking-wider border-b border-white/10 shrink-0">{group.label}</div>
+                <div className="overflow-y-auto py-1 sidebar-nav">
+                  {group.items.map((item) => {
+                    const isItemActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                          isItemActive
+                            ? "text-white bg-white/15"
+                            : "text-white/70 hover:text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="whitespace-nowrap">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+                <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-[var(--primary)] rotate-45 border-l border-b border-white/10" />
               </div>
             </div>
           );
@@ -560,7 +580,7 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
           >
             <FiMenu className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold text-gray-800 flex-1">{title}</h1>
+          <h1 className="text-lg font-bold text-gray-800 flex-1" suppressHydrationWarning>{title}</h1>
           <div className="flex items-center gap-3">
             <InstallPwaButton />
             <Link

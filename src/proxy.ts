@@ -20,8 +20,17 @@ export function proxy(request: NextRequest) {
     }
   }
 
+  // ── Pass current pathname to server components via header ──
+  // Lets the root layout pick the correct initial language (dashboard vs
+  // storefront uses different DB settings) on the first server render —
+  // killing the BN ↔ EN flash on dashboard refresh.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", path);
+
   // ── Existing middleware logic ──
-  const response = NextResponse.next();
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   // Add aggressive caching for image requests
   if (path.startsWith("/_next/image")) {
@@ -51,5 +60,10 @@ export const config = {
     "/checkout/:path*",
     "/product/:path*",
     "/contact/:path*",
+    // Dashboard + cdlogin: needed so the root layout can read x-pathname and
+    // pick the correct initial language (avoids BN ↔ EN flash on refresh).
+    "/dashboard/:path*",
+    "/cdlogin",
+    "/cdlogin/:path*",
   ],
 };

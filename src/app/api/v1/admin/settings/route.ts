@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { clearSmtpCache, clearEmailBrandCache } from "@/lib/email";
+import { clearEmailTemplatesCache } from "@/lib/email-templates";
 
 export async function GET(_request: NextRequest) {
   let admin;
@@ -77,6 +78,10 @@ export async function PUT(request: NextRequest) {
     clearSmtpCache();
     // Bust email brand cache so next email picks up new theme/lang/site_name.
     clearEmailBrandCache();
+    // Bust email templates cache if the customizer was saved.
+    if (changed.some(([k]) => k === "email_templates")) {
+      clearEmailTemplatesCache();
+    }
     return jsonResponse({ message: "Settings updated", changed: changed.length });
   } catch (error) {
     console.error("Settings PUT error:", error);

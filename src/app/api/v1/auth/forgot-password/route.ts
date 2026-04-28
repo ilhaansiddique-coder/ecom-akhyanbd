@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/lib/validation";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { sendResetCodeEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -31,6 +32,8 @@ export async function POST(request: NextRequest) {
     create: { email, token: hashedCode, createdAt: new Date() },
   });
 
-  // TODO: Send code via email
+  // Send reset code via email (non-blocking)
+  sendResetCodeEmail(email, code);
+
   return jsonResponse({ message: "রিসেট কোড আপনার ইমেইলে পাঠানো হয়েছে।" });
 }

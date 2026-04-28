@@ -1,10 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/LanguageContext";
 import { FiArrowLeft, FiExternalLink, FiCopy, FiCheck, FiSmartphone, FiMonitor, FiTablet, FiGlobe } from "react-icons/fi";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+
+/**
+ * Defers Recharts mount until the parent has positive dimensions.
+ * Avoids the "width(-1) and height(-1)" warning on first render.
+ */
+function MeasuredChart({ height = 256, children }: { height?: number; children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    if (typeof ResizeObserver === "undefined") {
+      setReady(true);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setReady(true);
+          ro.disconnect();
+          break;
+        }
+      }
+    });
+    ro.observe(node);
+    requestAnimationFrame(() => setReady(true));
+  }, []);
+  return (
+    <div ref={containerRef} style={{ width: "100%", height, minWidth: 0 }}>
+      {ready ? children : null}
+    </div>
+  );
+}
 
 interface Bucket { key: string; count: number }
 interface RecentClick {
@@ -185,8 +216,8 @@ export default function ShortlinkAnalyticsClient({
                 {lang === "en" ? "No clicks in this range" : "এই রেঞ্জে কোনো ক্লিক নেই"}
               </p>
             ) : (
-              <div className="h-48 md:h-64">
-                <ResponsiveContainer width="100%" height="100%">
+              <MeasuredChart height={typeof window !== "undefined" && window.innerWidth >= 768 ? 256 : 192}>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={data.timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis
@@ -205,7 +236,7 @@ export default function ShortlinkAnalyticsClient({
                     <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </MeasuredChart>
             )}
           </div>
 

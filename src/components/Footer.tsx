@@ -8,6 +8,43 @@ import MotionFadeIn from "./MotionFadeIn";
 import T from "./T";
 import { useSiteSettings, useOption } from "@/lib/SiteSettingsContext";
 import { useLang } from "@/lib/LanguageContext";
+import { toBilingual, type Bilingual } from "@/lib/bilingual";
+
+interface HFContent {
+  description: Bilingual;
+  quickLinksTitle: Bilingual;
+  contactTitle: Bilingual;
+  legalTitle: Bilingual;
+  newsletterTitle: Bilingual;
+  newsletterSubtitle: Bilingual;
+  newsletterPlaceholder: Bilingual;
+  newsletterButton: Bilingual;
+}
+
+function readHF(raw: string | null | undefined): Partial<HFContent> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const ft = (parsed?.footer && typeof parsed.footer === "object" ? parsed.footer : {}) as Record<string, unknown>;
+    const out: Partial<HFContent> = {};
+    if (ft.description) out.description = toBilingual(ft.description);
+    if (ft.quickLinksTitle) out.quickLinksTitle = toBilingual(ft.quickLinksTitle);
+    if (ft.contactTitle) out.contactTitle = toBilingual(ft.contactTitle);
+    if (ft.legalTitle) out.legalTitle = toBilingual(ft.legalTitle);
+    if (ft.newsletterTitle) out.newsletterTitle = toBilingual(ft.newsletterTitle);
+    if (ft.newsletterSubtitle) out.newsletterSubtitle = toBilingual(ft.newsletterSubtitle);
+    if (ft.newsletterPlaceholder) out.newsletterPlaceholder = toBilingual(ft.newsletterPlaceholder);
+    if (ft.newsletterButton) out.newsletterButton = toBilingual(ft.newsletterButton);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function pick(b: Bilingual | undefined, lang: string): string | null {
+  if (!b) return null;
+  return lang === "en" ? (b.en || b.bn) : (b.bn || b.en);
+}
 
 const quickLinkKeys = [
   { key: "nav.home", href: "/" },
@@ -25,7 +62,15 @@ const legalLinkKeys = [
 
 export default function Footer() {
   const settings = useSiteSettings();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const hf = readHF(settings.page_header_footer);
+  const hfDescription = pick(hf?.description, lang);
+  const hfQuickLinksTitle = pick(hf?.quickLinksTitle, lang);
+  const hfLegalTitle = pick(hf?.legalTitle, lang);
+  const hfNewsletterTitle = pick(hf?.newsletterTitle, lang);
+  const hfNewsletterSubtitle = pick(hf?.newsletterSubtitle, lang);
+  const hfNewsletterPlaceholder = pick(hf?.newsletterPlaceholder, lang);
+  const hfNewsletterButton = pick(hf?.newsletterButton, lang);
 
   // Customizer-driven layout
   const layout         = useOption<string>("footer.layout");      // four_col | three_col | minimal
@@ -36,7 +81,7 @@ export default function Footer() {
   // Fall back through DB keys: general form fields → contact fields → hardcoded defaults
   const siteName = settings.site_name || t("footer.companyName");
   const siteTagline = settings.site_tagline || t("footer.tagline");
-  const siteDescription = settings.site_description || t("footer.description");
+  const siteDescription = hfDescription || settings.site_description || t("footer.description");
   const phone = settings.phone || "";
   const email = settings.email || "";
   const address = settings.address || "";
@@ -127,7 +172,7 @@ export default function Footer() {
 
           <MotionFadeIn delay={0.1}>
             <h4 className="text-base font-bold mb-5 relative inline-block">
-              <T k="footer.quickLinks" />
+              {hfQuickLinksTitle || <T k="footer.quickLinks" />}
               <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
             </h4>
             <ul className="space-y-2.5">
@@ -143,7 +188,7 @@ export default function Footer() {
 
           <MotionFadeIn delay={0.2}>
             <h4 className="text-base font-bold mb-5 relative inline-block">
-              <T k="footer.legal" />
+              {hfLegalTitle || <T k="footer.legal" />}
               <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
             </h4>
             <ul className="space-y-2.5">
@@ -160,13 +205,13 @@ export default function Footer() {
           {showNewsletter && (
             <MotionFadeIn delay={0.3}>
               <h4 className="text-base font-bold mb-5 relative inline-block">
-                <T k="footer.connect" />
+                {hfNewsletterTitle || <T k="footer.connect" />}
                 <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
               </h4>
-              <p className="text-white/70 text-sm mb-4"><T k="footer.connectDesc" /></p>
+              <p className="text-white/70 text-sm mb-4">{hfNewsletterSubtitle || <T k="footer.connectDesc" />}</p>
               <div className="flex gap-2 mb-6">
-                <input type="email" placeholder="Email" className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 transition-colors" />
-                <button className="px-4 py-2.5 bg-white text-primary font-bold text-sm rounded-lg hover:bg-white/90 transition-colors shrink-0"><T k="footer.subscribe" /></button>
+                <input type="email" placeholder={hfNewsletterPlaceholder || "Email"} className="flex-1 px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40 transition-colors" />
+                <button className="px-4 py-2.5 bg-white text-primary font-bold text-sm rounded-lg hover:bg-white/90 transition-colors shrink-0">{hfNewsletterButton || <T k="footer.subscribe" />}</button>
               </div>
               {showSocials && socialLinks.length > 0 && (
                 <div className="flex items-center gap-3">
@@ -182,7 +227,7 @@ export default function Footer() {
           {!showNewsletter && showSocials && socialLinks.length > 0 && (
             <MotionFadeIn delay={0.3}>
               <h4 className="text-base font-bold mb-5 relative inline-block">
-                <T k="footer.connect" />
+                {hfNewsletterTitle || <T k="footer.connect" />}
                 <span className="absolute -bottom-1.5 left-0 w-8 h-0.5 bg-white/30 rounded" />
               </h4>
               <div className="flex items-center gap-3">

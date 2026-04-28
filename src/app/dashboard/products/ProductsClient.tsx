@@ -47,6 +47,8 @@ interface Product {
   description?: string;
   category_id?: number;
   brand_id?: number;
+  categories?: { id: number; name: string }[];
+  variants?: { price: number | string; is_active?: boolean }[];
 }
 
 interface InitialData {
@@ -56,10 +58,23 @@ interface InitialData {
   brands: Brand[];
 }
 
+// Returns a formatted price string for a product. For variable products where
+// the base price is 0, derives the range from active variant prices instead.
+function productPriceDisplay(p: Product, toBnFn: (n: number) => string): string {
+  if (p.price > 0) return `৳${toBnFn(p.price)}`;
+  const variantPrices = (p.variants ?? [])
+    .map((v) => Number(v.price))
+    .filter((n) => n > 0);
+  if (variantPrices.length === 0) return `৳${toBnFn(0)}`;
+  const min = Math.min(...variantPrices);
+  const max = Math.max(...variantPrices);
+  return min === max ? `৳${toBnFn(min)}` : `৳${toBnFn(min)}–৳${toBnFn(max)}`;
+}
+
 const emptyForm = {
   name: "",
   slug: "",
-  category_id: "",
+  category_ids: [] as string[],
   brand_id: "",
   description: "",
   price: "",
@@ -155,6 +170,16 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [badgeOpen, setBadgeOpen] = useState(false);
+  const [catDropOpen, setCatDropOpen] = useState(false);
+  const catDropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!catDropOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (catDropRef.current && !catDropRef.current.contains(e.target as Node)) setCatDropOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [catDropOpen]);
   const [form, setForm] = useState<FormState>(emptyForm);
   // Bulk-apply inputs for the variants panel. Kept outside `form` so the
   // main payload isn't polluted with transient UI-only values.
@@ -223,7 +248,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
     setForm({
       name: p.name + " (Copy)",
       slug: p.slug + "-copy",
-      category_id: String(p.category?.id || p.category_id || ""),
+      category_ids: p.categories?.length ? p.categories.map(c => String(c.id)) : (p.category?.id ? [String(p.category.id)] : []),
       brand_id: String(p.brand?.id || p.brand_id || ""),
       description: p.description || "",
       price: String(p.price),
@@ -256,7 +281,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
     setForm({
       name: p.name,
       slug: p.slug,
-      category_id: String(p.category?.id || p.category_id || ""),
+      category_ids: p.categories?.length ? p.categories.map(c => String(c.id)) : (p.category?.id ? [String(p.category.id)] : []),
       brand_id: String(p.brand?.id || p.brand_id || ""),
       description: p.description || "",
       price: String(p.price),
@@ -338,7 +363,8 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       original_price: f.original_price ? parseNum(f.original_price) : null,
       stock: f.has_variations ? f.variants.reduce((s, v) => s + (Number(v.stock) || 0), 0) : parseNum(f.stock),
       unlimited_stock: f.unlimited_stock,
-      category_id: f.category_id ? Number(f.category_id) : null,
+      category_ids: f.category_ids.map(Number).filter(Boolean),
+      category_id: f.category_ids[0] ? Number(f.category_ids[0]) : null,
       brand_id: f.brand_id ? Number(f.brand_id) : null,
       image: f.image || undefined,
       // Filter out empties so the DB never gets `[""]`. The server JSON-
@@ -395,6 +421,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       shipping_cost: payload.shipping_cost,
       description: payload.description,
       category: payload.category_id ? categories.find((c) => c.id === payload.category_id) : undefined,
+      categories: (payload.category_ids ?? []).map((id: number) => categories.find((c) => c.id === id)).filter(Boolean) as { id: number; name: string }[],
       brand: payload.brand_id ? brands.find((b) => b.id === payload.brand_id) : undefined,
       category_id: payload.category_id,
       brand_id: payload.brand_id,
@@ -407,6 +434,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
       setAllProducts((prev) => [optimisticProduct, ...prev]);
     }
     setModalOpen(false);
+    setCatDropOpen(false);
     showToast(isEdit ? t("toast.updated") : t("toast.created"));
 
     // Background sync — replace optimistic row with server's authoritative copy
@@ -706,9 +734,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold text-gray-800 text-sm truncate">{p.name}</p>
-                        <p className="text-xs text-gray-400">{p.category?.name || "—"}{p.badge ? ` · ${p.badge}` : ""}</p>
+                        <p className="text-xs text-gray-400">{(p.categories?.length ? p.categories.map(c => c.name).join(", ") : p.category?.name) || "—"}{p.badge ? ` · ${p.badge}` : ""}</p>
                       </div>
-                      <p className="text-base font-bold text-[var(--primary)] shrink-0">৳{toBn(p.price)}</p>
+                      <p className="text-base font-bold text-[var(--primary)] shrink-0">{productPriceDisplay(p, toBn)}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -756,6 +784,14 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                         className="w-4 h-4 accent-[var(--primary)]"
                       />
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        #
+                        <span className="px-1.5 py-0.5 rounded bg-[var(--primary)]/10 text-[var(--primary)] text-[10px] font-bold leading-none">
+                          {toBn(totalProducts)}
+                        </span>
+                      </span>
+                    </th>
                     {[t("th.image"), t("th.name"), t("th.category"), t("th.price"), t("th.stock"), t("th.sales"), t("th.status"), t("th.actions")].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
@@ -764,7 +800,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                 <tbody className="divide-y divide-gray-50">
                   {products.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-gray-400">{t("empty.products")}</td>
+                      <td colSpan={10} className="py-12 text-center text-gray-400">{t("empty.products")}</td>
                     </tr>
                   ) : (
                     products.map((p) => (
@@ -781,6 +817,9 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                             onChange={() => toggleSelectProduct(p.id)}
                             className="w-4 h-4 accent-[var(--primary)]"
                           />
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-400 font-medium">
+                          {toBn(p.id)}
                         </td>
                         <td className="px-4 py-3">
                           {p.image ? (
@@ -804,8 +843,8 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                           <div className="font-medium text-gray-800 max-w-44 truncate">{p.name}</div>
                           {p.badge && <span className="text-xs text-[var(--primary)] font-medium">{p.badge}</span>}
                         </td>
-                        <td className="px-4 py-3 text-gray-500">{p.category?.name || "—"}</td>
-                        <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">৳{toBn(p.price)}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{(p.categories?.length ? p.categories.map(c => c.name).join(", ") : p.category?.name) || "—"}</td>
+                        <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">{productPriceDisplay(p, toBn)}</td>
                         <td className="px-4 py-3 text-gray-600">
                           {(p as any).unlimited_stock ? (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
@@ -909,9 +948,55 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                     <label className={labelCls}>{t("form.slug")} *</label>
                     <input name="slug" required value={form.slug} onChange={(e) => { const v = e.target.value; setForm(prev => ({ ...prev, slug: v })); }} className={inputCls} />
                   </div>
-                  <div>
+                  <div ref={catDropRef} className="relative">
                     <label className={labelCls}>{t("form.category")}</label>
-                    <InlineSelect fullWidth value={form.category_id} options={[{ value: "", label: t("form.select") }, ...categories.map(c => ({ value: String(c.id), label: c.name }))]} onChange={(v) => { setForm(prev => ({ ...prev, category_id: v })); }} placeholder={t("form.select")} />
+                    {/* Trigger — shows chips or placeholder, opens dropdown on click */}
+                    <div
+                      onClick={() => setCatDropOpen(o => !o)}
+                      className={`flex flex-wrap gap-1.5 px-3 py-2 min-h-[42px] border rounded-xl bg-white cursor-pointer transition-colors ${catDropOpen ? "border-[var(--primary)]" : "border-gray-200 hover:border-gray-300"}`}
+                    >
+                      {form.category_ids.length === 0 && (
+                        <span className="text-sm text-gray-400 self-center">{t("form.select")}</span>
+                      )}
+                      {form.category_ids.map((cid) => {
+                        const cat = categories.find(c => String(c.id) === cid);
+                        return cat ? (
+                          <span key={cid} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)] font-medium">
+                            {cat.name}
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setForm(prev => ({ ...prev, category_ids: prev.category_ids.filter(id => id !== cid) })); }} className="hover:text-red-500 transition-colors leading-none">&times;</button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                    {/* Dropdown */}
+                    {catDropOpen && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl shadow-black/10 overflow-hidden">
+                        <div className="max-h-48 overflow-y-auto">
+                          {categories.map(c => {
+                            const selected = form.category_ids.includes(String(c.id));
+                            return (
+                              <label key={c.id} className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm transition-colors ${selected ? "bg-[var(--primary)]/5 text-[var(--primary)]" : "text-gray-700 hover:bg-gray-50"}`}>
+                                <input type="checkbox" checked={selected} onChange={() => {
+                                  const sid = String(c.id);
+                                  setForm(prev => ({
+                                    ...prev,
+                                    category_ids: selected ? prev.category_ids.filter(id => id !== sid) : [...prev.category_ids, sid],
+                                  }));
+                                }} className="w-3.5 h-3.5 accent-[var(--primary)] shrink-0" />
+                                {c.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t border-gray-100 px-3 py-2 flex justify-end">
+                          <button type="button" onClick={() => setCatDropOpen(false)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white transition-colors"
+                            style={{ backgroundColor: "var(--primary)" }}>
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className={labelCls}>{t("form.brand")}</label>

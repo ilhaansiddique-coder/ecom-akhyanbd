@@ -17,7 +17,7 @@
  * We normalise to lower + underscore-collapsed before matching keywords so
  * a single helper covers both providers and any future variants.
  */
-export type DerivedOrderStatus = "delivered" | "cancelled" | null;
+export type DerivedOrderStatus = "shipped" | "delivered" | "cancelled" | null;
 
 export function mapCourierStatusToOrderStatus(raw: string | null | undefined): DerivedOrderStatus {
   if (!raw) return null;
@@ -37,6 +37,17 @@ export function mapCourierStatusToOrderStatus(raw: string | null | undefined): D
   // has "delivered" in the name. Match strict equality on the keyword
   // segment OR the exact "delivered" string.
   if (s === "delivered") return "delivered";
+
+  // Courier-sent states — parcel is with the courier, awaiting/in pickup.
+  // Steadfast: "pending", "in_review".
+  // Pathao: "Pending", "Pickup_Requested", "At_Warehouse".
+  // Mapping these to "shipped" keeps the order status in sync with the
+  // courier dispatch event, which is used as the anchor for daily sales
+  // analytics (courierSentAt column).
+  if (s === "pending") return "shipped";
+  if (s.includes("pickup")) return "shipped";
+  if (s.includes("warehouse")) return "shipped";
+  if (s.includes("in_review")) return "shipped";
 
   return null;
 }

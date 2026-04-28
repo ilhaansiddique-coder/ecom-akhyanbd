@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 
 const FacebookPixel = dynamic(() => import("./FacebookPixel"), { ssr: false });
 const GoogleTagManager = dynamic(() => import("./GoogleTagManager"), { ssr: false });
+const MicrosoftClarity = dynamic(() => import("./MicrosoftClarity"), { ssr: false });
 
 /**
  * Mounts FacebookPixel + GoogleTagManager, but defers them on non-conversion
@@ -99,6 +100,7 @@ export default function DeferredAnalytics() {
     <>
       <FacebookPixel />
       <GoogleTagManager />
+      <MicrosoftClarity />
     </>
   );
 }
