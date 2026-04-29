@@ -129,6 +129,12 @@ export default async function DashboardServerPage() {
     for (const s of statusCountsRaw) {
       if (s.status in orderCounts) orderCounts[s.status] = s._count.id;
     }
+    // Roll up confirmed + processing + shipped + delivered into "confirmed".
+    // Once an order is confirmed it never reverts — shipping/delivery are
+    // downstream stages of the same locked-in sale, so the merchant-facing
+    // "Confirmed" count covers all of them. Mirrors the same rollup in
+    // /api/v1/admin/dashboard so SSR and client-fetch agree.
+    orderCounts.confirmed = orderCounts.confirmed + orderCounts.processing + orderCounts.shipped + orderCounts.delivered;
 
     // Build revenue by status
     const cancelledRevenue = Number(cancelledRevAgg._sum.total ?? 0) - Number(cancelledRevAgg._sum.shippingCost ?? 0);
@@ -136,6 +142,8 @@ export default async function DashboardServerPage() {
     for (const s of revByStatusRaw) {
       if (s.status in revByStatus) revByStatus[s.status] = Number(s._sum.total ?? 0) - Number(s._sum.shippingCost ?? 0);
     }
+    // Same rollup for revenue.
+    revByStatus.confirmed = revByStatus.confirmed + revByStatus.processing + revByStatus.shipped + revByStatus.delivered;
 
     const dailyOrders = days.map((day, i) => ({
       date: day.toISOString().slice(5, 10),

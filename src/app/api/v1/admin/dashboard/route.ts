@@ -38,6 +38,9 @@ export async function GET(request: NextRequest) {
       }
     }
     const createdAtFilter = dateFilter ? { createdAt: dateFilter } : {};
+    // Courier-sent stats anchor on courierSentAt rather than createdAt so an
+    // order created earlier but dispatched within the range still counts.
+    const shippedFilter = dateFilter ? { courierSentAt: dateFilter } : {};
 
     // Build last 7 days as BD-midnight markers (bar chart)
     const days: Date[] = [];
@@ -136,24 +139,33 @@ export async function GET(request: NextRequest) {
         where: { status: { notIn: ["cancelled", "trashed"] }, ...createdAtFilter },
       }),
       // ── Courier-sent ("actual sales") stats ──────────────────────────────────
-      // Shipped order count (date-scoped)
-      prisma.order.count({ where: { status: "shipped", ...createdAtFilter } }),
-      // Shipped revenue excl. shipping cost (date-scoped)
+      // Anchored on `courierSentAt`, NOT `createdAt`, so an order created two
+      // days ago but dispatched today still counts on today's stats. This
+      // matches how a merchant intuitively reads "today's courier sent" —
+      // the day the parcel left their hands, not the day the order arrived.
+      // Excludes cancelled/trashed (returned-before-pickup edge case) but
+      // keeps "delivered" since same-day delivered shipments still count.
+      prisma.order.count({
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
+      }),
+      // Shipped revenue excl. shipping cost (date-scoped on courierSentAt)
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
-        where: { status: "shipped", ...createdAtFilter },
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
       }),
-      // Today's shipped orders (always fixed to today)
-      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
-      // Today's shipped revenue excl. shipping (always fixed to today)
+      // Today's shipped orders — anchored on courierSentAt
+      prisma.order.count({
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, courierSentAt: { gte: today } },
+      }),
+      // Today's shipped revenue — anchored on courierSentAt
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
-        where: { status: "shipped", createdAt: { gte: today } },
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, courierSentAt: { gte: today } },
       }),
-      // Unique customers (by phone) from shipped orders (date-scoped)
+      // Unique customers (by phone) from courier-sent orders in range
       prisma.order.groupBy({
         by: ["customerPhone"],
-        where: { status: "shipped", ...createdAtFilter },
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
       }),
       // Daily bar chart — always last 7 days (not date-scoped)
       ...days.map((day) => {
@@ -206,7 +218,12 @@ export async function GET(request: NextRequest) {
       }),
       order_counts: {
         pending:   orderCounts.pending   || 0,
-        confirmed: orderCounts.confirmed || 0,
+        // "Confirmed" rolls up confirmed + processing + shipped + delivered.
+        // Once an order is confirmed it never reverts, so for dashboard
+        // reporting we treat the entire post-confirmation funnel as
+        // "confirmed orders" — the merchant cares about how many sales were
+        // locked in, not the current logistics state.
+        confirmed: (orderCounts.confirmed || 0) + (orderCounts.processing || 0) + (orderCounts.shipped || 0) + (orderCounts.delivered || 0),
         processing: orderCounts.processing || 0,
         shipped:   orderCounts.shipped   || 0,
         delivered: orderCounts.delivered || 0,
@@ -214,7 +231,8 @@ export async function GET(request: NextRequest) {
       },
       revenue_by_status: {
         pending:   revMap.pending   || 0,
-        confirmed: revMap.confirmed || 0,
+        // Same rollup logic for revenue.
+        confirmed: (revMap.confirmed || 0) + (revMap.processing || 0) + (revMap.shipped || 0) + (revMap.delivered || 0),
         processing: revMap.processing || 0,
         shipped:   revMap.shipped   || 0,
         delivered: revMap.delivered || 0,

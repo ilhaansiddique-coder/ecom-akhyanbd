@@ -40,7 +40,6 @@ import {
   PieChart as RechartsPieChart,
   Pie,
   Cell,
-  ResponsiveContainer,
 } from "recharts";
 
 // ─── Status labels ───────────────────────────────────────────────────────────
@@ -204,46 +203,38 @@ function CombinedStatCard({
 const PIE_COLORS = ["#eab308", "#3b82f6", "#6366f1", "#8b5cf6", "var(--primary)", "#ef4444"];
 
 /**
- * Wraps a Recharts <ResponsiveContainer> so it only mounts AFTER the parent
- * <div> has been measured. Skips Recharts' first-paint warning where
- * ResponsiveContainer reads `clientWidth` of a not-yet-laid-out grid item
- * and gets -1, then logs "width(-1) and height(-1)".
- *
- * The wrapper renders an empty placeholder div with the requested fixed
- * height; once a ResizeObserver reports a positive width, the chart renders.
- * After that the chart's own internal observer keeps it sized correctly.
+ * Measures its container with ResizeObserver and exposes the width via a
+ * render prop. Use this instead of Recharts <ResponsiveContainer> — the
+ * latter logs "width(-1) and height(-1)" during its very first render
+ * because its internal dimension state defaults to -1 before mount effects
+ * resolve. Passing numeric width/height directly to BarChart/PieChart
+ * avoids ResponsiveContainer entirely → no warning, ever.
  */
-function MeasuredChart({ height = 256, children }: { height?: number; children: React.ReactNode }) {
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return;
-    // Trigger a layout flush so the next render can measure correctly.
-    node.getBoundingClientRect();
-  }, []);
-  const [ready, setReady] = useState(false);
+function MeasuredChart({
+  height = 256,
+  children,
+}: {
+  height?: number;
+  children: (width: number, height: number) => React.ReactNode;
+}) {
+  const [width, setWidth] = useState(0);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     if (typeof ResizeObserver === "undefined") {
-      setReady(true);
+      setWidth(node.clientWidth || 0);
       return;
     }
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setReady(true);
-          ro.disconnect();
-          break;
-        }
+        const w = Math.floor(entry.contentRect.width);
+        if (w > 0) setWidth(w);
       }
     });
     ro.observe(node);
-    // Belt + suspenders: in case observer is slow, also flip after first paint.
-    requestAnimationFrame(() => setReady(true));
   }, []);
   return (
     <div ref={containerRef} style={{ width: "100%", height, minWidth: 0 }}>
-      <div ref={ref} style={{ width: "100%", height: "100%" }}>
-        {ready ? children : null}
-      </div>
+      {width > 0 ? children(width, height) : null}
     </div>
   );
 }
@@ -496,14 +487,14 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm min-w-0">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.weeklyOrders")}</h2>
           <MeasuredChart height={256}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <RechartsBarChart data={dailyOrders} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+            {(w, h) => (
+              <RechartsBarChart width={w} height={h} data={dailyOrders} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
                 <Bar dataKey="count" fill="var(--primary)" radius={[6, 6, 0, 0]} />
               </RechartsBarChart>
-            </ResponsiveContainer>
+            )}
           </MeasuredChart>
         </motion.div>
 
@@ -515,8 +506,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
             <p className="text-sm text-gray-400 py-16 text-center">{t("empty.orders")}</p>
           ) : (
             <MeasuredChart height={256}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <RechartsPieChart>
+              {(w, h) => (
+                <RechartsPieChart width={w} height={h}>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={3} dataKey="value"
                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                     {pieData.map((_, i) => (
@@ -525,7 +516,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
                 </RechartsPieChart>
-              </ResponsiveContainer>
+              )}
             </MeasuredChart>
           )}
         </motion.div>

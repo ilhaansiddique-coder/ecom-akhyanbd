@@ -75,6 +75,37 @@ export async function PUT(
     if (body.consignment_id !== undefined) updateData.consignmentId = body.consignment_id || null;
     if (body.courier_status !== undefined) updateData.courierStatus = body.courier_status || null;
 
+    // Auto-flip order status → "shipped" the moment a parcel is attached to a
+    // courier. This covers two paths that previously left status stuck on
+    // "confirmed":
+    //   1. Admin pastes a consignment ID into the inline input on the orders table.
+    //   2. Admin toggles courier_sent manually without going through /courier/pathao.
+    //
+    // We also stamp courierSentAt so daily-dispatch analytics on the dashboard
+    // count the order on the day the courier was actually engaged. Both fields
+    // are set ONLY if the caller hasn't explicitly overridden status, and only
+    // when the existing status is a pre-courier state. Never override delivered
+    // / cancelled / trashed — those are terminal.
+    const willHaveConsignment =
+      body.consignment_id !== undefined
+        ? Boolean(body.consignment_id)
+        : Boolean(existing.consignmentId);
+    const willBeCourierSent =
+      body.courier_sent !== undefined
+        ? Boolean(body.courier_sent)
+        : Boolean(existing.courierSent);
+    const attachedToCourier = willHaveConsignment || willBeCourierSent;
+    const PRE_COURIER_STATUSES = new Set(["pending", "confirmed", "processing"]);
+    const callerSetStatus = body.status !== undefined;
+
+    if (attachedToCourier && !callerSetStatus && PRE_COURIER_STATUSES.has(existing.status)) {
+      updateData.status = "shipped";
+    }
+    // Stamp courierSentAt once on first transition to "attached".
+    if (attachedToCourier && !existing.courierSentAt) {
+      updateData.courierSentAt = new Date();
+    }
+
     // Recalculate totals
     if (body.subtotal !== undefined) updateData.subtotal = Number(body.subtotal);
     if (body.total !== undefined) updateData.total = Number(body.total);

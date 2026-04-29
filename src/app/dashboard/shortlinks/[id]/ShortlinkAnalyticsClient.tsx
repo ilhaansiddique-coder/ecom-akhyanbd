@@ -4,35 +4,38 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/LanguageContext";
 import { FiArrowLeft, FiExternalLink, FiCopy, FiCheck, FiSmartphone, FiMonitor, FiTablet, FiGlobe } from "react-icons/fi";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 /**
- * Defers Recharts mount until the parent has positive dimensions.
- * Avoids the "width(-1) and height(-1)" warning on first render.
+ * Measures container width with ResizeObserver and renders the chart with
+ * numeric width/height. Avoids Recharts <ResponsiveContainer> entirely —
+ * its first-render dimension state defaults to -1 and logs a warning.
  */
-function MeasuredChart({ height = 256, children }: { height?: number; children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
+function MeasuredChart({
+  height = 256,
+  children,
+}: {
+  height?: number;
+  children: (width: number, height: number) => React.ReactNode;
+}) {
+  const [width, setWidth] = useState(0);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     if (typeof ResizeObserver === "undefined") {
-      setReady(true);
+      setWidth(node.clientWidth || 0);
       return;
     }
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setReady(true);
-          ro.disconnect();
-          break;
-        }
+        const w = Math.floor(entry.contentRect.width);
+        if (w > 0) setWidth(w);
       }
     });
     ro.observe(node);
-    requestAnimationFrame(() => setReady(true));
   }, []);
   return (
     <div ref={containerRef} style={{ width: "100%", height, minWidth: 0 }}>
-      {ready ? children : null}
+      {width > 0 ? children(width, height) : null}
     </div>
   );
 }
@@ -217,14 +220,12 @@ export default function ShortlinkAnalyticsClient({
               </p>
             ) : (
               <MeasuredChart height={typeof window !== "undefined" && window.innerWidth >= 768 ? 256 : 192}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                  <BarChart data={data.timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                {(w, h) => (
+                  <BarChart width={w} height={h} data={data.timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis
                       dataKey="date"
                       tick={{ fontSize: 10, fill: "#888" }}
-                      // Show fewer ticks on mobile so labels don't overlap when
-                      // viewing 30/90-day ranges on a narrow viewport.
                       interval="preserveStartEnd"
                       minTickGap={20}
                     />
@@ -235,7 +236,7 @@ export default function ShortlinkAnalyticsClient({
                     />
                     <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
+                )}
               </MeasuredChart>
             )}
           </div>

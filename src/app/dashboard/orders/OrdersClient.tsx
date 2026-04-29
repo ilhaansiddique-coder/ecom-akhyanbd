@@ -725,7 +725,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         // operate on a stale closure of `orders`. A separate flag captures
         // whether we should also fire the /status PUT (for CAPI + payment).
         const derived = mapCourierStatusToOrderStatus(res.delivery_status);
-        let firedStatus: "delivered" | "cancelled" | null = null;
+        let firedStatus: "shipped" | "delivered" | "cancelled" | null = null;
         let firedPayment: "paid" | null = null;
         setOrders((prev) => prev.map((o) => {
           if (o.id !== orderId) return o;
@@ -779,9 +779,48 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   };
 
   const handleBulkCourierRefresh = async (scope: "page" | "pending") => {
-    const eligible = (scope === "page" ? filtered : orders).filter(
-      (o) => o.courier_sent && o.courier_status !== "delivered" && o.courier_status !== "cancelled"
-    );
+    // For "page" scope we already have everything in memory.
+    // For "pending" scope we need to walk the entire dataset across all pages —
+    // `orders` only holds the current page, so prior versions silently scanned
+    // 20 orders even when the DB had thousands.
+    let eligible: Order[] = [];
+    if (scope === "page") {
+      eligible = filtered.filter(
+        (o) => o.courier_sent && o.courier_status !== "delivered" && o.courier_status !== "cancelled"
+      );
+    } else {
+      // Walk all pages of /admin/orders. Cap at 200 pages × 20 = 4000 just to
+      // bound runaway loops on a corrupt total. Each page is ~1 small request.
+      try {
+        const collected: Order[] = [];
+        const seen = new Set<number>();
+        // First fetch tells us the total count; loop based on that.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const first = await api.admin.getOrders(`page=1`) as any;
+        const total = Number(first?.total ?? first?.pagination?.total ?? 0);
+        const perPage = 20;
+        const lastPage = Math.max(1, Math.ceil(total / perPage));
+        const pushPage = (items: Order[]) => {
+          for (const it of items ?? []) {
+            if (!seen.has(it.id)) { seen.add(it.id); collected.push(it); }
+          }
+        };
+        pushPage((first?.items ?? first?.data ?? []) as Order[]);
+        for (let p = 2; p <= Math.min(lastPage, 200); p++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const res = await api.admin.getOrders(`page=${p}`) as any;
+          pushPage((res?.items ?? res?.data ?? []) as Order[]);
+        }
+        eligible = collected.filter(
+          (o) => o.courier_sent && o.courier_status !== "delivered" && o.courier_status !== "cancelled"
+        );
+      } catch {
+        // Fallback to in-memory if the multi-page walk fails
+        eligible = orders.filter(
+          (o) => o.courier_sent && o.courier_status !== "delivered" && o.courier_status !== "cancelled"
+        );
+      }
+    }
     if (eligible.length === 0) {
       showToast(lang === "en" ? "No orders to refresh" : "রিফ্রেশ করার মতো কোনো অর্ডার নেই");
       setBulkRefreshOpen(false);
