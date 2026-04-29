@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
       cancelledRevResult,
       totalCustomers,
       totalProducts,
-      activeProducts,
       pendingOrders,
       lowStockCount,
       recentOrders,
@@ -90,17 +89,40 @@ export async function GET(request: NextRequest) {
       }),
       prisma.user.count({ where: { role: "customer" } }),
       prisma.product.count(),
-      prisma.product.count({ where: { isActive: true } }),
+      // activeProducts removed — not consumed by the frontend Stats interface
       prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),
       prisma.product.count({ where: { stock: { lt: 10 } } }),
+      // Select only columns rendered by the dashboard — avoids pulling address,
+      // notes, weight, SEO fields, etc. over the wire.
       prisma.order.findMany({
         take: 10,
         where: { status: { not: "trashed" }, ...createdAtFilter },
         orderBy: { createdAt: "desc" },
-        include: { items: true },
+        select: {
+          id: true,
+          customerName: true,
+          customerPhone: true,
+          total: true,
+          status: true,
+          paymentStatus: true,
+          paymentMethod: true,
+          createdAt: true,
+          items: {
+            select: { id: true, productName: true, price: true, quantity: true },
+          },
+        },
       }),
-      prisma.product.findMany({ take: 10, orderBy: { soldCount: "desc" } }),
-      prisma.product.findMany({ where: { stock: { lt: 10 } }, orderBy: { stock: "asc" } }),
+      prisma.product.findMany({
+        take: 10,
+        orderBy: { soldCount: "desc" },
+        select: { id: true, name: true, soldCount: true, price: true, image: true },
+      }),
+      prisma.product.findMany({
+        where: { stock: { lt: 10 } },
+        take: 20,
+        orderBy: { stock: "asc" },
+        select: { id: true, name: true, stock: true, image: true },
+      }),
       // Order counts by status (date-scoped)
       prisma.order.groupBy({
         by: ["status"],
@@ -171,7 +193,6 @@ export async function GET(request: NextRequest) {
         today_revenue: Number(todayRevenueResult._sum.total || 0) - Number(todayRevenueResult._sum.shippingCost || 0),
         total_customers: totalCustomers,
         total_products: totalProducts,
-        active_products: activeProducts,
         pending_orders: pendingOrders,
         low_stock_count: lowStockCount,
         low_stock: lowStockCount,

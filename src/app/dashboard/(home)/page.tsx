@@ -23,9 +23,16 @@ export default async function DashboardServerPage() {
     const nowMs = Date.now();
     const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
     const today = new Date(bdDayStartShifted - BD_OFFSET_MS);
-    // BD date string e.g. "2026-04-28" (add 6 h to get UTC midnight of the BD day)
     const todayStr = new Date(today.getTime() + BD_OFFSET_MS).toISOString().slice(0, 10);
 
+    // Build last-7-days array BEFORE the Promise.all so it can be spread inline.
+    // This eliminates the separate dailyCounts Promise.all waterfall entirely.
+    const days: Date[] = [];
+    for (let i = 6; i >= 0; i--) {
+      days.push(new Date(today.getTime() - i * 86400000));
+    }
+
+    // ── Single Promise.all — all queries fire in parallel, zero waterfalls ──
     const [
       totalOrders,
       pendingOrders,
@@ -36,11 +43,14 @@ export default async function DashboardServerPage() {
       recentOrdersRaw,
       shippedCount,
       shippedRevAgg,
-      todayShippedCount,
-      todayShippedRevAgg,
       shippedCustomerGroups,
+      statusCountsRaw,
+      revByStatusRaw,
+      lowStockRaw,
+      topProductsRaw,
+      ...dailyCounts
     ] = await Promise.all([
-      // All date-filterable order queries scoped to today (default view)
+      // Order counts / aggregates — all scoped to today (default view)
       prisma.order.count({ where: { status: { not: "trashed" }, createdAt: { gte: today } } }),
       prisma.order.count({ where: { status: "pending", createdAt: { gte: today } } }),
       prisma.order.aggregate({
@@ -53,101 +63,104 @@ export default async function DashboardServerPage() {
       }),
       prisma.product.count(),
       prisma.user.count({ where: { role: "customer" } }),
+      // Only select columns the dashboard actually renders — avoids pulling
+      // address, notes, createdBy, etc. over the wire.
       prisma.order.findMany({
         take: 10,
         orderBy: { createdAt: "desc" },
         where: { status: { not: "trashed" }, createdAt: { gte: today } },
-        include: { items: true },
+        select: {
+          id: true,
+          customerName: true,
+          customerPhone: true,
+          total: true,
+          status: true,
+          paymentStatus: true,
+          paymentMethod: true,
+          createdAt: true,
+          items: {
+            select: { id: true, productName: true, price: true, quantity: true },
+          },
+        },
       }),
-      // Courier-sent ("actual sales") stats — today-scoped for SSR default
-      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
-      prisma.order.aggregate({
-        _sum: { total: true, shippingCost: true },
-        where: { status: "shipped", createdAt: { gte: today } },
-      }),
-      // todayShipped / todayShippedRevenue — always today (same as above when default=today)
+      // Courier-sent ("actual sales") — today-scoped for SSR default
       prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
         where: { status: "shipped", createdAt: { gte: today } },
       }),
       prisma.order.groupBy({ by: ["customerPhone"], where: { status: "shipped", createdAt: { gte: today } } }),
+      // Status breakdown — previously a sequential await after the first batch
+      prisma.order.groupBy({
+        by: ["status"],
+        _count: { id: true },
+        where: { createdAt: { gte: today } },
+      }),
+      // Revenue by status — previously a sequential await after statusCountsRaw
+      prisma.order.groupBy({
+        by: ["status"],
+        _sum: { total: true, shippingCost: true },
+        where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
+      }),
+      // Low stock — previously a sequential await, now parallel
+      prisma.product.findMany({
+        where: { stock: { lte: 5 }, unlimitedStock: false },
+        take: 10,
+        orderBy: { stock: "asc" },
+        select: { id: true, name: true, stock: true, image: true },
+      }),
+      // Top products — previously a sequential await, now parallel
+      prisma.product.findMany({
+        orderBy: { soldCount: "desc" },
+        take: 5,
+        select: { id: true, name: true, soldCount: true, price: true, image: true },
+      }),
+      // Daily bar chart — last 7 BD days, spread inline to avoid a second Promise.all
+      ...days.map((day) => {
+        const next = new Date(day.getTime() + 86400000);
+        return prisma.order.count({
+          where: { createdAt: { gte: day, lt: next }, status: { not: "trashed" } },
+        });
+      }),
     ]);
 
-    // Order counts by status (today-scoped)
-    const statusCountsRaw = await prisma.order.groupBy({
-      by: ["status"],
-      _count: { id: true },
-      where: { createdAt: { gte: today } },
-    });
+    // Build order counts by status
     const orderCounts = { pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0 } as Record<string, number>;
     for (const s of statusCountsRaw) {
       if (s.status in orderCounts) orderCounts[s.status] = s._count.id;
     }
 
-    // Revenue by status (non-cancelled, today-scoped)
-    const revByStatusRaw = await prisma.order.groupBy({
-      by: ["status"],
-      _sum: { total: true, shippingCost: true },
-      where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
-    });
+    // Build revenue by status
     const cancelledRevenue = Number(cancelledRevAgg._sum.total ?? 0) - Number(cancelledRevAgg._sum.shippingCost ?? 0);
     const revByStatus = { pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: cancelledRevenue } as Record<string, number>;
     for (const s of revByStatusRaw) {
       if (s.status in revByStatus) revByStatus[s.status] = Number(s._sum.total ?? 0) - Number(s._sum.shippingCost ?? 0);
     }
 
-    // Low stock (always real-time, no date filter)
-    const lowStockRaw = await prisma.product.findMany({
-      where: { stock: { lte: 5 }, unlimitedStock: false },
-      take: 10,
-      orderBy: { stock: "asc" },
-      select: { id: true, name: true, stock: true, image: true },
-    });
-
-    // Top products by sold count (always all-time)
-    const topProductsRaw = await prisma.product.findMany({
-      orderBy: { soldCount: "desc" },
-      take: 5,
-      select: { id: true, name: true, soldCount: true, price: true, image: true },
-    });
-
-    // Daily orders last 7 days — BD-day buckets
-    const days: Date[] = [];
-    for (let i = 6; i >= 0; i--) {
-      days.push(new Date(today.getTime() - i * 86400000));
-    }
-    const dailyCounts = await Promise.all(
-      days.map((day) => {
-        const next = new Date(day.getTime() + 86400000);
-        return prisma.order.count({
-          where: { createdAt: { gte: day, lt: next }, status: { not: "trashed" } },
-        });
-      })
-    );
     const dailyOrders = days.map((day, i) => ({
       date: day.toISOString().slice(5, 10),
-      count: dailyCounts[i],
+      count: dailyCounts[i] as number,
     }));
 
     const totalRevenue = Number(revenueAgg._sum.total ?? 0) - Number(revenueAgg._sum.shippingCost ?? 0);
+    // SSR default is today-scoped, so shipped = today_shipped (same query result)
+    const shippedRevenue = Number(shippedRevAgg._sum.total ?? 0) - Number(shippedRevAgg._sum.shippingCost ?? 0);
 
     const stats = {
       total_orders: totalOrders,
-      today_orders: totalOrders,          // same value — both scoped to today
+      today_orders: totalOrders,
       total_revenue: totalRevenue,
-      today_revenue: totalRevenue,         // same value
+      today_revenue: totalRevenue,
       cancelled_revenue: cancelledRevenue,
       total_customers: totalCustomers,
       total_products: totalProducts,
       pending_orders: pendingOrders,
       low_stock: lowStockRaw.length,
       low_stock_count: lowStockRaw.length,
-      // Courier-sent ("actual sales") stats
       shipped_orders: shippedCount,
-      shipped_revenue: Number(shippedRevAgg._sum.total ?? 0) - Number(shippedRevAgg._sum.shippingCost ?? 0),
-      today_shipped: todayShippedCount,
-      today_shipped_revenue: Number(todayShippedRevAgg._sum.total ?? 0) - Number(todayShippedRevAgg._sum.shippingCost ?? 0),
+      shipped_revenue: shippedRevenue,
+      today_shipped: shippedCount,          // same scope → same value
+      today_shipped_revenue: shippedRevenue, // same scope → same value
       shipped_customers: shippedCustomerGroups.length,
     };
 
