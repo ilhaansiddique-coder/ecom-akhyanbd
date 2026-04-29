@@ -10,7 +10,7 @@ import { jsonResponse, errorResponse } from "@/lib/api-response";
 const BASE = "https://merchant.pathao.com/api/v1";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type PathaoTab = "active" | "delivered" | "returned_reversed" | "paid_zero";
+export type PathaoTab = "active" | "delivered" | "partial" | "returned_reversed" | "paid_zero";
 
 interface PathaoRawParcel {
   order_consignment_id: string;
@@ -160,12 +160,76 @@ export async function GET(request: NextRequest) {
   try { await requireStaff(); } catch (e) { return e as Response; }
 
   try {
-    const sp      = request.nextUrl.searchParams;
-    const tab     = (sp.get("tab") || "active") as PathaoTab;
-    const archive = sp.get("archive") ?? "0";
-    const page    = Math.max(1, parseInt(sp.get("page")  || "1",  10));
-    const limit   = Math.min(50, Math.max(1, parseInt(sp.get("limit") || "20", 10)));
-    const search  = (sp.get("q") || "").trim().toLowerCase();
+    const sp        = request.nextUrl.searchParams;
+    const tab       = (sp.get("tab") || "active") as PathaoTab;
+    const archive   = sp.get("archive") ?? "0";
+    const page      = Math.max(1, parseInt(sp.get("page")  || "1",  10));
+    const limit     = Math.min(200, Math.max(1, parseInt(sp.get("limit") || "100", 10)));
+    const search    = (sp.get("q") || "").trim().toLowerCase();
+    const subFilter = (sp.get("subFilter") || "").trim().toLowerCase();
+    const fromStr   = (sp.get("from") || "").trim();
+    const toStr     = (sp.get("to")   || "").trim();
+
+    // ── Date range filter ────────────────────────────────────────────────────
+    // Pathao's API supports server-side date filtering via `created_at_start`
+    // / `created_at_end`, but the format keeps changing across their API
+    // versions. Filtering client-side after fetch is reliable across versions.
+    // We anchor on `order_created_at` (BD time, UTC+6).
+    let fromMs: number | null = null;
+    let toMs:   number | null = null;
+    if (fromStr) {
+      const [y, m, d] = fromStr.split("-").map(Number);
+      fromMs = Date.UTC(y, m - 1, d) - 6 * 3600 * 1000; // BD midnight in UTC ms
+    }
+    if (toStr) {
+      const [y, m, d] = toStr.split("-").map(Number);
+      // Inclusive end: stop at start of NEXT BD day
+      toMs = Date.UTC(y, m - 1, d + 1) - 6 * 3600 * 1000;
+    }
+    const inDateRange = (p: PathaoRawParcel): boolean => {
+      if (fromMs === null && toMs === null) return true;
+      const t = new Date(p.order_created_at).getTime();
+      if (Number.isNaN(t)) return false;
+      if (fromMs !== null && t < fromMs) return false;
+      if (toMs   !== null && t >= toMs)  return false;
+      return true;
+    };
+    const applyDateFilter = (parcels: PathaoRawParcel[]): PathaoRawParcel[] =>
+      (fromMs === null && toMs === null) ? parcels : parcels.filter(inDateRange);
+
+    // ── Sub-filter predicates per tab ─────────────────────────────────────────
+    // Each stat card on the UI maps to a key here. When the user clicks a
+    // card, the client passes ?subFilter=<key> and we narrow the parcel list
+    // to entries whose order_status matches the corresponding pattern.
+    const matchStatus = (p: PathaoRawParcel, re: RegExp) =>
+      re.test(p.order_status ?? "");
+
+    // Helper predicates so the "pending" fallback can exclude them.
+    const isInTransit = (p: PathaoRawParcel) =>
+      matchStatus(p, /in[\s_]?transit|on[_\s]?the[_\s]?way|delivery in progress/i);
+    const isAtHub = (p: PathaoRawParcel) =>
+      matchStatus(p, /pickup completed|at hub|warehouse|sorting/i);
+    const isAssigned = (p: PathaoRawParcel) =>
+      matchStatus(p, /pickup requested|assigned/i);
+
+    const SUB_FILTERS: Record<string, (p: PathaoRawParcel) => boolean> = {
+      // Active tab cards. "Pending" is a fall-through bucket — any active
+      // parcel that doesn't fall into one of the more specific categories
+      // counts as pending. Pathao's official total_pending_orders stat works
+      // the same way, so the count on the card always matches the row count.
+      pending:     (p) => !isInTransit(p) && !isAtHub(p) && !isAssigned(p),
+      in_transit:  isInTransit,
+      at_hub:      isAtHub,
+      assigned:    isAssigned,
+      // Delivered tab cards
+      delivered:   (p) => /^delivered$/i.test(p.order_status ?? ""),
+      partial:     (p) => matchStatus(p, /partial/i),
+      exchange:    (p) => matchStatus(p, /exchange/i),
+    };
+    const applySubFilter = (parcels: PathaoRawParcel[]): PathaoRawParcel[] => {
+      const fn = subFilter && SUB_FILTERS[subFilter];
+      return fn ? parcels.filter(fn) : parcels;
+    };
 
     // ── Auth ─────────────────────────────────────────────────────────────────
     const token = await getMerchantPanelToken();
@@ -285,14 +349,36 @@ export async function GET(request: NextRequest) {
       }
 
       // Sort merged result newest-first
-      rawParcels = Array.from(mergeMap.values()).sort(
+      let merged = applyDateFilter(Array.from(mergeMap.values())).sort(
         (a, b) =>
           new Date(b.order_created_at).getTime() -
           new Date(a.order_created_at).getTime(),
       );
-      // Pagination is driven entirely by the returned (ts=3) list
-      pathaoTotal    = retPage.total;
-      pathaoLastPage = retPage.lastPage;
+
+      // Returned-tab sub-filters: filter the merged list when a card is clicked.
+      if (subFilter === "paid_return") {
+        merged = merged.filter((p) => /paid/i.test(p.billing_status ?? ""));
+      } else if (subFilter === "in_progress") {
+        // Reverse delivery still on its way back: an attached _reverse exists
+        // and its status is NOT "Returned to Merchant".
+        merged = merged.filter(
+          (p) => p._reverse && !/returned to merchant/i.test(p._reverse.order_status ?? ""),
+        );
+      }
+
+      rawParcels     = merged;
+      // When no sub-filter is active, paginate using Pathao's reported totals
+      // for the returned bucket (server-paginated). When a sub-filter is on,
+      // the count is approximate (filters the current page only) — full-set
+      // filtering would require a fetchAllForStats(3, …) which we skip to
+      // keep latency reasonable.
+      if (subFilter === "paid_return" || subFilter === "in_progress") {
+        pathaoTotal    = merged.length;
+        pathaoLastPage = Math.max(1, Math.ceil(merged.length / limit));
+      } else {
+        pathaoTotal    = retPage.total;
+        pathaoLastPage = retPage.lastPage;
+      }
 
       tabStats = {
         returnTotal:       Number(retStats.total_orders ?? 0),
@@ -303,6 +389,55 @@ export async function GET(request: NextRequest) {
         total:             Number(retStats.total_orders ?? 0) + Number(revStats.total_orders ?? 0),
       };
 
+    } else if (tab === "partial") {
+      // ── Partial Delivered orders ──────────────────────────────────────────
+      // Pathao's exact status string varies ("Partial Delivered",
+      // "Partial Delivery", "partial_delivery") and partial entries can
+      // live in either the delivered (ts=2) bucket OR the returned (ts=3)
+      // bucket depending on whether the courier classifies the partial as
+      // a delivery or a return event. We pull both buckets (active +
+      // archived for ts=2, plus ts=3) and match any status containing
+      // "partial" case-insensitively.
+      const [del2Active, del2Arch, ret3] = await Promise.all([
+        fetchAllForStats(2, "0", token),
+        fetchAllForStats(2, "1", token),
+        fetchAllForStats(3, archive, token),
+      ]);
+
+      const all = [...del2Active, ...del2Arch, ...ret3];
+      // De-dupe by consignment ID in case Pathao surfaces the same row twice
+      const seen = new Set<string>();
+      const deduped = all.filter((p) => {
+        const id = p.order_consignment_id;
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      const partialOnly = applyDateFilter(deduped.filter((p) =>
+        (p.order_status ?? "").toString().toLowerCase().includes("partial"),
+      ));
+
+      // Sort newest-first so pagination is stable
+      partialOnly.sort(
+        (a, b) =>
+          new Date(b.order_created_at).getTime() -
+          new Date(a.order_created_at).getTime(),
+      );
+
+      const start = (page - 1) * limit;
+      rawParcels     = partialOnly.slice(start, start + limit);
+      pathaoTotal    = partialOnly.length;
+      pathaoLastPage = Math.max(1, Math.ceil(partialOnly.length / limit));
+
+      // Stats: total partial orders + COD aggregates over the filtered set.
+      const totalCod = partialOnly.reduce((s, p) => s + Number(p.order_amount || 0), 0);
+      tabStats = {
+        total_orders: partialOnly.length,
+        total_cod:    totalCod,
+        avg_cod:      partialOnly.length > 0 ? Math.round(totalCod / partialOnly.length) : 0,
+      };
+
     } else if (tab === "paid_zero") {
       // ── Paid orders (billing_status=paid, all types) + invoice totals ─────
       const [paidPage, invStats] = await Promise.all([
@@ -310,8 +445,8 @@ export async function GET(request: NextRequest) {
         fetchInvoiceStats(token),
       ]);
 
-      // ── Keep only low / zero COD parcels (৳0 – ৳150) ──────────────────
-      rawParcels     = paidPage.parcels.filter((p) => p.order_amount <= 150);
+      // ── Keep only low / zero COD parcels (৳0 – ৳150) + apply date scope ──
+      rawParcels     = applyDateFilter(paidPage.parcels.filter((p) => p.order_amount <= 150));
       pathaoTotal    = rawParcels.length;   // filtered count for this page
       pathaoLastPage = paidPage.lastPage;
 
@@ -328,21 +463,104 @@ export async function GET(request: NextRequest) {
       const ts        = tab === "active" ? 1 : 2;
       const statsType = tab === "active" ? "active" : "delivered";
 
-      // Fetch current page + official stats in parallel (just 2 requests)
-      const [mainPage, st] = await Promise.all([
-        fetchOrdersPage(ordersUrl(ts, archive, page, limit), token),
-        fetchOrderStats(token, statsType),
-      ]);
+      if (tab === "active") {
+        // Pathao parks RA "In Transit" entries in ts=1 alongside outbound DAs,
+        // so the official "active" stat over-counts for a merchant who only
+        // cares about parcels going OUT. We fetch the entire bucket in one
+        // request, filter to DA-only, then slice for the requested page —
+        // gives us an accurate total + correct pagination over real outbound
+        // orders only.
+        const [allActive, st] = await Promise.all([
+          fetchAllForStats(ts, archive, token),
+          fetchOrderStats(token, statsType),
+        ]);
 
-      if (!mainPage.parcels) {
-        clearMerchantPanelTokenCache();
-        return errorResponse("Pathao session expired — will auto-refresh on next request", 502);
+        if (!allActive) {
+          clearMerchantPanelTokenCache();
+          return errorResponse("Pathao session expired — will auto-refresh on next request", 502);
+        }
+
+        const daOnly = applyDateFilter(allActive.filter(
+          (p) => !p.order_consignment_id?.toUpperCase().startsWith("RA"),
+        ));
+        // Apply user-clicked sub-filter (Pending / In Transit / At Hub / Assigned).
+        const filtered = applySubFilter(daOnly);
+
+        const start = (page - 1) * limit;
+        rawParcels     = filtered.slice(start, start + limit);
+        pathaoTotal    = filtered.length;
+        pathaoLastPage = Math.max(1, Math.ceil(filtered.length / limit));
+
+        // Compute card counts from the actual DA-only set so the numbers
+        // always match what the same predicate would return when clicked.
+        // Pathao's official /stats/order?type=active endpoint sometimes
+        // returns 0 for these fields (response shape varies), causing the
+        // cards to under-count. Computing locally guarantees consistency:
+        //   pending + in_transit + at_hub + assigned = total_orders.
+        const cnt = { in_transit: 0, at_hub: 0, assigned: 0, pending: 0 };
+        let collectable = 0;
+        for (const p of daOnly) {
+          if (isInTransit(p))      cnt.in_transit++;
+          else if (isAtHub(p))     cnt.at_hub++;
+          else if (isAssigned(p))  cnt.assigned++;
+          else                     cnt.pending++;
+          collectable += Number(p.order_amount || 0);
+        }
+
+        const reverseInActive = allActive.length - daOnly.length;
+        tabStats = {
+          ...st,
+          total_orders:                daOnly.length,
+          total_pending_orders:        cnt.pending,
+          in_transit:                  cnt.in_transit,
+          at_delivery_hub:             cnt.at_hub,
+          assigned_for_delivery:       cnt.assigned,
+          total_collectable_amount:    collectable,
+          excluded_reverse:            reverseInActive,
+        };
+      } else {
+        // Delivered (ts=2) — fetch full bucket so we can apply sub-filters
+        // (Delivered / Partial / Exchange cards) without hitting Pathao again.
+        const [allDelivered, st] = await Promise.all([
+          fetchAllForStats(ts, archive, token),
+          fetchOrderStats(token, statsType),
+        ]);
+
+        if (!allDelivered) {
+          clearMerchantPanelTokenCache();
+          return errorResponse("Pathao session expired — will auto-refresh on next request", 502);
+        }
+
+        const dateScoped = applyDateFilter(allDelivered);
+        const filtered   = applySubFilter(dateScoped);
+
+        const start = (page - 1) * limit;
+        rawParcels     = filtered.slice(start, start + limit);
+        pathaoTotal    = filtered.length;
+        pathaoLastPage = Math.max(1, Math.ceil(filtered.length / limit));
+
+        // Locally compute the cards so they match the click predicates exactly.
+        // Anchored on the date-scoped set so cards reflect the chosen window.
+        let dDelivered = 0, dPartial = 0, dExchange = 0, dCollected = 0;
+        for (const p of dateScoped) {
+          const s2 = (p.order_status ?? "").toString();
+          if (/partial/i.test(s2))        dPartial++;
+          else if (/exchange/i.test(s2))  dExchange++;
+          else if (/^delivered$/i.test(s2)) dDelivered++;
+          dCollected += Number(p.order_amount || 0);
+        }
+        const totalDel = dateScoped.length;
+        const pct = totalDel > 0 ? `${Math.round((dDelivered / totalDel) * 100)}%` : "0%";
+        tabStats = {
+          ...st,
+          total_orders:           totalDel,
+          delivered:              dDelivered,
+          delivered_percentage:   pct,
+          partial_delivery:       dPartial,
+          exchange:               dExchange,
+          total_collected_amount: dCollected,
+        };
       }
-
-      rawParcels     = mainPage.parcels;
-      pathaoTotal    = mainPage.total;
-      pathaoLastPage = mainPage.lastPage;
-      tabStats       = st;
     }
 
     // ── Client-side search ────────────────────────────────────────────────────

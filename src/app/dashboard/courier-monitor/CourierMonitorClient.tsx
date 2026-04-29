@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import DateRangePicker from "@/components/DateRangePicker";
+import InlineSelect from "@/components/InlineSelect";
 import { toBn } from "@/utils/toBn";
 import { useLang } from "@/lib/LanguageContext";
 import { motion } from "framer-motion";
@@ -16,8 +17,8 @@ import {
 } from "react-icons/fi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type DataSource  = "database" | "pathao";
-type PathaoTab   = "active" | "delivered" | "returned_reversed" | "paid_zero";
+type DataSource  = "database" | "pathao" | "steadfast";
+type PathaoTab   = "active" | "delivered" | "partial" | "returned_reversed" | "paid_zero";
 
 interface ParcelItem {
   productName: string;
@@ -63,6 +64,9 @@ interface PathaoFilters {
   archive: string; // "0"=active, "1"=archived
   page: number;
   q: string;
+  subFilter: string; // optional status-card filter (e.g. "pending", "in_transit")
+  from: string;      // YYYY-MM-DD (BD), inclusive
+  to: string;        // YYYY-MM-DD (BD), inclusive
 }
 
 // ─── Pathao Tab Config ────────────────────────────────────────────────────────
@@ -85,6 +89,12 @@ const PATHAO_TABS: TabDef[] = [
     label: "Delivered", labelBn: "ডেলিভারি হয়েছে",
     activeClass:   "bg-emerald-500 text-white shadow",
     inactiveClass: "text-emerald-600 hover:bg-emerald-50",
+  },
+  {
+    id: "partial",
+    label: "Partial Orders", labelBn: "আংশিক অর্ডার",
+    activeClass:   "bg-amber-500 text-white shadow",
+    inactiveClass: "text-amber-600 hover:bg-amber-50",
   },
   {
     id: "returned_reversed",
@@ -121,14 +131,38 @@ const ORDER_STATUS_CLS: Record<string, string> = {
   delivered:  "bg-emerald-100 text-emerald-800",
   cancelled:  "bg-red-100 text-red-800",
 };
+// Display label for the local-order status badge. The DB still stores
+// "shipped" but the merchant-facing label is "Courier Sent" — map at render
+// time so we don't need a data migration.
+const ORDER_STATUS_LABEL_EN: Record<string, string> = {
+  pending:    "Pending",
+  confirmed:  "Confirmed",
+  processing: "Processing",
+  shipped:    "Courier Sent",
+  delivered:  "Delivered",
+  cancelled:  "Cancelled",
+};
+const ORDER_STATUS_LABEL_BN: Record<string, string> = {
+  pending:    "অপেক্ষমাণ",
+  confirmed:  "নিশ্চিত",
+  processing: "প্রসেসিং",
+  shipped:    "কুরিয়ার পাঠানো হয়েছে",
+  delivered:  "ডেলিভারি",
+  cancelled:  "বাতিল",
+};
+function localStatusLabel(status: string | null | undefined, lang: string): string {
+  if (!status) return "";
+  const map = lang === "en" ? ORDER_STATUS_LABEL_EN : ORDER_STATUS_LABEL_BN;
+  return map[status] ?? status;
+}
 const BILLING_STATUS_CLS: Record<string, string> = {
   paid:   "bg-emerald-100 text-emerald-700",
   unpaid: "bg-amber-100 text-amber-700",
 };
 
 const EMPTY_STATS: Record<string, unknown> = {};
-const DB_LIMIT     = 20;
-const PATHAO_LIMIT = 20;
+const DB_LIMIT     = 100;
+const PATHAO_LIMIT = 100;
 
 function useCopy() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -181,8 +215,8 @@ export default function CourierMonitorClient() {
     page: 1, from: "", to: "", courier: "all", status: "all", q: "",
   });
   const [pathaoFilters, setPathaoFilters] = useState<PathaoFilters>({
-    tab: urlSource === "pathao" ? urlTab : "active",
-    archive: "0", page: 1, q: "",
+    tab: (urlSource === "pathao" || urlSource === "steadfast") ? urlTab : "active",
+    archive: "0", page: 1, q: "", subFilter: "", from: "", to: "",
   });
   const [searchInput, setSearchInput] = useState("");
 
@@ -197,7 +231,7 @@ export default function CourierMonitorClient() {
   const pushUrl = useCallback((src: DataSource, tab: PathaoTab) => {
     const sp = new URLSearchParams();
     if (src !== "database") sp.set("source", src);
-    if (src === "pathao" && tab !== "active") sp.set("tab", tab);
+    if ((src === "pathao" || src === "steadfast") && tab !== "active") sp.set("tab", tab);
     const qs = sp.toString();
     router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
   }, [router, pathname]);
@@ -230,18 +264,25 @@ export default function CourierMonitorClient() {
     } finally { setLoading(false); }
   };
 
-  // ── Fetch Pathao ──────────────────────────────────────────────────────────
-  const loadPathao = async (f: PathaoFilters) => {
+  // ── Fetch Pathao or Steadfast (same shape, different endpoint) ───────────
+  // The source argument is passed explicitly because `source` state may not
+  // have flushed when switchSource calls loadPathao back-to-back with setSource.
+  const loadPathao = async (f: PathaoFilters, srcOverride?: DataSource) => {
     setLoading(true); setFetchError(null);
     try {
+      const src = srcOverride ?? source;
       const sp = new URLSearchParams();
       sp.set("tab",     f.tab);
       sp.set("page",    String(f.page));
       sp.set("limit",   String(PATHAO_LIMIT));
       sp.set("archive", f.archive);
       if (f.q) sp.set("q", f.q);
+      if (f.subFilter) sp.set("subFilter", f.subFilter);
+      if (f.from) sp.set("from", f.from);
+      if (f.to)   sp.set("to",   f.to);
 
-      const res = await fetch(`/api/v1/admin/courier/pathao-parcels?${sp}`);
+      const endpoint = src === "steadfast" ? "steadfast-parcels" : "pathao-parcels";
+      const res = await fetch(`/api/v1/admin/courier/${endpoint}?${sp}`);
       if (!res.ok) {
         const e = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
         throw new Error(e.message || `HTTP ${res.status}`);
@@ -264,8 +305,8 @@ export default function CourierMonitorClient() {
 
   // ── Initial load — honour URL params ─────────────────────────────────────
   useEffect(() => {
-    if (urlSource === "pathao") {
-      loadPathao(pathaoFiltersRef.current);
+    if (urlSource === "pathao" || urlSource === "steadfast") {
+      loadPathao(pathaoFiltersRef.current, urlSource);
     } else {
       loadDb(dbFiltersRef.current);
     }
@@ -277,11 +318,12 @@ export default function CourierMonitorClient() {
     if (next === source) return;
     setSource(next); setFetched(false);
     setParcels([]); setStats(EMPTY_STATS); setTotalCount(0); setSearchInput("");
-    if (next === "pathao") {
-      const reset: PathaoFilters = { tab: "active", archive: "0", page: 1, q: "" };
+    if (next === "pathao" || next === "steadfast") {
+      const reset: PathaoFilters = { tab: "active", archive: "0", page: 1, q: "", subFilter: "", from: "", to: "" };
       setPathaoFilters(reset); pathaoFiltersRef.current = reset;
-      pushUrl("pathao", "active");
-      setTimeout(() => loadPathao(reset), 0);
+      pushUrl(next, "active");
+      // Pass `next` explicitly — the `source` state hasn't flushed yet.
+      setTimeout(() => loadPathao(reset, next), 0);
     } else {
       const reset: DbFilters = { page: 1, from: "", to: "", courier: "all", status: "all", q: "" };
       setDbFilters(reset); dbFiltersRef.current = reset;
@@ -294,7 +336,10 @@ export default function CourierMonitorClient() {
   const switchPathaoTab = (tab: PathaoTab) => {
     if (tab === pathaoFilters.tab) return;
     setFetched(false); setParcels([]); setStats(EMPTY_STATS); setSearchInput("");
-    const next: PathaoFilters = { ...pathaoFiltersRef.current, tab, page: 1, q: "" };
+    // Reset subFilter on tab switch — old filter keys don't apply to a new tab
+    const next: PathaoFilters = { ...pathaoFiltersRef.current, tab, page: 1, q: "", subFilter: "" };
+    // Preserve date range across tab switches — merchants typically want
+    // the same window when comparing buckets. Reset only if you want fresh.
     setPathaoFilters(next); pathaoFiltersRef.current = next;
     pushUrl("pathao", tab);
     loadPathao(next);
@@ -346,11 +391,14 @@ export default function CourierMonitorClient() {
     setRefreshingAll(false); setRefreshProgress(0);
   };
 
-  const currentPage  = source === "pathao" ? pathaoFilters.page : dbFilters.page;
-  const totalPages   = source === "pathao" ? lastPage : Math.ceil(totalCount / DB_LIMIT);
+  // Pathao Live and Steadfast Live share the same UX scaffold (tabs, sub-cards,
+  // pagination, search, archive toggle). DB tab is the only outlier.
+  const isLive       = source === "pathao" || source === "steadfast";
+  const currentPage  = isLive ? pathaoFilters.page : dbFilters.page;
+  const totalPages   = isLive ? lastPage : Math.ceil(totalCount / DB_LIMIT);
   const goToPage     = (pg: number) => {
-    if (source === "pathao") applyPathaoFilters({ page: pg });
-    else                     applyDbFilters({ page: pg });
+    if (isLive) applyPathaoFilters({ page: pg });
+    else        applyDbFilters({ page: pg });
   };
 
   const activeTab = PATHAO_TABS.find((t) => t.id === pathaoFilters.tab)!;
@@ -370,36 +418,58 @@ export default function CourierMonitorClient() {
     ));
   }
 
+  // Setting subFilter resets to page 1 and re-fetches. Clicking the same
+  // filter again clears it (toggle behavior).
+  const setSubFilter = (key: string) => {
+    const next: PathaoFilters = {
+      ...pathaoFiltersRef.current,
+      subFilter: pathaoFiltersRef.current.subFilter === key ? "" : key,
+      page: 1,
+    };
+    setPathaoFilters(next); pathaoFiltersRef.current = next;
+    loadPathao(next);
+  };
+  const sub = pathaoFilters.subFilter;
+
   function renderActiveStats() {
     const s = stats as Record<string, number>;
     return [
-      <StatCard key={0} icon={FiPackage}     label={lbl("Total Active",    "মোট সক্রিয়")}           value={toBn(s.total_orders ?? 0)}           color="bg-amber-500"   delay={0}    />,
-      <StatCard key={1} icon={FiClock}       label={lbl("Pending",         "পেন্ডিং")}               value={toBn(s.total_pending_orders ?? 0)}    color="bg-gray-400"    delay={0.05} />,
-      <StatCard key={2} icon={FiTruck}       label={lbl("In Transit",      "ট্রানজিটে")}             value={toBn(s.in_transit ?? 0)}              color="bg-blue-500"    delay={0.1}  />,
-      <StatCard key={3} icon={FiPackage}     label={lbl("At Hub",          "হাবে আছে")}              value={toBn(s.at_delivery_hub ?? 0)}         color="bg-indigo-500"  delay={0.15} />,
-      <StatCard key={4} icon={FiCheckCircle} label={lbl("Assigned",        "অ্যাসাইন হয়েছে")}        value={toBn(s.assigned_for_delivery ?? 0)}   color="bg-purple-500"  delay={0.2}  />,
-      <StatCard key={5} icon={FiDollarSign}  label={lbl("Collectable ৳",   "সংগ্রহযোগ্য")}           value={fmtCurrency(s.total_collectable_amount ?? 0)} color="bg-emerald-500" delay={0.25} />,
+      <StatCard key={0} icon={FiPackage}     label={lbl("Total Active",    "মোট সক্রিয়")}           value={toBn(s.total_orders ?? 0)}           color="bg-amber-500"   delay={0}     onClick={() => setSubFilter("")}          active={sub === ""}          />,
+      <StatCard key={1} icon={FiClock}       label={lbl("Pending",         "পেন্ডিং")}               value={toBn(s.total_pending_orders ?? 0)}    color="bg-gray-400"    delay={0.05}  onClick={() => setSubFilter("pending")}    active={sub === "pending"}    />,
+      <StatCard key={2} icon={FiTruck}       label={lbl("In Transit",      "ট্রানজিটে")}             value={toBn(s.in_transit ?? 0)}              color="bg-blue-500"    delay={0.1}   onClick={() => setSubFilter("in_transit")} active={sub === "in_transit"} />,
+      <StatCard key={3} icon={FiPackage}     label={lbl("At Hub",          "হাবে আছে")}              value={toBn(s.at_delivery_hub ?? 0)}         color="bg-indigo-500"  delay={0.15}  onClick={() => setSubFilter("at_hub")}     active={sub === "at_hub"}     />,
+      <StatCard key={4} icon={FiCheckCircle} label={lbl("Assigned",        "অ্যাসাইন হয়েছে")}        value={toBn(s.assigned_for_delivery ?? 0)}   color="bg-purple-500"  delay={0.2}   onClick={() => setSubFilter("assigned")}   active={sub === "assigned"}   />,
+      <StatCard key={5} icon={FiDollarSign}  label={lbl("Collectable ৳",   "সংগ্রহযোগ্য")}           value={fmtCurrency(s.total_collectable_amount ?? 0)} color="bg-emerald-500" delay={0.25}  />,
     ];
   }
 
   function renderDeliveredStats() {
     const s = stats as Record<string, unknown>;
     return [
-      <StatCard key={0} icon={FiPackage}     label={lbl("Total",           "মোট")}                   value={toBn(Number(s.total_orders ?? 0))}                  color="bg-emerald-500" delay={0}    />,
-      <StatCard key={1} icon={FiCheckCircle} label={lbl("Delivered",       "ডেলিভারি হয়েছে")}        value={`${toBn(Number(s.delivered ?? 0))} (${s.delivered_percentage ?? "0%"})`} color="bg-emerald-600" delay={0.05} />,
-      <StatCard key={2} icon={FiPackage}     label={lbl("Partial",         "আংশিক")}                 value={toBn(Number(s.partial_delivery ?? 0))}              color="bg-amber-500"   delay={0.1}  />,
-      <StatCard key={3} icon={FiRefreshCw}   label={lbl("Exchange",        "এক্সচেঞ্জ")}             value={toBn(Number(s.exchange ?? 0))}                      color="bg-blue-500"    delay={0.15} />,
+      <StatCard key={0} icon={FiPackage}     label={lbl("Total",           "মোট")}                   value={toBn(Number(s.total_orders ?? 0))}                  color="bg-emerald-500" delay={0}    onClick={() => setSubFilter("")}          active={sub === ""}          />,
+      <StatCard key={1} icon={FiCheckCircle} label={lbl("Delivered",       "ডেলিভারি হয়েছে")}        value={`${toBn(Number(s.delivered ?? 0))} (${s.delivered_percentage ?? "0%"})`} color="bg-emerald-600" delay={0.05} onClick={() => setSubFilter("delivered")} active={sub === "delivered"} />,
+      <StatCard key={2} icon={FiPackage}     label={lbl("Partial",         "আংশিক")}                 value={toBn(Number(s.partial_delivery ?? 0))}              color="bg-amber-500"   delay={0.1}  onClick={() => setSubFilter("partial")}   active={sub === "partial"}   />,
+      <StatCard key={3} icon={FiRefreshCw}   label={lbl("Exchange",        "এক্সচেঞ্জ")}             value={toBn(Number(s.exchange ?? 0))}                      color="bg-blue-500"    delay={0.15} onClick={() => setSubFilter("exchange")}  active={sub === "exchange"}  />,
       <StatCard key={4} icon={FiDollarSign}  label={lbl("Total Collected ৳","মোট সংগৃহীত")}          value={fmtCurrency(Number(s.total_collected_amount ?? 0))} color="bg-indigo-500"  delay={0.2}  />,
+    ];
+  }
+
+  function renderPartialStats() {
+    const s = stats as Record<string, number>;
+    return [
+      <StatCard key={0} icon={FiPackage}     label={lbl("Partial Orders",  "আংশিক অর্ডার")}          value={toBn(s.total_orders ?? 0)}        color="bg-amber-500"   delay={0}    />,
+      <StatCard key={1} icon={FiDollarSign}  label={lbl("Total COD ৳",     "মোট সিওডি")}             value={fmtCurrency(s.total_cod ?? 0)}    color="bg-emerald-500" delay={0.05} />,
+      <StatCard key={2} icon={FiCheckCircle} label={lbl("Avg COD ৳",       "গড় সিওডি")}              value={fmtCurrency(s.avg_cod ?? 0)}      color="bg-indigo-500"  delay={0.1}  />,
     ];
   }
 
   function renderReturnedStats() {
     const s = stats as Record<string, number>;
     return [
-      <StatCard key={0} icon={FiXCircle}     label={lbl("Returns Total",   "রিটার্ন মোট")}           value={toBn(s.returnTotal ?? 0)}        color="bg-red-500"     delay={0}    />,
+      <StatCard key={0} icon={FiXCircle}     label={lbl("Returns Total",   "রিটার্ন মোট")}           value={toBn(s.returnTotal ?? 0)}        color="bg-red-500"     delay={0}    onClick={() => setSubFilter("")}             active={sub === ""}            />,
       <StatCard key={1} icon={FiArrowLeft}   label={lbl("Reverse Total",   "রিভার্স মোট")}           value={toBn(s.reverseTotal ?? 0)}       color="bg-orange-500"  delay={0.05} />,
-      <StatCard key={2} icon={FiCheckCircle} label={lbl("Paid Returns",    "পরিশোধিত রিটার্ন")}      value={toBn(s.paidReturn ?? 0)}         color="bg-emerald-500" delay={0.1}  />,
-      <StatCard key={3} icon={FiTruck}       label={lbl("In Progress",     "চলমান")}                  value={toBn(s.reverseInProgress ?? 0)}  color="bg-blue-500"    delay={0.15} />,
+      <StatCard key={2} icon={FiCheckCircle} label={lbl("Paid Returns",    "পরিশোধিত রিটার্ন")}      value={toBn(s.paidReturn ?? 0)}         color="bg-emerald-500" delay={0.1}  onClick={() => setSubFilter("paid_return")}  active={sub === "paid_return"} />,
+      <StatCard key={3} icon={FiTruck}       label={lbl("In Progress",     "চলমান")}                  value={toBn(s.reverseInProgress ?? 0)}  color="bg-blue-500"    delay={0.15} onClick={() => setSubFilter("in_progress")}  active={sub === "in_progress"} />,
     ];
   }
 
@@ -439,16 +509,30 @@ export default function CourierMonitorClient() {
               <FiWifi className="w-4 h-4" />
               Pathao Live
             </button>
+            <button
+              onClick={() => switchSource("steadfast")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                source === "steadfast" ? "bg-emerald-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <FiWifi className="w-4 h-4" />
+              Steadfast Live
+            </button>
           </div>
           {source === "pathao" && (
             <span className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-xl px-3 py-1.5">
               {lbl("Live data from Pathao merchant portal", "Pathao মার্চেন্ট পোর্টাল থেকে সরাসরি ডেটা")}
             </span>
           )}
+          {source === "steadfast" && (
+            <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-1.5">
+              {lbl("Local Steadfast orders (refresh status from Steadfast API)", "লোকাল Steadfast অর্ডার (Steadfast API থেকে রিফ্রেশ)")}
+            </span>
+          )}
         </div>
 
-        {/* ── Pathao Sub-Tabs ── */}
-        {source === "pathao" && (
+        {/* ── Live Sub-Tabs (shared between Pathao Live and Steadfast Live) ── */}
+        {isLive && (
           <div className="flex items-center gap-2 flex-wrap bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
             {PATHAO_TABS.map((t) => (
               <button
@@ -466,39 +550,46 @@ export default function CourierMonitorClient() {
 
         {/* ── Stat Cards ── */}
         <div className={`grid gap-3 ${
-          source === "pathao" && pathaoFilters.tab === "active"    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" :
-          source === "pathao" && pathaoFilters.tab === "delivered" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" :
+          isLive && pathaoFilters.tab === "active"    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" :
+          isLive && pathaoFilters.tab === "delivered" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" :
           "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4"
         }`}>
-          {source === "database"                              ? renderDbStats()       :
+          {!isLive                                          ? renderDbStats()       :
            pathaoFilters.tab === "active"                    ? renderActiveStats()   :
            pathaoFilters.tab === "delivered"                 ? renderDeliveredStats():
+           pathaoFilters.tab === "partial"                   ? renderPartialStats()  :
            pathaoFilters.tab === "returned_reversed"         ? renderReturnedStats() :
                                                                renderPaidStats()     }
         </div>
 
         {/* ── Filters ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          {source === "database" ? (
+          {!isLive ? (
             <div className="flex flex-wrap items-center gap-3">
               <DateRangePicker
                 from={dbFilters.from} to={dbFilters.to}
                 onChange={(f, t) => applyDbFilters({ from: f, to: t })}
               />
-              <select value={dbFilters.courier} onChange={(e) => applyDbFilters({ courier: e.target.value })}
-                className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[var(--primary)] bg-white">
-                <option value="all">{lbl("All Couriers",  "সব কুরিয়ার")}</option>
-                <option value="steadfast">Steadfast</option>
-                <option value="pathao">Pathao</option>
-              </select>
-              <select value={dbFilters.status} onChange={(e) => applyDbFilters({ status: e.target.value })}
-                className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[var(--primary)] bg-white">
-                <option value="all">{lbl("All Statuses",  "সব স্ট্যাটাস")}</option>
-                <option value="pending">{lbl("Pending",    "অপেক্ষমাণ")}</option>
-                <option value="in_transit">{lbl("In Transit", "ট্রানজিটে")}</option>
-                <option value="delivered">{lbl("Delivered",   "ডেলিভারি হয়েছে")}</option>
-                <option value="returned">{lbl("Returned",    "ফেরত")}</option>
-              </select>
+              <InlineSelect
+                value={dbFilters.courier}
+                onChange={(v) => applyDbFilters({ courier: v })}
+                options={[
+                  { value: "all",       label: lbl("All Couriers", "সব কুরিয়ার") },
+                  { value: "steadfast", label: "Steadfast" },
+                  { value: "pathao",    label: "Pathao" },
+                ]}
+              />
+              <InlineSelect
+                value={dbFilters.status}
+                onChange={(v) => applyDbFilters({ status: v })}
+                options={[
+                  { value: "all",        label: lbl("All Statuses", "সব স্ট্যাটাস") },
+                  { value: "pending",    label: lbl("Pending",      "অপেক্ষমাণ") },
+                  { value: "in_transit", label: lbl("In Transit",   "ট্রানজিটে") },
+                  { value: "delivered",  label: lbl("Delivered",    "ডেলিভারি হয়েছে") },
+                  { value: "returned",   label: lbl("Returned",     "ফেরত") },
+                ]}
+              />
               <SearchBox
                 value={searchInput} onChange={setSearchInput}
                 placeholder={lbl("Name, phone, consignment ID…", "নাম, ফোন, কনসাইনমেন্ট…")}
@@ -516,12 +607,20 @@ export default function CourierMonitorClient() {
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
+              {/* Date range — anchors to order_created_at on Pathao parcels */}
+              <DateRangePicker
+                from={pathaoFilters.from} to={pathaoFilters.to}
+                onChange={(f, t) => applyPathaoFilters({ from: f, to: t, page: 1 })}
+              />
               {/* Archive toggle */}
-              <select value={pathaoFilters.archive} onChange={(e) => applyPathaoFilters({ archive: e.target.value })}
-                className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-orange-400 bg-white">
-                <option value="0">{lbl("Active",   "সক্রিয়")}</option>
-                <option value="1">{lbl("Archived", "আর্কাইভড")}</option>
-              </select>
+              <InlineSelect
+                value={pathaoFilters.archive}
+                onChange={(v) => applyPathaoFilters({ archive: v })}
+                options={[
+                  { value: "0", label: lbl("Active",   "সক্রিয়") },
+                  { value: "1", label: lbl("Archived", "আর্কাইভড") },
+                ]}
+              />
               <SearchBox
                 value={searchInput} onChange={setSearchInput}
                 placeholder={lbl("Name, phone, consignment ID…", "নাম, ফোন, কনসাইনমেন্ট…")}
@@ -593,7 +692,7 @@ export default function CourierMonitorClient() {
                         "কুরিয়ার সেটিংসে Pathao ক্রেডেনশিয়াল সেভ করুন। টোকেন স্বয়ংক্রিয়ভাবে রিফ্রেশ হবে।")}
                 </p>
               )}
-              <button onClick={() => source === "pathao" ? loadPathao(pathaoFiltersRef.current) : loadDb(dbFiltersRef.current)}
+              <button onClick={() => isLive ? loadPathao(pathaoFiltersRef.current) : loadDb(dbFiltersRef.current)}
                 className="mt-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors">
                 {lbl("Try again", "আবার চেষ্টা করুন")}
               </button>
@@ -618,7 +717,7 @@ export default function CourierMonitorClient() {
           {/* ── Tables ── */}
           {!loading && !fetchError && parcels.length > 0 && (
             <div className="overflow-x-auto">
-              {source === "database" ? (
+              {!isLive ? (
                 <DbTable parcels={parcels} refreshingIds={refreshingIds} refreshingAll={refreshingAll}
                   copiedId={copiedId} copy={copy} onRefresh={refreshOne} lang={lang} lbl={lbl} />
               ) : pathaoFilters.tab === "returned_reversed" ? (
@@ -649,7 +748,7 @@ export default function CourierMonitorClient() {
                   <button key={pn} onClick={() => goToPage(pn)}
                     className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
                       pn === currentPage
-                        ? source === "pathao" ? `${activeTab.activeClass} border-transparent` : "bg-[var(--primary)] text-white border-[var(--primary)]"
+                        ? isLive ? `${activeTab.activeClass} border-transparent` : "bg-[var(--primary)] text-white border-[var(--primary)]"
                         : "border-gray-200 text-gray-600 hover:bg-gray-50"
                     }`}>
                     {toBn(pn)}
@@ -669,13 +768,21 @@ export default function CourierMonitorClient() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCard({
-  icon: Icon, label, value, color, delay,
-}: { icon: React.ElementType; label: string; value: string; color: string; delay: number }) {
+  icon: Icon, label, value, color, delay, onClick, active,
+}: {
+  icon: React.ElementType; label: string; value: string; color: string; delay: number;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const interactive = !!onClick;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.35 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3"
+      onClick={onClick}
+      className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3 transition-all
+        ${interactive ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""}
+        ${active ? "border-[var(--primary)] ring-2 ring-[var(--primary)]/20" : "border-gray-100"}`}
     >
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
         <Icon className="w-5 h-5 text-white" />
@@ -726,7 +833,7 @@ function ConsignmentCell({ consignmentId, copyKey, copiedId, copy, orange = fals
   );
 }
 
-function LocalOrderCell({ parcel, lbl }: { parcel: CourierParcel; lbl: (en: string, bn: string) => string }) {
+function LocalOrderCell({ parcel, lang, lbl }: { parcel: CourierParcel; lang: string; lbl: (en: string, bn: string) => string }) {
   if (!parcel.id) return <span className="text-xs text-gray-400 italic">{lbl("No match", "মেলেনি")}</span>;
   return (
     <div className="flex items-center gap-1.5">
@@ -736,7 +843,7 @@ function LocalOrderCell({ parcel, lbl }: { parcel: CourierParcel; lbl: (en: stri
       </Link>
       {parcel.status && (
         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${ORDER_STATUS_CLS[parcel.status] || "bg-gray-100 text-gray-600"}`}>
-          {parcel.status}
+          {localStatusLabel(parcel.status, lang)}
         </span>
       )}
     </div>
@@ -801,7 +908,7 @@ function DbTable({ parcels, refreshingIds, refreshingAll, copiedId, copy, onRefr
               <td className="px-4 py-3">
                 <div className="flex flex-col gap-1">
                   <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-fit whitespace-nowrap ${cb.cls}`}>{cb.label}</span>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full w-fit whitespace-nowrap ${ORDER_STATUS_CLS[p.status ?? ""] || "bg-gray-100 text-gray-600"}`}>{p.status}</span>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full w-fit whitespace-nowrap ${ORDER_STATUS_CLS[p.status ?? ""] || "bg-gray-100 text-gray-600"}`}>{localStatusLabel(p.status, lang)}</span>
                 </div>
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap hidden lg:table-cell">
@@ -870,7 +977,7 @@ function PathaoStandardTable({ parcels, copiedId, copy, lang, lbl }: {
                 </span>
               </td>
               <td className="px-4 py-3 hidden lg:table-cell">
-                <LocalOrderCell parcel={p} lbl={lbl} />
+                <LocalOrderCell parcel={p} lang={lang} lbl={lbl} />
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap hidden lg:table-cell">
                 {p.createdAt ? new Date(p.createdAt).toLocaleDateString(lang === "en" ? "en-GB" : "bn-BD", { day: "2-digit", month: "short" }) : "—"}
@@ -989,7 +1096,7 @@ function ReturnReverseTable({ parcels, copiedId, copy, lang, lbl }: {
 
               {/* ── Local Order ── */}
               <td className="px-4 py-3 align-top">
-                <LocalOrderCell parcel={p} lbl={lbl} />
+                <LocalOrderCell parcel={p} lang={lang} lbl={lbl} />
               </td>
 
               {/* ── Date ── */}
@@ -1057,7 +1164,7 @@ function PaidTable({ parcels, copiedId, copy, lang, lbl }: {
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full inline-block ${cb.cls}`}>{cb.label}</span>
               </td>
               <td className="px-4 py-3 hidden lg:table-cell">
-                <LocalOrderCell parcel={p} lbl={lbl} />
+                <LocalOrderCell parcel={p} lang={lang} lbl={lbl} />
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap hidden lg:table-cell">
                 {p.billingDate

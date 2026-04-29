@@ -10,9 +10,10 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  // 20 per page so pagination only triggers above 20 — under that count
-  // the dashboard fits everything in one view (no Prev/Next clutter).
-  const perPage = 20;
+  // 100 per page — large enough that most merchants see their full daily
+  // workload in one view but still bounded so a year-long fetch doesn't
+  // pull thousands of rows in a single response.
+  const perPage = 100;
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   const dateFrom = searchParams.get("date_from"); // YYYY-MM-DD

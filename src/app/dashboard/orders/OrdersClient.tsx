@@ -157,8 +157,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
   // Pagination — server returns 20 per page (admin/orders/route.ts).
   // Match that here so page math lines up with what the API actually slices.
   // Pagination controls only render when totalPages > 1, i.e. when total
-  // orders exceeds 20 — under that, no Prev/Next clutter.
-  const perPage = 20;
+  // orders exceeds 100 — under that, no Prev/Next clutter.
+  const perPage = 100;
   const [page, setPage] = useState(1);
   // Seed from SSR so pagination controls render immediately on first paint
   // without waiting for the client-side re-fetch (skipFirstFetchRef).
@@ -798,7 +798,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const first = await api.admin.getOrders(`page=1`) as any;
         const total = Number(first?.total ?? first?.pagination?.total ?? 0);
-        const perPage = 20;
+        const perPage = 100;
         const lastPage = Math.max(1, Math.ceil(total / perPage));
         const pushPage = (items: Order[]) => {
           for (const it of items ?? []) {

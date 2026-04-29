@@ -83,13 +83,23 @@ export default async function DashboardServerPage() {
           },
         },
       }),
-      // Courier-sent ("actual sales") — today-scoped for SSR default
-      prisma.order.count({ where: { status: "shipped", createdAt: { gte: today } } }),
+      // Courier-sent ("actual sales") — today-scoped for SSR default.
+      // Anchored on courierSentAt (dispatch day) not createdAt, and uses
+      // the courierSent flag rather than status="shipped" so orders that
+      // were sent today but already delivered/cancelled still count.
+      // COUNT includes cancelled-after-dispatch (matches the courier-monitor
+      // "Total Sent" view); REVENUE excludes cancelled (no real money).
+      prisma.order.count({
+        where: { courierSent: true, status: { not: "trashed" }, courierSentAt: { gte: today } },
+      }),
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
-        where: { status: "shipped", createdAt: { gte: today } },
+        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, courierSentAt: { gte: today } },
       }),
-      prisma.order.groupBy({ by: ["customerPhone"], where: { status: "shipped", createdAt: { gte: today } } }),
+      prisma.order.groupBy({
+        by: ["customerPhone"],
+        where: { courierSent: true, status: { not: "trashed" }, courierSentAt: { gte: today } },
+      }),
       // Status breakdown — previously a sequential await after the first batch
       prisma.order.groupBy({
         by: ["status"],

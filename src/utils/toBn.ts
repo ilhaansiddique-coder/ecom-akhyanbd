@@ -1,7 +1,13 @@
 const bnDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
 
-// Global language state — set by LanguageContext, read by toBn
-let currentLang: string = "bn";
+// Global language state — set by LanguageContext, read by toBn.
+//
+// Default is "en" so SSR (which renders before any client-side context can
+// run) always emits English digits. LanguageContext then calls
+// setNumberLang("bn") on mount when the user's saved preference is Bangla,
+// at which point a re-render flips digits to Bengali. Defaulting to "bn"
+// caused a flash of Bengali numerals on hard reload even in English mode.
+let currentLang: string = "en";
 
 export function setNumberLang(lang: string) {
   currentLang = lang;

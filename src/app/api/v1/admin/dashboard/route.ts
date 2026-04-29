@@ -63,7 +63,6 @@ export async function GET(request: NextRequest) {
       topProducts,
       lowStockProducts,
       ordersByStatus,
-      revenueByStatus,
       shippedCount,
       shippedRevAgg,
       todayShippedCount,
@@ -126,38 +125,38 @@ export async function GET(request: NextRequest) {
         orderBy: { stock: "asc" },
         select: { id: true, name: true, stock: true, image: true },
       }),
-      // Order counts by status (date-scoped)
+      // Single groupBy returns both count + revenue per status — used to
+      // derive `order_counts.*` and `revenue_by_status.*` without firing a
+      // second groupBy on the same table.
       prisma.order.groupBy({
         by: ["status"],
         _count: { _all: true },
-        ...(dateFilter ? { where: { createdAt: dateFilter } } : {}),
-      }),
-      // Revenue by status excl. cancelled/trashed (date-scoped)
-      prisma.order.groupBy({
-        by: ["status"],
         _sum: { total: true, shippingCost: true },
-        where: { status: { notIn: ["cancelled", "trashed"] }, ...createdAtFilter },
+        ...(dateFilter ? { where: { createdAt: dateFilter } } : {}),
       }),
       // ── Courier-sent ("actual sales") stats ──────────────────────────────────
       // Anchored on `courierSentAt`, NOT `createdAt`, so an order created two
       // days ago but dispatched today still counts on today's stats. This
       // matches how a merchant intuitively reads "today's courier sent" —
       // the day the parcel left their hands, not the day the order arrived.
-      // Excludes cancelled/trashed (returned-before-pickup edge case) but
-      // keeps "delivered" since same-day delivered shipments still count.
+      //
+      // COUNTS include cancelled-after-dispatch (the parcel was still sent —
+      // matches the courier-monitor's "Total Sent" view). REVENUE excludes
+      // cancelled (cancelled money isn't real money), but only `cancelled`,
+      // not the pre-dispatch trash.
       prisma.order.count({
-        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
+        where: { courierSent: true, status: { not: "trashed" }, ...shippedFilter },
       }),
       // Shipped revenue excl. shipping cost (date-scoped on courierSentAt)
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
         where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
       }),
-      // Today's shipped orders — anchored on courierSentAt
+      // Today's shipped orders — count includes cancelled-after-dispatch
       prisma.order.count({
-        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, courierSentAt: { gte: today } },
+        where: { courierSent: true, status: { not: "trashed" }, courierSentAt: { gte: today } },
       }),
-      // Today's shipped revenue — anchored on courierSentAt
+      // Today's shipped revenue — excludes cancelled (no revenue from those)
       prisma.order.aggregate({
         _sum: { total: true, shippingCost: true },
         where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, courierSentAt: { gte: today } },
@@ -165,7 +164,7 @@ export async function GET(request: NextRequest) {
       // Unique customers (by phone) from courier-sent orders in range
       prisma.order.groupBy({
         by: ["customerPhone"],
-        where: { courierSent: true, status: { notIn: ["cancelled", "trashed"] }, ...shippedFilter },
+        where: { courierSent: true, status: { not: "trashed" }, ...shippedFilter },
       }),
       // Daily bar chart — always last 7 days (not date-scoped)
       ...days.map((day) => {
@@ -175,14 +174,16 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Build order counts map
+    // Build order counts + revenue map from the single merged groupBy.
+    // Revenue is excluded for cancelled/trashed (those flow through
+    // cancelledRevResult separately, surfaced as `cancelled_revenue`).
     const orderCounts: Record<string, number> = {};
-    for (const g of ordersByStatus) orderCounts[g.status] = g._count._all;
-
-    // Build revenue map for non-cancelled statuses
     const revMap: Record<string, number> = {};
-    for (const g of revenueByStatus) {
-      revMap[g.status] = Number(g._sum.total || 0) - Number(g._sum.shippingCost || 0);
+    for (const g of ordersByStatus) {
+      orderCounts[g.status] = g._count._all;
+      if (g.status !== "cancelled" && g.status !== "trashed") {
+        revMap[g.status] = Number(g._sum.total || 0) - Number(g._sum.shippingCost || 0);
+      }
     }
 
     // Cancelled revenue: product total minus shipping (never add delivery charge to cancelled)

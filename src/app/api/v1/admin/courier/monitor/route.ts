@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const statusParam  = searchParams.get("status")  || "all";
     const search       = (searchParams.get("q") || "").trim();
     const page         = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const LIMIT        = 20;
+    const LIMIT        = 100;
     const skip         = (page - 1) * LIMIT;
 
     // ── Build date filter (shared by both main query and stats query) ──────

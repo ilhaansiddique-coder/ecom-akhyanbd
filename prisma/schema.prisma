@@ -202,6 +202,13 @@ model Order {
   @@index([userId, createdAt])
   @@index([transactionId])
   @@index([riskScore])
+  // Dashboard "Courier Sent Orders" + courier-monitor + dashboard analytics
+  // all filter on courierSent + courierSentAt. Without indexes Postgres
+  // sequentially scans the entire orders table on every page load.
+  @@index([courierSentAt])
+  @@index([courierSent, courierSentAt])
+  // Courier-monitor route uses `consignmentId: { not: null }` with date.
+  @@index([consignmentId])
   @@map("orders")
 }
 

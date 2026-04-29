@@ -129,7 +129,7 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
   const [brands] = useState<Brand[]>(initialData?.brands ?? []);
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
-  const perPage = 20;
+  const perPage = 100;
 
   // In-memory search — instant, zero network
   const filtered = useMemo(() => {

@@ -38,17 +38,36 @@ export function LanguageProvider({
   // Initial-render priority: server-resolved > localStorage cache > route default.
   // Server-resolved wins because the surrounding HTML was already rendered with
   // it; matching here prevents the BN ↔ EN flash on every dashboard refresh.
+  // Initial language MUST be deterministic and match what SSR rendered —
+  // reading localStorage here causes hydration mismatches when the cached
+  // value differs from the SSR default. We use the route default
+  // ("en" for dashboard, "bn" for storefront) and sync localStorage +
+  // server settings in useEffect below, after mount.
   const [lang, setLangState] = useState<Lang>(() => {
     if (initialLang === "en" || initialLang === "bn") return initialLang;
-    const fallback: Lang = isDashboard ? "en" : "bn";
-    if (typeof window === "undefined") return fallback;
+    return isDashboard ? "en" : "bn";
+  });
+
+  // Once we're on the client, read localStorage for the user's actual
+  // preference and apply it. Runs after first paint so React's hydration
+  // check has already passed; the re-render flips digits/labels to match.
+  useEffect(() => {
     try {
       const key = isDashboard ? "akhiyan_dashboard_lang" : "akhiyan_site_lang";
       const cached = window.localStorage.getItem(key);
-      if (cached === "en" || cached === "bn") return cached;
-    } catch {}
-    return fallback;
-  });
+      if ((cached === "en" || cached === "bn") && cached !== lang) {
+        setLangState(cached);
+        setNumberLang(cached);
+      } else {
+        // Same-as-default: still need to sync the toBn global so subsequent
+        // re-renders (triggered by other state) get the right digits.
+        setNumberLang(lang);
+      }
+    } catch {
+      setNumberLang(lang);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const settingsRef = useRef<{ site_language?: string; dashboard_language?: string } | null>(null);
   const fetchedRef = useRef(false);
 
