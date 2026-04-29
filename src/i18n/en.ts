@@ -257,6 +257,7 @@ export const en: Record<string, string> = {
   "dash.siteSettings": "Site Settings",
   "dash.checkoutSettings": "Checkout Form",
   "dash.courierSettings": "Courier",
+  "dash.courierMonitor": "Courier Monitor",
   "dash.emailSettings": "Email",
   "dash.languageSettings": "Language",
 

@@ -139,6 +139,7 @@ function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
       items: [
         { label: t("dash.orders"), href: "/dashboard/orders", icon: FiShoppingBag },
         { label: t("dash.incompleteOrders") || "Incomplete Orders", href: "/dashboard/orders/incomplete", icon: FiShoppingBag },
+        { label: t("dash.courierMonitor") || "Courier Monitor", href: "/dashboard/courier-monitor", icon: FiTruck },
         { label: t("dash.spamDetection") || "Spam Detection", href: "/dashboard/spam", icon: FiShield },
       ],
     },

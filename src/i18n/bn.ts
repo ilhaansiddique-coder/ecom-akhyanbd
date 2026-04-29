@@ -257,6 +257,7 @@ export const bn: Record<string, string> = {
   "dash.siteSettings": "সাইট সেটিংস",
   "dash.checkoutSettings": "চেকআউট ফর্ম",
   "dash.courierSettings": "কুরিয়ার",
+  "dash.courierMonitor": "কুরিয়ার মনিটর",
   "dash.emailSettings": "ইমেইল",
   "dash.languageSettings": "ভাষা",
 
