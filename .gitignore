@@ -54,9 +54,20 @@ next-env.d.ts
 # pm2
 .pm2
 
-# database temp files
+# database files & dumps (NEVER commit — may contain prod data)
+*.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+db-exports/
+/backups/
+
+# inspection scratch
+_inspect*.db
+_inspect*.mjs
 
 # Local Capacitor scratch folder (not part of repo)
 mobile/
