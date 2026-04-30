@@ -834,13 +834,34 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         const provider = (order.courier_type as "steadfast" | "pathao" | undefined) || activeCourier;
         const res = await api.admin.checkCourierStatus(order.id, provider);
         if (res.delivery_status) {
-          setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_status: res.delivery_status } : o));
-          // Auto-mark as delivered if courier says delivered
-          if (res.delivery_status === "delivered" && order.status !== "delivered") {
-            deliveredCount++;
+          // Mirror single-row refresh: map courier status → order status and
+          // flip BOTH locally (and server-side via /status PUT for CAPI +
+          // payment_status). The courier endpoint already wrote `courierStatus`
+          // and `status` to the DB via buildStatusUpdate, but the /status PUT
+          // is what fires FB CAPI Purchase / OrderCancelled and sets
+          // payment_status=paid on delivery.
+          //
+          // Previous version only handled `delivered` here; "paid_return" /
+          // "cancelled" / "returned" / "refused" would silently not flip
+          // status in the UI even though courier_status updated.
+          const derived = mapCourierStatusToOrderStatus(res.delivery_status);
+          const willFlipStatus =
+            !!derived && order.status !== "trashed" && order.status !== derived;
+          const willMarkPaid =
+            derived === "delivered" && order.payment_status !== "paid";
+          setOrders((prev) => prev.map((o) => o.id === order.id ? {
+            ...o,
+            courier_status: res.delivery_status,
+            ...(willFlipStatus ? { status: derived! } : {}),
+            ...(willMarkPaid ? { payment_status: "paid" } : {}),
+          } : o));
+          if (willFlipStatus) {
+            if (derived === "delivered") deliveredCount++;
             try {
-              await api.admin.updateOrderStatus(order.id, { status: "delivered", payment_status: "paid" });
-              setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "delivered", payment_status: "paid" } : o));
+              await api.admin.updateOrderStatus(order.id, {
+                status: derived!,
+                ...(willMarkPaid ? { payment_status: "paid" } : {}),
+              });
             } catch {}
           }
         }
