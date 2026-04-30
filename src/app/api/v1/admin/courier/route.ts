@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
           await prisma.order.update({
             where: { id: order.id },
             data: {
-              courierSent: true,
+              courierSent: true, courierType: "steadfast",
               consignmentId: String(res.consignment.consignment_id),
               courierStatus: "pending",
               status: "shipped",
@@ -389,7 +389,7 @@ export async function POST(request: NextRequest) {
         const updated = await prisma.order.update({
           where: { id: order.id },
           data: {
-            courierSent: true,
+            courierSent: true, courierType: "steadfast",
             consignmentId: String(res.consignment.consignment_id),
             courierStatus: "pending",
             status: "shipped",
