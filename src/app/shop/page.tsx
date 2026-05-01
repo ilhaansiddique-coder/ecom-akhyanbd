@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
+import { inStockWhere } from "@/lib/productFilters";
 import { toBilingual, type Bilingual } from "@/lib/bilingual";
 import ShopClient from "./ShopClient";
 
@@ -75,7 +76,8 @@ const PAGE_SIZE = 24;
 
 const getInitialProducts = unstable_cache(
   async (): Promise<{ products: Product[]; total: number }> => {
-    const where = { isActive: true, deletedAt: null };
+    // AND inStockWhere → fully out-of-stock products hidden from shop list.
+    const where = { isActive: true, deletedAt: null, AND: [inStockWhere] };
     const [rows, total] = await Promise.all([
       prisma.product.findMany({
         where,

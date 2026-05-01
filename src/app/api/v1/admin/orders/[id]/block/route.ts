@@ -1,0 +1,42 @@
+/**
+ * POST /api/v1/admin/orders/[id]/block
+ *
+ * One-click ban: blocks the customer's phone, IP, and device fingerprint
+ * tied to this order in a single call. Used by the order detail "Block
+ * customer" button.
+ *
+ * Body:
+ *   { reason?: string }
+ *
+ * Response:
+ *   { phone: { blocked, value }, ip: { blocked, value }, fp: { blocked, value } }
+ */
+import { NextRequest } from "next/server";
+import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
+import { requireStaff } from "@/lib/auth-helpers";
+import { blockCustomerFromOrder } from "@/lib/spamGuard";
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let admin;
+  try { admin = await requireStaff(); } catch (e) { return e as Response; }
+
+  const { id } = await params;
+  const orderId = Number(id);
+  if (!Number.isFinite(orderId) || orderId <= 0) return errorResponse("Invalid order id", 400);
+
+  let body: Record<string, unknown> = {};
+  try { body = await request.json(); } catch {}
+  const reason = (typeof body.reason === "string" && body.reason.trim()) || "fake_order";
+
+  try {
+    const result = await blockCustomerFromOrder(orderId, reason, admin.id);
+    return jsonResponse(result);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Order not found") return notFound("Order not found");
+    console.error("[block-from-order]", e);
+    return errorResponse("Failed to block customer", 500);
+  }
+}

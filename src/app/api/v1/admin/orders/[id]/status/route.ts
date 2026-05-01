@@ -35,8 +35,22 @@ export async function PUT(
       try { await requireAdmin(); } catch (e) { return e as Response; }
     }
 
+    // Guard: never let an already-dispatched order revert to a pre-courier
+    // status. Once a parcel has a consignment + courierSent flag, status MUST
+    // stay in {shipped, delivered, cancelled, trashed}. Any pending/confirmed/
+    // processing PUT is silently coerced to "shipped" so accidental dropdown
+    // clicks (or stale bulk-status forms) can't desync the orders grid from
+    // the courier monitor. This was the root cause of the recurring
+    // "courier sent but row says Confirmed" reports.
+    const PRE_COURIER = new Set(["pending", "confirmed", "processing"]);
+    let nextStatus = data.status;
+    const dispatched = Boolean(existing.courierSent && existing.consignmentId);
+    if (dispatched && PRE_COURIER.has(nextStatus)) {
+      nextStatus = "shipped";
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = { status: data.status };
+    const updateData: any = { status: nextStatus };
     if (data.payment_status) updateData.paymentStatus = data.payment_status;
 
     // Handle Purchase / OrderCancelled event based on new status.

@@ -206,7 +206,7 @@ export default function IncompleteOrdersClient() {
         </div>
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <div className="text-xs text-gray-500">{lang === "en" ? "Lost cart value" : "হারানো কার্ট মূল্য"}</div>
-          <div className="text-2xl font-bold text-[#0f5931] mt-1">৳{stats.value.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-[var(--primary)] mt-1">৳{stats.value.toLocaleString()}</div>
         </div>
       </div>
 
@@ -233,7 +233,7 @@ export default function IncompleteOrdersClient() {
                       <div className="text-xs text-gray-500 mt-0.5">{r.phone}</div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-bold text-[#0f5931]">৳{Number(r.total).toLocaleString()}</div>
+                      <div className="font-bold text-[var(--primary)]">৳{Number(r.total).toLocaleString()}</div>
                       <div className="text-[10px] text-gray-400">{ago(r.updated_at, lang)}</div>
                     </div>
                   </div>
@@ -253,7 +253,7 @@ export default function IncompleteOrdersClient() {
                     <button
                       onClick={() => onConvert(r)}
                       disabled={convertingId === r.id}
-                      className="px-3 py-1.5 text-xs rounded-lg bg-[#0f5931] text-white flex items-center gap-1.5 disabled:opacity-50"
+                      className="px-3 py-1.5 text-xs rounded-lg bg-[var(--primary)] hover:bg-[var(--primary-light)] text-white flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                     >
                       <FiShoppingBag className="w-3.5 h-3.5" />
                       {convertingId === r.id
@@ -300,7 +300,7 @@ export default function IncompleteOrdersClient() {
                         </td>
                         <td className="px-4 py-3 font-mono text-xs">{r.phone}</td>
                         <td className="px-4 py-3 text-gray-700">{items.length}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-[#0f5931]">৳{Number(r.total).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-[var(--primary)]">৳{Number(r.total).toLocaleString()}</td>
                         <td className="px-4 py-3 text-xs text-gray-500">{ago(r.updated_at, lang)}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
@@ -317,7 +317,7 @@ export default function IncompleteOrdersClient() {
                               onClick={() => onConvert(r)}
                               disabled={convertingId === r.id}
                               title={lang === "en" ? "Convert to order" : "অর্ডারে কনভার্ট করুন"}
-                              className="p-2 rounded-lg bg-[#0f5931] hover:bg-[#0d4d2a] disabled:opacity-50"
+                              className="p-2 rounded-lg bg-[var(--primary)] hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
                             >
                               <FiShoppingBag className="w-4 h-4 text-white" />
                             </button>
@@ -412,7 +412,7 @@ export default function IncompleteOrdersClient() {
               <div className="border-t border-gray-100 pt-3 space-y-1">
                 <div className="flex justify-between text-gray-600"><span>{lang === "en" ? "Subtotal" : "সাবটোটাল"}</span><span>৳{Number(viewing.subtotal).toLocaleString()}</span></div>
                 <div className="flex justify-between text-gray-600"><span>{lang === "en" ? "Shipping" : "শিপিং"}</span><span>৳{Number(viewing.shipping_cost).toLocaleString()}</span></div>
-                <div className="flex justify-between font-bold text-base pt-1"><span>{lang === "en" ? "Total" : "মোট"}</span><span className="text-[#0f5931]">৳{Number(viewing.total).toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold text-base pt-1"><span>{lang === "en" ? "Total" : "মোট"}</span><span className="text-[var(--primary)]">৳{Number(viewing.total).toLocaleString()}</span></div>
               </div>
             </div>
           </div>

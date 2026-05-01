@@ -9,8 +9,9 @@ import { sendOrderConfirmation, sendAdminOrderNotification } from "@/lib/email";
 import { bumpVersion } from "@/lib/sync";
 import { revalidateTag } from "next/cache";
 import { randomBytes } from "crypto";
-import { calculateRiskScore, isValidBDPhone } from "@/lib/spamDetection";
+import { calculateRiskScore, isValidBDPhone, normalizePhone } from "@/lib/spamDetection";
 import { getClientIp } from "@/lib/fbcapi";
+import { isCustomerBlocked } from "@/lib/spamGuard";
 
 // GET - List user's orders (auth required)
 export async function GET(request: NextRequest) {
@@ -74,6 +75,25 @@ export async function POST(request: NextRequest) {
       422,
     );
   }
+  // ── Block-list gate ──────────────────────────────────────────────────────
+  // Reject early if the incoming customer is on any blocklist (phone / IP /
+  // device fingerprint). Vague generic error so the attacker can't tell
+  // which dimension matched. Runs BEFORE address validation so banned
+  // customers don't even get descriptive form-validation feedback.
+  {
+    const fpHashEarly = request.cookies.get("fpHash")?.value || "";
+    const ipEarly = getClientIp(request);
+    const block = await isCustomerBlocked({ phone: rawPhone, ip: ipEarly, fpHash: fpHashEarly });
+    if (block.blocked) {
+      console.warn("[orders] blocked", { matched: block.matched, reason: block.reason, phone: normalizePhone(rawPhone), ip: ipEarly });
+      return errorResponse(
+        t("We can't process this order right now. Please contact support.",
+          "এখন এই অর্ডারটি প্রক্রিয়া করা যাচ্ছে না। অনুগ্রহ করে সাপোর্টে যোগাযোগ করুন।"),
+        403,
+      );
+    }
+  }
+
   // Address: must be at least 5 chars to avoid blank/garbage entries.
   const rawAddress = (data.customer_address || data.address || "").trim();
   if (rawAddress.length < 5) {
@@ -381,7 +401,10 @@ export async function POST(request: NextRequest) {
   // Use the normalized values resolved at the top of the handler so downstream
   // consumers (address save, guest user create, FB CAPI, spam scoring) all see
   // the same trimmed/validated phone + address that was stored on the order.
-  const customerPhone = rawPhone;
+  // Always store the canonical 01XXXXXXXXX form. Incomplete-orders + courier
+  // both key off this exact format; storing user-typed "+880-1700-123456"
+  // would silently break the convert-on-place flow.
+  const customerPhone = normalizePhone(rawPhone);
   const customerAddress = rawAddress;
   const customerCity = data.city || "";
   const customerZip = data.zip_code || null;

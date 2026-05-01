@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { getSessionUser } from "@/lib/auth-helpers";
+import { isCustomerBlocked } from "@/lib/spamGuard";
+import { getClientIp } from "@/lib/fbcapi";
 
 // Public endpoint: capture in-progress checkout state.
 // Upserted by phone (BD 11-digit). Throttled implicitly because we only call
@@ -21,6 +23,18 @@ export async function POST(request: NextRequest) {
 
     const cartItems = Array.isArray(body.cart_items) ? body.cart_items : [];
     if (cartItems.length === 0) return jsonResponse({ skipped: true });
+
+    // Block-list gate: silent drop. Don't reveal blocked status to the
+    // attacker — pretend the row was captured.
+    {
+      const fpHash = request.cookies.get("fpHash")?.value || "";
+      const ip = getClientIp(request);
+      const block = await isCustomerBlocked({ phone: phoneRaw, ip, fpHash });
+      if (block.blocked) {
+        console.warn("[incomplete-orders] blocked", { matched: block.matched, reason: block.reason, phone: phoneRaw });
+        return jsonResponse({ skipped: true });
+      }
+    }
 
     // Don't capture if a real order with this phone exists in the last 5 minutes —
     // means user already converted.

@@ -31,7 +31,36 @@ export async function GET(request: NextRequest) {
       orderBy: { updatedAt: "desc" },
       take: 500,
     });
-    return jsonResponse({ data: rows.map(serialize) });
+
+    // Belt-and-suspenders: even with `convertedAt = null`, a row can linger
+    // when the order was placed under a slightly different phone format
+    // (typed "+880…", dashes, leading zero variants) before the canonical-
+    // phone fix landed. Sweep the matching Orders table once and hide any
+    // incomplete row whose phone shows up there. Skip when admin explicitly
+    // asks for converted rows (debug view).
+    let filtered = rows;
+    if (!includeConverted && rows.length > 0) {
+      const phones = Array.from(new Set(rows.map((r) => r.phone).filter(Boolean)));
+      if (phones.length > 0) {
+        const matched = await prisma.order.findMany({
+          where: { customerPhone: { in: phones }, status: { not: "trashed" } },
+          select: { customerPhone: true },
+        });
+        const placedSet = new Set(matched.map((o) => o.customerPhone));
+        if (placedSet.size > 0) {
+          // Mark them converted in DB so subsequent reads + the stat card
+          // counters are consistent without re-running this sweep.
+          const now = new Date();
+          await prisma.incompleteOrder.updateMany({
+            where: { phone: { in: Array.from(placedSet) }, convertedAt: null },
+            data: { convertedAt: now },
+          }).catch(() => {});
+          filtered = rows.filter((r) => !placedSet.has(r.phone));
+        }
+      }
+    }
+
+    return jsonResponse({ data: filtered.map(serialize) });
   } catch (e) {
     console.error("[IncompleteOrder] list error:", e);
     return errorResponse("Failed to fetch incomplete orders", 500);

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound } from "@/lib/api-response";
+import { inStockWhere } from "@/lib/productFilters";
 
 export async function GET(
   _request: NextRequest,
@@ -22,7 +23,9 @@ export async function GET(
       const productEntries = JSON.parse(page.products) as { product_id: number; quantity?: number }[];
       const productIds = productEntries.map((p) => p.product_id);
       const products = await prisma.product.findMany({
-        where: { id: { in: productIds } },
+        // Admin curated list, but still filter out fully-out-of-stock so
+        // landing-page CTAs never offer something the customer can't buy.
+        where: { id: { in: productIds }, AND: [inStockWhere] },
         include: {
           category: true,
           variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },

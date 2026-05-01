@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse } from "@/lib/api-response";
+import { inStockWhere } from "@/lib/productFilters";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -12,12 +13,19 @@ export async function GET(request: NextRequest) {
 
   if (!q.trim()) return jsonResponse(paginatedResponse([], { page, perPage, total: 0 }));
 
+  // AND inStockWhere with the keyword OR — both must match. Without the
+  // wrapping AND, Prisma would replace the keyword OR with the in-stock OR.
   const where = {
     isActive: true,
-    OR: [
-      { name: { contains: q } },
-      { description: { contains: q } },
-      { badge: { contains: q } },
+    AND: [
+      {
+        OR: [
+          { name: { contains: q } },
+          { description: { contains: q } },
+          { badge: { contains: q } },
+        ],
+      },
+      inStockWhere,
     ],
   };
 

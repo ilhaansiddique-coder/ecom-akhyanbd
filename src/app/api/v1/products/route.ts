@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
+import { inStockWhere } from "@/lib/productFilters";
 
 const CACHE_TTL = 60; // seconds
 
@@ -42,6 +43,10 @@ function buildCachedQuery(
   // (the PDP "Other Products" strip can still show multi-category products).
   if (excludeCategoryId) where.categoryId = { not: Number(excludeCategoryId) };
   if (excludeId) where.id = { not: Number(excludeId) };
+
+  // Hide fully-out-of-stock products from customers. AND'd onto the existing
+  // filter so categoryId/featured constraints still apply.
+  where.AND = [...(where.AND ?? []), inStockWhere];
 
   const cacheKey = `products:${page}:${perPage}:${categoryId}:${brandId}:${isFeatured}:${sortBy}:${sortDir}:x${excludeCategoryId || ""}:i${excludeId || ""}`;
 

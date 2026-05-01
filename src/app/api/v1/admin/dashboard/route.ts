@@ -93,7 +93,15 @@ export async function GET(request: NextRequest) {
       prisma.product.count(),
       // activeProducts removed — not consumed by the frontend Stats interface
       prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),
-      prisma.product.count({ where: { stock: { lt: 10 } } }),
+      // Low-stock count — threshold ≤10, split simple vs variable.
+      prisma.product.count({
+        where: {
+          OR: [
+            { hasVariations: false, unlimitedStock: false, stock: { lt: 10 } },
+            { hasVariations: true, variants: { some: { isActive: true, unlimitedStock: false, stock: { lt: 10 } } } },
+          ],
+        },
+      }),
       // Select only columns rendered by the dashboard — avoids pulling address,
       // notes, weight, SEO fields, etc. over the wire.
       prisma.order.findMany({
@@ -119,11 +127,23 @@ export async function GET(request: NextRequest) {
         orderBy: { soldCount: "desc" },
         select: { id: true, name: true, soldCount: true, price: true, image: true },
       }),
+      // Low-stock products — threshold ≤10. Simple by parent.stock; variable
+      // by any active non-unlimited variant. Variants included so client can
+      // render the offending variant labels instead of a misleading sum.
       prisma.product.findMany({
-        where: { stock: { lt: 10 } },
+        where: {
+          OR: [
+            { hasVariations: false, unlimitedStock: false, stock: { lt: 10 } },
+            { hasVariations: true, variants: { some: { isActive: true, unlimitedStock: false, stock: { lt: 10 } } } },
+          ],
+        },
         take: 20,
         orderBy: { stock: "asc" },
-        select: { id: true, name: true, stock: true, image: true },
+        select: {
+          id: true, name: true, stock: true, image: true,
+          hasVariations: true, unlimitedStock: true,
+          variants: { where: { isActive: true }, select: { label: true, stock: true, unlimitedStock: true } },
+        },
       }),
       // Single groupBy returns both count + revenue per status — used to
       // derive `order_counts.*` and `revenue_by_status.*` without firing a
@@ -242,7 +262,24 @@ export async function GET(request: NextRequest) {
       daily_orders: dailyOrders,
       recent_orders: recentOrders.map(serialize),
       top_products:  topProducts.map(serialize),
-      low_stock:     lowStockProducts.map(serialize),
+      // Same shape the SSR home page emits: simple products carry parent stock;
+      // variable products carry only the offending variants (label + stock).
+      // Avoids the "Stock: 143" misleading sum on a product flagged because
+      // ONE variant is at 2.
+      low_stock: lowStockProducts.map((p) => {
+        if (p.hasVariations) {
+          const lowVariants = (p.variants ?? [])
+            .filter((v) => !v.unlimitedStock && (Number(v.stock) || 0) < 10)
+            .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0))
+            .map((v) => ({ label: v.label, stock: Number(v.stock) || 0 }));
+          return {
+            id: p.id, name: p.name, image: p.image ?? null,
+            stock: lowVariants.reduce((s, v) => s + v.stock, 0),
+            variants: lowVariants,
+          };
+        }
+        return { id: p.id, name: p.name, stock: p.stock, image: p.image ?? null };
+      }),
     });
   } catch (error) {
     console.error("Dashboard error:", error);

@@ -48,7 +48,11 @@ interface Product {
   category_id?: number;
   brand_id?: number;
   categories?: { id: number; name: string }[];
-  variants?: { price: number | string; is_active?: boolean }[];
+  variants?: { price: number | string; stock?: number | string; unlimited_stock?: boolean; unlimitedStock?: boolean; is_active?: boolean }[];
+  has_variations?: boolean;
+  hasVariations?: boolean;
+  unlimited_stock?: boolean;
+  unlimitedStock?: boolean;
 }
 
 interface InitialData {
@@ -58,17 +62,50 @@ interface InitialData {
   brands: Brand[];
 }
 
-// Returns a formatted price string for a product. For variable products where
-// the base price is 0, derives the range from active variant prices instead.
+// Returns effective stock for a product. For variable products, sums per-variant
+// stock (active variants only). Returns null when stock is "unlimited" so caller
+// can render ∞ chip instead of a number. Parent `stock` column is stale on
+// variable products (admin edits per-variant) — never use it for display.
+function productStockDisplay(p: Product): { unlimited: true } | { unlimited: false; total: number } {
+  const isVariable = Boolean(p.has_variations || p.hasVariations);
+  const parentUnlimited = Boolean(p.unlimited_stock || p.unlimitedStock);
+  if (!isVariable) {
+    return parentUnlimited ? { unlimited: true } : { unlimited: false, total: Number(p.stock) || 0 };
+  }
+  const variants = (p.variants ?? []).filter((v) => v.is_active !== false);
+  if (variants.length === 0) return { unlimited: false, total: 0 };
+  // If EVERY variant is unlimited → unlimited badge.
+  const allUnlimited = variants.every((v) => Boolean(v.unlimited_stock || v.unlimitedStock));
+  if (allUnlimited) return { unlimited: true };
+  // Sum countable variant stocks; unlimited variants contribute 0 to the
+  // numeric total (admin still sees ∞ on individual variant chips below).
+  const total = variants.reduce((s, v) => {
+    if (v.unlimited_stock || v.unlimitedStock) return s;
+    return s + (Number(v.stock) || 0);
+  }, 0);
+  return { unlimited: false, total };
+}
+
+// Returns a formatted price string for a product.
+// Variable products: ALWAYS derive from active-variant prices (the parent
+// `price` column is meaningless for them — it's hidden in the form too).
+// Showing the parent on a variable product was confusing admins because
+// stale/zero parent values would surface even though every variant had a
+// real price.
+// Simple products: show the parent price directly.
 function productPriceDisplay(p: Product, toBnFn: (n: number) => string): string {
-  if (p.price > 0) return `৳${toBnFn(p.price)}`;
-  const variantPrices = (p.variants ?? [])
-    .map((v) => Number(v.price))
-    .filter((n) => n > 0);
-  if (variantPrices.length === 0) return `৳${toBnFn(0)}`;
-  const min = Math.min(...variantPrices);
-  const max = Math.max(...variantPrices);
-  return min === max ? `৳${toBnFn(min)}` : `৳${toBnFn(min)}–৳${toBnFn(max)}`;
+  const isVariable = Boolean(p.has_variations || p.hasVariations);
+  if (isVariable) {
+    const variantPrices = (p.variants ?? [])
+      .filter((v) => v.is_active !== false)
+      .map((v) => Number(v.price))
+      .filter((n) => n > 0);
+    if (variantPrices.length === 0) return `৳${toBnFn(0)}`;
+    const min = Math.min(...variantPrices);
+    const max = Math.max(...variantPrices);
+    return min === max ? `৳${toBnFn(min)}` : `৳${toBnFn(min)}–৳${toBnFn(max)}`;
+  }
+  return `৳${toBnFn(p.price)}`;
 }
 
 const emptyForm = {
@@ -743,7 +780,11 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                         {p.is_active ? t("form.active") : t("form.inactive")}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {(p as any).unlimited_stock ? (lang === "en" ? "∞ Stock" : "∞ স্টক") : `${toBn(p.stock)} ${lang === "en" ? "stock" : "স্টক"}`}
+                        {(() => {
+                          const s = productStockDisplay(p);
+                          if (s.unlimited) return lang === "en" ? "∞ Stock" : "∞ স্টক";
+                          return `${toBn(s.total)} ${lang === "en" ? "stock" : "স্টক"}`;
+                        })()}
                       </span>
                       {!((p as any).unlimited_stock) && ((p as any).has_variations || (p as any).hasVariations) && (p as any).variants?.length > 0 && (
                         <div className="flex flex-wrap gap-1">
@@ -846,24 +887,28 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                         <td className="px-4 py-3 text-gray-500 text-xs">{(p.categories?.length ? p.categories.map(c => c.name).join(", ") : p.category?.name) || "—"}</td>
                         <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">{productPriceDisplay(p, toBn)}</td>
                         <td className="px-4 py-3 text-gray-600">
-                          {(p as any).unlimited_stock ? (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
-                          ) : ((p as any).has_variations || (p as any).hasVariations) && (p as any).variants?.length > 0 ? (
-                            <div>
-                              {(p as any).variants.every((v: any) => v.unlimited_stock) ? (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>
-                              ) : (
-                                <span className="font-semibold text-sm">{toBn(p.stock)}</span>
-                              )}
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {(p as any).variants.map((v: any) => (
-                                  <span key={v.id || v.label} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
-                                    {v.label}: {v.unlimited_stock ? "∞" : toBn(v.stock)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ) : toBn(p.stock)}
+                          {(() => {
+                            const s = productStockDisplay(p);
+                            const isVariable = Boolean(p.has_variations || p.hasVariations);
+                            if (s.unlimited) {
+                              return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">{lang === "en" ? "Unlimited" : "আনলিমিটেড"}</span>;
+                            }
+                            if (isVariable && (p.variants?.length ?? 0) > 0) {
+                              return (
+                                <div>
+                                  <span className="font-semibold text-sm">{toBn(s.total)}</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {p.variants!.map((v: any) => (
+                                      <span key={v.id || v.label} className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                        {v.label}: {v.unlimited_stock || v.unlimitedStock ? "∞" : toBn(Number(v.stock) || 0)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return toBn(s.total);
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-gray-600">{toBn((p as any).sold_count ?? p.sold ?? 0)}</td>
                         <td className="px-4 py-3">

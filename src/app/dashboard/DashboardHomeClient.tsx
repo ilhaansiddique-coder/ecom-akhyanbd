@@ -112,7 +112,16 @@ interface OrderCounts {
 }
 interface DailyOrder { date: string; count: number; }
 interface TopProduct { id: number; name: string; sold: number; revenue: number; image?: string; }
-interface LowStockItem { id: number; name: string; stock: number; image?: string; }
+interface LowStockItem {
+  id: number;
+  name: string;
+  stock: number;
+  image?: string;
+  // Present only for variable products. Each entry is an active variant whose
+  // stock ≤ 10 (the threshold used by the SSR + API queries). Renderer shows
+  // these as chips instead of a misleading sum.
+  variants?: { label: string; stock: number }[];
+}
 
 /** Simple stat card for the bottom row (today / customers / low-stock) */
 function StatCard({
@@ -602,13 +611,26 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           </h2>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
             {lowStockItems.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
-                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+              <div key={item.id} className="flex items-start gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
+                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
                   <FiBox className="w-4 h-4 text-red-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{item.name}</div>
-                  <div className="text-xs text-red-600 font-semibold">{t("cust.stockLabel")}: {toBn(item.stock)}</div>
+                  {item.variants && item.variants.length > 0 ? (
+                    // Variable product: list each low variant. Sum would be
+                    // misleading ("Stock: 143" on a product flagged because one
+                    // size is at 2).
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {item.variants.map((v) => (
+                        <span key={v.label} className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
+                          {v.label}: {toBn(v.stock)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-red-600 font-semibold">{t("cust.stockLabel")}: {toBn(item.stock)}</div>
+                  )}
                 </div>
               </div>
             ))}

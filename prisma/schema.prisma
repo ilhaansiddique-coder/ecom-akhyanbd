@@ -186,6 +186,10 @@ model Order {
   consignmentId      String?   @map("consignment_id")
   courierStatus      String?   @map("courier_status")
   courierScore       String?   @map("courier_score")
+  // Wallclock when courierScore was last fetched from Steadfast. Used by the
+  // auto-check effect to TTL-refresh stale scores (24h default) instead of
+  // freezing the first reading forever.
+  courierScoreAt     DateTime? @map("courier_score_at")
   trackingData       String?   @map("tracking_data")
   fpHash             String?   @map("fp_hash")
   riskScore          Int?      @map("risk_score")
@@ -274,6 +278,21 @@ model BlockedIp {
   createdAt DateTime? @default(now()) @map("created_at")
 
   @@map("blocked_ips")
+}
+
+// Phone-level blocklist. Order-create + incomplete-order capture both check
+// this table and refuse to write rows for matching phones. Matched against
+// the canonical 01XXXXXXXXX form (see normalizePhone) so format variants
+// can't bypass the block.
+model BlockedPhone {
+  id        Int       @id @default(autoincrement())
+  phone     String    @unique
+  reason    String?
+  blockedBy Int?      @map("blocked_by")     // admin user id, optional audit trail
+  orderId   Int?      @map("order_id")        // order that triggered the block
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  @@map("blocked_phones")
 }
 
 model OrderItem {

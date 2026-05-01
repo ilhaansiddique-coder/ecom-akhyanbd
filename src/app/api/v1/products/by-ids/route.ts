@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { inStockWhere } from "@/lib/productFilters";
 
 /**
  * GET /api/v1/products/by-ids?ids=1,2,3
@@ -20,12 +21,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  // Filter to ACTIVE + non-deleted products only. The cart uses absence
-  // from this response as the signal to prune stale items, so admins
-  // disabling or trashing a product must propagate through here as
-  // "missing" — same behaviour the storefront product page uses.
+  // Filter to ACTIVE + non-deleted + in-stock products only. The cart uses
+  // absence from this response as the signal to prune stale items, so
+  // disabled / trashed / fully-out-of-stock products propagate as "missing"
+  // and the cart silently drops them — same behaviour the storefront PDP
+  // uses (404 on fully OOS).
   const products = await prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true, deletedAt: null },
+    where: { id: { in: ids }, isActive: true, deletedAt: null, AND: [inStockWhere] },
     select: {
       id: true,
       name: true,

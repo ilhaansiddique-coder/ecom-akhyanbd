@@ -65,7 +65,13 @@ export async function PUT(
     if (body.customer_address !== undefined) updateData.customerAddress = body.customer_address;
     if (body.city !== undefined) updateData.city = body.city;
     if (body.zip_code !== undefined) updateData.zipCode = body.zip_code || null;
-    if (body.status !== undefined) updateData.status = body.status;
+    // Guard: dispatched orders can't revert to pre-courier states. Mirrors
+    // the same protection in /admin/orders/[id]/status/route.ts.
+    if (body.status !== undefined) {
+      const PRE_COURIER = new Set(["pending", "confirmed", "processing"]);
+      const dispatched = Boolean(existing.courierSent && existing.consignmentId);
+      updateData.status = (dispatched && PRE_COURIER.has(String(body.status))) ? "shipped" : body.status;
+    }
     if (body.payment_status !== undefined) updateData.paymentStatus = body.payment_status;
     if (body.payment_method !== undefined) updateData.paymentMethod = body.payment_method;
     if (body.shipping_cost !== undefined) updateData.shippingCost = Number(body.shipping_cost);
@@ -74,6 +80,19 @@ export async function PUT(
     if (body.courier_sent !== undefined) updateData.courierSent = Boolean(body.courier_sent);
     if (body.consignment_id !== undefined) updateData.consignmentId = body.consignment_id || null;
     if (body.courier_status !== undefined) updateData.courierStatus = body.courier_status || null;
+    // courier_type lets admin tag an order with the provider it was sent to
+    // outside the dashboard (e.g. manual Steadfast/Pathao entry through the
+    // edit modal). Empty string from the form means "no courier" → null.
+    if (body.courier_type !== undefined) {
+      const ct = String(body.courier_type || "").toLowerCase();
+      updateData.courierType = ct === "steadfast" || ct === "pathao" ? ct : null;
+    }
+    // If a consignment ID is being attached and no explicit courier_sent flag
+    // was sent, treat it as courier-attached. Mirrors the "willHaveConsignment"
+    // logic below but covers callers that only send consignment_id.
+    if (body.consignment_id !== undefined && body.courier_sent === undefined) {
+      updateData.courierSent = Boolean(body.consignment_id);
+    }
 
     // Auto-flip order status → "shipped" the moment a parcel is attached to a
     // courier. This covers two paths that previously left status stuck on

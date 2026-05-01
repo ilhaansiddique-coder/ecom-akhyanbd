@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FiTruck, FiShield, FiStar } from "react-icons/fi";
 import { prisma } from "@/lib/prisma";
+import { inStockWhere } from "@/lib/productFilters";
 import { serialize } from "@/lib/serialize";
 import { mapApiProduct, type Product } from "@/data/products";
 import { toBn } from "@/utils/toBn";
@@ -27,7 +28,15 @@ const getProduct = cache(async (slug: string) => {
   try {
     const decoded = decodeURIComponent(slug);
     const product = await prisma.product.findFirst({
-      where: { OR: [{ slug }, { slug: decoded }] },
+      // Hide PDP for fully out-of-stock or inactive products → 404.
+      // Customer can't land on a page they can't buy from.
+      where: {
+        AND: [
+          { OR: [{ slug }, { slug: decoded }] },
+          { isActive: true },
+          inStockWhere,
+        ],
+      },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         brand:    { select: { id: true, name: true, slug: true } },
@@ -253,7 +262,7 @@ async function RelatedProducts({ categoryId, excludeId }: { categoryId: number; 
   let related: Product[] = [];
   try {
     const relatedRows = await prisma.product.findMany({
-      where: { isActive: true, categoryId, id: { not: excludeId } },
+      where: { isActive: true, categoryId, id: { not: excludeId }, AND: [inStockWhere] },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         variants: { where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true } },
@@ -298,6 +307,7 @@ async function OtherProducts({ categoryId, excludeId }: { categoryId: number; ex
         id: { not: excludeId },
         // NOT this category → guarantees no overlap with Related Products.
         categoryId: { not: categoryId },
+        AND: [inStockWhere],
       },
       include: {
         category: { select: { id: true, name: true, slug: true } },

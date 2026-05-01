@@ -251,11 +251,19 @@ export async function POST(request: NextRequest) {
       if (result.success_ratio) {
         await prisma.order.update({
           where: { id: order.id },
-          data: { courierScore: result.success_ratio },
+          // Stamp courierScoreAt so the client auto-check can TTL-skip on
+          // subsequent loads. Without it, a once-checked order would never
+          // refresh even if customer's success rate moved.
+          data: { courierScore: result.success_ratio, courierScoreAt: new Date() },
         });
       }
       return jsonResponse(result);
-    } catch {
+    } catch (err) {
+      // Surface upstream rate-limit so client can back off instead of hammering.
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("429") || msg.toLowerCase().includes("rate")) {
+        return errorResponse("Steadfast rate limited — backing off", 429);
+      }
       return errorResponse("Failed to check score", 500);
     }
   }

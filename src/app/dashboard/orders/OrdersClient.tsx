@@ -9,7 +9,7 @@ import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
 import { toBn } from "@/utils/toBn";
 import DashboardLayout from "@/components/DashboardLayout";
 import Toast from "@/components/Toast";
-import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus, FiTrash2 } from "react-icons/fi";
+import { FiSearch, FiChevronDown, FiChevronUp, FiPackage, FiEye, FiEdit2, FiX, FiUser, FiMapPin, FiPhone, FiMail, FiCalendar, FiCreditCard, FiTruck, FiRefreshCw, FiCheckCircle, FiXCircle, FiExternalLink, FiPlus, FiTrash2, FiSlash } from "react-icons/fi";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import Modal from "@/components/Modal";
 import PathaoSendModal from "@/components/PathaoSendModal";
@@ -76,6 +76,7 @@ interface Order {
   consignment_id?: string;
   courier_status?: string;
   courier_score?: string;
+  courier_score_at?: string | null;
   created_at: string;
   items?: OrderItem[];
   user?: { id: number; name: string; email: string } | null;
@@ -266,6 +267,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     customer_name: "", customer_phone: "", customer_email: "", customer_address: "",
     city: "", zip_code: "", status: "", payment_status: "", payment_method: "",
     shipping_cost: "", discount: "0", notes: "",
+    consignment_id: "", courier_type: "",
     items: [] as CreateItem[],
   });
   const [editProductSearch, setEditProductSearch] = useState("");
@@ -273,33 +275,75 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
 
   // Courier connection state + auto score check
   const [courierConnected, setCourierConnected] = useState(false);
+  const [activeCouriers, setActiveCouriers] = useState<{ id: "steadfast" | "pathao"; label: string }[]>([]);
   const autoCheckedRef = useRef(new Set<number>());
 
   useEffect(() => {
     // Treat "connected" as: at least one courier configured (any provider).
     // Score endpoint walks all enabled providers, so we don't need to ping balance.
+    // Also remember the list so the edit modal can show them as picker options
+    // for orders sent manually outside the dashboard.
     api.admin.listActiveCouriers()
-      .then((r) => setCourierConnected((r.couriers?.length || 0) > 0))
-      .catch(() => setCourierConnected(false));
+      .then((r) => {
+        const list = r.couriers || [];
+        setActiveCouriers(list);
+        setCourierConnected(list.length > 0);
+      })
+      .catch(() => { setActiveCouriers([]); setCourierConnected(false); });
   }, []);
 
-  // Auto-check courier scores when courier is connected
+  // Auto-check courier scores when courier is connected.
+  //
+  // Improvements over the prior sequential loop:
+  //  1. **TTL** — re-check if courier_score_at is older than SCORE_TTL_MS (24h).
+  //     Stale orders refresh on next page visit so admin sees current rates.
+  //  2. **Concurrency cap** — pool of SCORE_CONCURRENCY (3) parallel workers.
+  //     ~3× faster than serial without spamming Steadfast.
+  //  3. **429 backoff** — when /admin/courier returns 429, halt remaining
+  //     queue for this mount and back off; per-mount autoCheckedRef still
+  //     prevents same-id refetch.
   useEffect(() => {
     if (!courierConnected || orders.length === 0) return;
-    const unchecked = orders.filter((o) => !o.courier_score && !autoCheckedRef.current.has(o.id));
-    if (unchecked.length === 0) return;
-    unchecked.forEach((o) => autoCheckedRef.current.add(o.id));
+    const SCORE_TTL_MS = 24 * 60 * 60 * 1000;
+    const SCORE_CONCURRENCY = 3;
+    const now = Date.now();
+    const isStale = (iso?: string | null) => {
+      if (!iso) return true;
+      const t = Date.parse(iso);
+      return Number.isNaN(t) || (now - t) > SCORE_TTL_MS;
+    };
+    const queue = orders.filter((o) =>
+      !autoCheckedRef.current.has(o.id) && (!o.courier_score || isStale(o.courier_score_at))
+    );
+    if (queue.length === 0) return;
+    queue.forEach((o) => autoCheckedRef.current.add(o.id));
+
     let cancelled = false;
-    (async () => {
-      for (const order of unchecked) {
-        if (cancelled) break;
+    let halted = false;
+    let cursor = 0;
+    const next = () => (cancelled || halted ? null : queue[cursor++] ?? null);
+
+    async function worker() {
+      while (true) {
+        const order = next();
+        if (!order) return;
         try {
-          const res = await api.admin.checkCourierScore(order.id);
-          const ratio = res.success_ratio || "0.0%";
-          setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, courier_score: ratio } : o));
-        } catch { break; }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const res: any = await api.admin.checkCourierScore(order.id);
+          const ratio = res?.success_ratio || "0.0%";
+          setOrders((prev) => prev.map((o) =>
+            o.id === order.id ? { ...o, courier_score: ratio, courier_score_at: new Date().toISOString() } : o
+          ));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "";
+          if (msg.includes("429")) { halted = true; return; }
+          // Soft-fail single order; keep workers running for the rest.
+        }
       }
-    })();
+    }
+    const workers = Array.from({ length: Math.min(SCORE_CONCURRENCY, queue.length) }, () => worker());
+    Promise.all(workers).catch(() => {});
+
     return () => { cancelled = true; };
   }, [courierConnected, orders]);
 
@@ -393,6 +437,8 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         shipping_cost: String(o.shipping_cost ?? 0),
         discount: String(o.discount ?? 0),
         notes: o.notes || "",
+        consignment_id: String(o.consignment_id || ""),
+        courier_type: String(o.courier_type || ""),
         items: (o.items || []).map((i: any) => ({
           product_id: i.product_id || i.productId,
           product_name: i.product_name || i.productName || "",
@@ -445,6 +491,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       const subtotal = editForm.items.reduce((s, i) => s + i.price * i.quantity, 0);
       const shipping = Number(editForm.shipping_cost) || 0;
       const discount = Number(editForm.discount) || 0;
+      // Courier fields — admin may attach a consignment ID + provider for an
+      // order sent manually outside the dashboard. Send only when changed
+      // from the existing values to avoid clobbering null with empty string
+      // on every save (which would also re-run the auto-shipped logic
+      // server-side unnecessarily).
+      const consignmentChanged = editForm.consignment_id !== String(editOrder.consignment_id || "");
+      const courierTypeChanged = editForm.courier_type !== String(editOrder.courier_type || "");
+      const courierPatch: Record<string, unknown> = {};
+      if (consignmentChanged) courierPatch.consignment_id = editForm.consignment_id.trim() || null;
+      if (courierTypeChanged) courierPatch.courier_type = editForm.courier_type || null;
       const res = await api.admin.updateOrder(editOrder.id, {
         customer_name: editForm.customer_name,
         customer_phone: editForm.customer_phone,
@@ -459,6 +515,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         discount,
         total: Math.max(0, subtotal + shipping - discount),
         items: editForm.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, price: i.price, quantity: i.quantity, variant_id: i.variant_id, variant_label: i.variant_label })),
+        ...courierPatch,
       });
       const updated = res.data || res;
       setOrders((prev) => prev.map((o) => (o.id === editOrder.id ? { ...o, ...updated } : o)));
@@ -1433,7 +1490,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                 <div>
                   {o.courier_sent ? (
                     <div className="flex items-center gap-1.5">
-                      <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate ${
+                      <span title={o.courier_status || "sent"} style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate cursor-help ${
                         o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                         o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                         o.courier_status === "cancelled" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
@@ -1535,6 +1592,18 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             {(() => { const ph = o.customer_phone || o.phone || ""; return ph ? (
                               <a href={`tel:${ph}`} onClick={(e) => e.stopPropagation()} className="text-xs text-blue-600 hover:underline mt-0.5 block">{ph}</a>
                             ) : null; })()}
+                            {/* Notes — desktop only. Mobile card already shows
+                                them in the body. line-clamp-2 keeps the row
+                                from ballooning on long notes; full text shows
+                                in the title attribute on hover. */}
+                            {o.notes && (
+                              <p
+                                title={o.notes}
+                                className="text-[11px] text-gray-500 italic mt-1 leading-snug line-clamp-2 break-words"
+                              >
+                                &ldquo;{o.notes}&rdquo;
+                              </p>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-semibold text-[var(--primary)] whitespace-nowrap">৳{toBn(o.total)}</td>
                           <td className="px-4 py-3">
@@ -1554,7 +1623,7 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                           <td className="px-4 py-3">
                             {o.courier_sent ? (
                               <div className="flex items-center gap-1.5">
-                                <span style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate ${
+                                <span title={o.courier_status || "sent"} style={{ borderRadius: "5px" }} className={`text-xs px-2 py-1 font-medium inline-block w-[70px] truncate cursor-help ${
                                   o.courier_status === "delivered" ? "bg-green-100 text-green-700" :
                                   o.courier_status === "in_review" || o.courier_status === "pending" ? "bg-yellow-100 text-yellow-700" :
                                   o.courier_status === "cancelled" ? "bg-red-100 text-red-700" :
@@ -1729,18 +1798,20 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         <FiCalendar className="inline w-3 h-3 mr-1" />
                         {new Date(o.created_at).toLocaleString(lang === "en" ? "en-US" : "bn-BD")}
                       </p>
-                      {/* Status badges */}
+                      {/* Status badges — popup-only: 5px radius via inline
+                          style (Tailwind JIT was stripping rounded-[Npx] in
+                          this build), full label (no fixed width / truncate). */}
                       <div className="flex flex-wrap gap-2">
-                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium inline-block w-[70px] truncate ${stColor}`}>{stLabel}</span>
-                        <span className={`text-xs px-3 py-1.5 rounded-full font-medium inline-block w-[70px] truncate ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                        <span style={{ borderRadius: "5px" }} className={`text-xs px-3 py-1.5 font-medium inline-block ${stColor}`}>{stLabel}</span>
+                        <span style={{ borderRadius: "5px" }} className={`text-xs px-3 py-1.5 font-medium inline-block ${o.payment_status === "paid" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
                           {o.payment_status === "paid" ? t("status.paid") : t("status.unpaid")}
                         </span>
-                        <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gray-100 text-gray-700">
+                        <span style={{ borderRadius: "5px" }} className="text-xs px-3 py-1.5 font-medium bg-gray-100 text-gray-700">
                           <FiCreditCard className="inline w-3 h-3 mr-1" />
                           {PAYMENT_LABELS[o.payment_method] || o.payment_method}
                         </span>
                         {o.transaction_id && (
-                          <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-blue-100 text-blue-700">
+                          <span style={{ borderRadius: "5px" }} className="text-xs px-3 py-1.5 font-medium bg-blue-100 text-blue-700">
                             TrxID: {o.transaction_id}
                           </span>
                         )}
@@ -1853,6 +1924,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         </div>
                       )}
 
+                      {/* Courier + Status — two-up on desktop. Status block
+                          previously sat below courier as full-width footer
+                          with a top border; now lives as a sibling card so
+                          admins see send + status update in one row. */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {/* Courier Section */}
                       <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
@@ -1928,12 +2004,11 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                         )}
                       </div>
 
-                      {/* Quick Status Update */}
-                      <div className="border-t border-gray-100 pt-4">
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t("misc.statusPayment")}</h3>
-                        <div className="flex flex-wrap items-end gap-3">
-                          <div>
-                            <div className="text-xs font-medium text-gray-500 mb-1">{t("form.orderStatus")}</div>
+                      {/* Quick Status Update — sibling card to courier */}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t("misc.statusPayment")}</h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex-1 min-w-[140px]">
                             <InlineSelect
                               value={pendingStatus[o.id] ?? o.status}
                               options={STATUS_OPTIONS.filter((s) => s.value)}
@@ -1946,6 +2021,47 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                             className="px-4 py-2 bg-[var(--primary)] text-white rounded-xl text-sm font-semibold hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50"
                           >
                             {updatingId === o.id ? t("btn.saving") : t("btn.update")}
+                          </button>
+                        </div>
+                      </div>
+                      </div>
+
+                      {/* Danger zone — one-click ban customer by phone + IP +
+                          device fingerprint linked to this order. Stored in
+                          BlockedPhone / BlockedIp / DeviceFingerprint.status —
+                          all three checked on order create + incomplete capture. */}
+                      <div className="border-t border-red-100 pt-4 mt-3 bg-red-50/40 rounded-xl p-4">
+                        <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <FiSlash className="w-3.5 h-3.5" /> {lang === "en" ? "Danger Zone" : "বিপজ্জনক"}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs text-red-700 flex-1">
+                            {lang === "en"
+                              ? "Block this customer everywhere — bans phone, IP, and device fingerprint from placing future orders."
+                              : "এই কাস্টমারকে সব জায়গায় ব্লক করুন — ফোন, আইপি, ডিভাইস ব্লক হবে।"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const reason = window.prompt(lang === "en" ? "Reason?" : "কারণ?", "fake_order") || "fake_order";
+                              if (!reason) return;
+                              if (!confirm(lang === "en"
+                                ? `Block ${o.customer_name} permanently? This bans phone + IP + device.`
+                                : `${o.customer_name} কে স্থায়ী ভাবে ব্লক করবেন?`)) return;
+                              try {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const r: any = await api.admin.blockOrderCustomer(o.id, reason);
+                                showToast(lang === "en"
+                                  ? `Blocked: ${[r?.phone?.value, r?.ip?.value, r?.fp?.value].filter(Boolean).join(" · ") || "ok"}`
+                                  : "ব্লক করা হয়েছে");
+                              } catch {
+                                showToast(lang === "en" ? "Block failed" : "ব্লক ব্যর্থ", "error");
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 inline-flex items-center gap-1.5 shrink-0"
+                          >
+                            <FiSlash className="w-3.5 h-3.5" />
+                            {lang === "en" ? "Block customer" : "কাস্টমার ব্লক"}
                           </button>
                         </div>
                       </div>
@@ -2148,6 +2264,63 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
                   <label className="block text-xs font-medium text-gray-500 mb-1">{t("form.notes")}</label>
                   <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                     className={inputCls + " resize-none"} placeholder="অর্ডার সম্পর্কে নোট..." />
+                </div>
+
+                {/* Courier — manual attach (for orders sent outside the dashboard).
+                    Lets admin tag an order with provider + consignment ID after
+                    the fact. Backend auto-flips status to "shipped" + stamps
+                    courierSentAt the first time a consignment is attached. */}
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-[var(--primary)] uppercase tracking-wide">
+                      {lang === "en" ? "Courier" : "কুরিয়ার"}
+                    </p>
+                    <span className="text-[10px] text-gray-400">
+                      {lang === "en" ? "Optional — for manual tracking" : "ঐচ্ছিক — ম্যানুয়াল ট্র্যাকিং এর জন্য"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        {lang === "en" ? "Provider" : "প্রোভাইডার"}
+                      </label>
+                      <InlineSelect
+                        fullWidth
+                        value={editForm.courier_type}
+                        options={[
+                          { value: "", label: lang === "en" ? "— None —" : "— নেই —" },
+                          // Show all configured couriers; if none configured yet,
+                          // still show both so the admin can tag retroactively.
+                          ...(activeCouriers.length > 0
+                            ? activeCouriers.map((c) => ({ value: c.id, label: c.label }))
+                            : [
+                                { value: "steadfast", label: "Steadfast" },
+                                { value: "pathao", label: "Pathao" },
+                              ]),
+                        ]}
+                        onChange={(v) => setEditForm({ ...editForm, courier_type: v })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        {lang === "en" ? "Consignment ID" : "কনসাইনমেন্ট আইডি"}
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.consignment_id}
+                        onChange={(e) => setEditForm({ ...editForm, consignment_id: e.target.value })}
+                        className={inputCls}
+                        placeholder={lang === "en" ? "e.g. 244522177" : "যেমন 244522177"}
+                      />
+                    </div>
+                  </div>
+                  {editForm.consignment_id && !editForm.courier_type && (
+                    <p className="text-[11px] text-amber-600">
+                      {lang === "en"
+                        ? "Tip: pick a provider so courier-status refresh knows where to poll."
+                        : "টিপ: প্রোভাইডার নির্বাচন করুন যাতে কুরিয়ার-স্ট্যাটাস রিফ্রেশ ঠিকঠাক কাজ করে।"}
+                    </p>
+                  )}
                 </div>
 
                 {/* Summary */}

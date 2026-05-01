@@ -137,11 +137,23 @@ export async function checkCourierScore(phone: string): Promise<SteadfastFraudRe
   const { apiKey, secretKey } = await getKeys();
   if (!apiKey || !secretKey) throw new Error("Steadfast keys missing");
 
-  const res = await fetch(`${API_BASE}/fraud_check/${cleanPhone}`, {
+  // One-shot retry on 429: Steadfast returns Retry-After in seconds. Cap at 5s
+  // so we don't block the caller forever; any longer wait should fail loud
+  // and let the client back off.
+  const doFetch = () => fetch(`${API_BASE}/fraud_check/${cleanPhone}`, {
     method: "GET",
     headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(15000),
   });
+
+  let res = await doFetch();
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get("retry-after")) || 2;
+    const waitMs = Math.min(5000, Math.max(500, retryAfter * 1000));
+    await new Promise((r) => setTimeout(r, waitMs));
+    res = await doFetch();
+    if (res.status === 429) throw new Error("Steadfast 429 rate limit (after retry)");
+  }
 
   // Distinguish bad keys (401/403) and other server errors from a valid empty
   // response. Steadfast returns 200 + total_parcels:0 for unknown phones, so

@@ -228,6 +228,14 @@ export const api = {
     getBlockedIps: () => fetchAPI("/admin/spam/blocked-ips"),
     addBlockedIp: (data: Record<string, unknown>) => fetchAPI("/admin/spam/blocked-ips", { method: "POST", body: JSON.stringify(data) }),
     deleteBlockedIp: (id: number) => fetchAPI(`/admin/spam/blocked-ips/${id}`, { method: "DELETE" }),
+    getBlockedPhones: () => fetchAPI("/admin/spam/blocked-phones"),
+    addBlockedPhone: (data: Record<string, unknown>) => fetchAPI("/admin/spam/blocked-phones", { method: "POST", body: JSON.stringify(data) }),
+    deleteBlockedPhone: (id: number) => fetchAPI(`/admin/spam/blocked-phones/${id}`, { method: "DELETE" }),
+    // Customer-centric spam endpoints (new)
+    getSpamCustomers: (params?: string) => fetchAPI(`/admin/spam/customers${params ? `?${params}` : ""}`),
+    getSpamCustomerTrace: (phone: string) => fetchAPI(`/admin/spam/customer-trace?phone=${encodeURIComponent(phone)}`),
+    blockOrderCustomer: (orderId: number, reason?: string) =>
+      fetchAPI(`/admin/orders/${orderId}/block`, { method: "POST", body: JSON.stringify({ reason }) }),
 
     // Courier (Steadfast | Pathao). `provider` defaults to "steadfast".
     listActiveCouriers: () =>

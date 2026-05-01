@@ -112,12 +112,29 @@ export default async function DashboardServerPage() {
         _sum: { total: true, shippingCost: true },
         where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
       }),
-      // Low stock — previously a sequential await, now parallel
+      // Low stock — threshold ≤ 10. Split simple vs variable:
+      //  - Simple:   parent.stock ≤ 10 AND !unlimited.
+      //  - Variable: ANY active variant with stock ≤ 10 AND !unlimited.
+      // Parent.stock is stale on variable products (admin edits per-variant);
+      // old `stock: lte: N` query falsely flagged every variable product whose
+      // parent column was 0 even when every variant had healthy stock.
       prisma.product.findMany({
-        where: { stock: { lte: 5 }, unlimitedStock: false },
+        where: {
+          OR: [
+            { hasVariations: false, unlimitedStock: false, stock: { lt: 10 } },
+            { hasVariations: true, variants: { some: { isActive: true, unlimitedStock: false, stock: { lt: 10 } } } },
+          ],
+        },
         take: 10,
         orderBy: { stock: "asc" },
-        select: { id: true, name: true, stock: true, image: true },
+        select: {
+          id: true, name: true, stock: true, image: true,
+          hasVariations: true, unlimitedStock: true,
+          variants: {
+            where: { isActive: true },
+            select: { label: true, stock: true, unlimitedStock: true },
+          },
+        },
       }),
       // Top products — previously a sequential await, now parallel
       prisma.product.findMany({
@@ -207,12 +224,23 @@ export default async function DashboardServerPage() {
       image: p.image ?? undefined,
     }));
 
-    const lowStockItems = lowStockRaw.map((p) => ({
-      id: p.id,
-      name: p.name,
-      stock: p.stock,
-      image: p.image ?? undefined,
-    }));
+    // Build low-stock card payload. Variable products carry the offending
+    // variants (label + count) instead of a misleading sum; simple products
+    // keep the legacy { stock } field. UI picks layout off `variants`.
+    const lowStockItems = lowStockRaw.map((p) => {
+      if (p.hasVariations) {
+        const lowVariants = (p.variants ?? [])
+          .filter((v) => !v.unlimitedStock && (Number(v.stock) || 0) < 10)
+          .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0))
+          .map((v) => ({ label: v.label, stock: Number(v.stock) || 0 }));
+        return {
+          id: p.id, name: p.name, image: p.image ?? undefined,
+          stock: lowVariants.reduce((s, v) => s + v.stock, 0), // total of low ones
+          variants: lowVariants,
+        };
+      }
+      return { id: p.id, name: p.name, stock: p.stock, image: p.image ?? undefined };
+    });
 
     return (
       <DashboardPage

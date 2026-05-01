@@ -115,13 +115,24 @@ export function calculateRiskScore(
 }
 
 /**
+ * Normalize a BD phone number into canonical 01XXXXXXXXX form. Strips
+ * whitespace/dashes/plus, drops the +880 prefix. Returns the digits-only
+ * normalized string regardless of validity (caller validates separately
+ * with isValidBDPhone). Centralized here so order-create + incomplete-order
+ * upsert + courier dispatch all hash the same canonical phone — without
+ * this, "01700-123456" and "01700123456" wrote to different rows and the
+ * incomplete-orders page never marked them as converted.
+ */
+export function normalizePhone(phone: string): string {
+  const clean = String(phone || "").replace(/[\s\-+()]/g, "");
+  return clean.startsWith("880") ? "0" + clean.slice(3) : clean;
+}
+
+/**
  * Validate BD phone number — must be 01XXXXXXXXX (11 digits starting with 01)
  */
 export function isValidBDPhone(phone: string): boolean {
-  const clean = phone.replace(/[\s\-+()]/g, "");
-  // Allow +880 prefix
-  const normalized = clean.startsWith("880") ? "0" + clean.slice(3) : clean;
-  return /^01[3-9]\d{8}$/.test(normalized);
+  return /^01[3-9]\d{8}$/.test(normalizePhone(phone));
 }
 
 /**

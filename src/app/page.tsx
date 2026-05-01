@@ -6,6 +6,7 @@ import AllProducts from "@/components/AllProducts";
 import LazyCustomerReviews from "@/components/LazyCustomerReviews";
 import Features from "@/components/Features";
 import { prisma } from "@/lib/prisma";
+import { inStockWhere } from "@/lib/productFilters";
 import { serialize } from "@/lib/serialize";
 import { mapApiProduct } from "@/data/products";
 import type { Product } from "@/data/products";
@@ -61,7 +62,7 @@ const getProducts = unstable_cache(
   async (): Promise<{ products: Product[]; total: number }> => {
     const [rows, total] = await Promise.all([
       prisma.product.findMany({
-        where: { isActive: true },
+        where: { isActive: true, AND: [inStockWhere] },
         select: {
           id: true, name: true, slug: true, price: true, originalPrice: true,
           image: true, images: true, badge: true, badgeColor: true, weight: true,
@@ -79,7 +80,7 @@ const getProducts = unstable_cache(
         orderBy: { sortOrder: "asc" },
         take: 20,
       }),
-      prisma.product.count({ where: { isActive: true } }),
+      prisma.product.count({ where: { isActive: true, AND: [inStockWhere] } }),
     ]);
 
     return { products: rows.map((p) => mapApiProduct(serialize(p))), total };
