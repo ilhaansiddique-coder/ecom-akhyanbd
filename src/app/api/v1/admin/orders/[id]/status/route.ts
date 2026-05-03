@@ -54,26 +54,27 @@ export async function PUT(
     if (data.payment_status) updateData.paymentStatus = data.payment_status;
 
     // Handle Purchase / OrderCancelled event based on new status.
-    // Guard: only re-fire on confirm when deferred-purchase mode was ON at
-    // the time of checkout. Older order rows may have stale trackingData
-    // stored from before the collect route was fixed — firing them again
-    // would produce duplicate Purchase events (same event_id; FB dedupes
-    // within ~7 days but not after). Read the CURRENT defer setting; if
-    // off, skip the refire and just clear the stale payload.
+    //
+    // Rule: presence of `trackingData` is the source of truth. /collect only
+    // stores it when defer was ON at checkout time (defer-off branch fires
+    // immediately and skips storage). So if trackingData exists here, it has
+    // NEVER been fired and must be fired on confirm — regardless of the
+    // CURRENT defer toggle. Previous version checked the live setting and
+    // cleared trackingData without firing when admin had toggled defer OFF
+    // between checkout and confirm — silently losing those Purchases.
+    //
+    // De-dup safety: trackingData is cleared right after we fire, so the
+    // same event can never be re-fired. FB's event_id de-dup (~7d) is the
+    // backstop for any pathological double-confirm.
     if (existing.trackingData) {
       const credRows = await prisma.siteSetting.findMany({
-        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"] } },
+        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code"] } },
       });
       const creds: Record<string, string> = {};
       for (const r of credRows) if (r.value) creds[r.key] = r.value;
       const accessToken = creds.fb_capi_access_token;
-      const deferEnabled = creds.fb_deferred_purchase === "true";
 
-      if (data.status === "confirmed" && !deferEnabled) {
-        // Defer OFF: Purchase already fired at checkout time. Just clear
-        // any stale stored payload so confirm never refires it.
-        updateData.trackingData = null;
-      } else if (data.status === "confirmed") {
+      if (data.status === "confirmed") {
         // Fire the stored Purchase event to Facebook CAPI
         try {
           const stored = JSON.parse(existing.trackingData);
@@ -83,11 +84,14 @@ export async function PUT(
             // Update event_time to now (when confirmed, not when ordered)
             eventData.event_time = Math.floor(Date.now() / 1000);
             await sendToFacebookCAPI(pixelId, accessToken, eventData, testEventCode);
+            console.log(`[FB CAPI] Purchase fired on confirm for order ${existing.id}`);
+          } else {
+            console.warn(`[FB CAPI] Skipped Purchase fire for order ${existing.id}: pixelId=${!!pixelId} token=${!!accessToken} eventData=${!!eventData}`);
           }
         } catch (e) {
           console.error("[FB CAPI] Failed to send deferred Purchase:", e);
         }
-        // Clear tracking data after sending
+        // Clear tracking data after sending so we never refire.
         updateData.trackingData = null;
       } else if (data.status === "cancelled" || data.status === "trashed") {
         // Fire a custom OrderCancelled event with the same custom_data so the
