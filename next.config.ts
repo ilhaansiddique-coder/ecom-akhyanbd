@@ -71,7 +71,39 @@ const nextConfig: NextConfig = {
     };
   },
   async headers() {
+    // Global security headers applied to every route. Designed to be safe —
+    // no CSP yet (CSP needs careful tuning for Next + FB pixel + R2 + the
+    // dashboard customizer iframe; that's a separate later pass in
+    // Report-Only mode first).
+    //
+    //  HSTS                    — force HTTPS for 2 years incl. subdomains.
+    //                            Browser remembers; never falls back to HTTP.
+    //  X-Frame-Options         — SAMEORIGIN so the dashboard /customizer
+    //                            iframe of own preview pages still works.
+    //                            Blocks clickjacking from external domains.
+    //  X-Content-Type-Options  — nosniff, blocks MIME-type confusion attacks.
+    //  Referrer-Policy         — strict-origin-when-cross-origin: same-site
+    //                            sees full URL, cross-site sees only origin,
+    //                            cross-protocol sees nothing.
+    //  Permissions-Policy      — disable APIs we never use (geolocation,
+    //                            camera, microphone, etc) so any future
+    //                            embedded ad/tracker can't request them.
+    //  X-DNS-Prefetch-Control  — speed up navigations to known third parties.
+    const securityHeaders = [
+      { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" },
+      { key: "X-DNS-Prefetch-Control", value: "on" },
+    ];
     return [
+      {
+        // Global — applies to every path. Per-path rules below merge
+        // additional headers (Cache-Control etc.) on top.
+        source: "/:path*",
+        headers: securityHeaders,
+      },
       {
         source: "/uploads/:path*",
         headers: [
