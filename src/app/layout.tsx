@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { Hind_Siliguri, Playfair_Display, Manrope, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { headers } from "next/headers";
@@ -61,16 +63,33 @@ const bricolage = Bricolage_Grotesque({
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-async function loadSiteSettings(): Promise<Record<string, string | null>> {
-  try {
-    const rows = await prisma.siteSetting.findMany();
+// Two layers of caching keep this off Postgres:
+//
+//  1. `unstable_cache` — cross-request shared cache, 60s TTL, tagged so the
+//     admin Settings PUT (which calls revalidateAll("settings")) busts it
+//     immediately. Settings change rarely; 60s lag is fine for SEO/branding.
+//  2. `cache()` — per-request dedupe so the metadata generator and the
+//     SiteSettingsContext provider (both called in the same render pipeline)
+//     share one fetch instead of two.
+//
+// Before this layer, every page load did 2 full `siteSetting.findMany()`
+// queries — pg_stat_activity showed it hammering Neon every ~3s.
+const fetchSiteSettings = unstable_cache(
+  async (): Promise<Record<string, string | null>> => {
+    const rows = await prisma.siteSetting.findMany({
+      select: { key: true, value: true },
+    });
     const out: Record<string, string | null> = {};
     for (const r of rows) out[r.key] = r.value ?? null;
     return out;
-  } catch {
-    return {};
-  }
-}
+  },
+  ["site-settings"],
+  { tags: ["settings"], revalidate: 60 },
+);
+const loadSiteSettings = cache(async (): Promise<Record<string, string | null>> => {
+  try { return await fetchSiteSettings(); }
+  catch { return {}; }
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await loadSiteSettings();
