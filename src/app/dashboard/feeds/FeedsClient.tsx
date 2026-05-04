@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useLang } from "@/lib/LanguageContext";
 import {
-  FiRss, FiCopy, FiCheck, FiExternalLink, FiSettings, FiPackage,
+  FiRss, FiCopy, FiCheck, FiExternalLink, FiSettings, FiPackage, FiRefreshCw,
   FiShoppingBag, FiZap, FiX,
 } from "react-icons/fi";
 
@@ -76,6 +76,8 @@ export default function FeedsClient() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") setOrigin(window.location.origin);
@@ -121,13 +123,46 @@ export default function FeedsClient() {
               : "Facebook, Google এবং TikTok-এর জন্য অটো-জেনারেটেড ক্যাটালগ ফিড। একবার URL পেস্ট করুন, পণ্য যোগ বা আপডেট করলে অ্যাড সিঙ্ক থাকবে।"}
           </p>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
-        >
-          <FiSettings className="w-4 h-4" />
-          {lang === "en" ? "Defaults" : "ডিফল্ট"}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={async () => {
+              if (refreshing) return;
+              setRefreshing(true);
+              try {
+                const res = await fetch("/api/v1/admin/feeds/revalidate", {
+                  method: "POST",
+                  credentials: "include",
+                });
+                if (!res.ok) throw new Error("Failed");
+                // Reload stats so admin sees the new row count after a moment.
+                setTimeout(() => load(), 500);
+                setRefreshMsg(lang === "en" ? "✓ Feeds refreshed" : "✓ ফিড রিফ্রেশ হয়েছে");
+                setTimeout(() => setRefreshMsg(""), 3000);
+              } catch {
+                setRefreshMsg(lang === "en" ? "Refresh failed" : "রিফ্রেশ ব্যর্থ");
+                setTimeout(() => setRefreshMsg(""), 3000);
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            disabled={refreshing}
+            className="px-3 py-2 text-sm rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-light)] flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+            title={lang === "en" ? "Force feed cache to rebuild on next request" : "পরবর্তী রিকোয়েস্টে ফিড পুনরায় তৈরি করুন"}
+          >
+            <FiRefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing
+              ? (lang === "en" ? "Refreshing..." : "রিফ্রেশ হচ্ছে...")
+              : (lang === "en" ? "Refresh feeds now" : "ফিড রিফ্রেশ করুন")}
+          </button>
+          {refreshMsg && <span className="text-xs text-green-700 font-medium">{refreshMsg}</span>}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
+          >
+            <FiSettings className="w-4 h-4" />
+            {lang === "en" ? "Defaults" : "ডিফল্ট"}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

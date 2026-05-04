@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { mapProductToFeedItems, type FeedItem, type FeedDefaults } from "./feedMapper";
 
@@ -51,19 +52,39 @@ export async function loadFeedDefaults(): Promise<FeedDefaults> {
  * are kept (rendered with availability="out of stock") so retargeting
  * audiences don't churn whenever inventory dips.
  */
-export async function loadFeedItems(): Promise<FeedItem[]> {
-  const defaults = await loadFeedDefaults();
-  const products = await prisma.product.findMany({
-    where: { isActive: true, deletedAt: null },
-    include: {
-      variants: { orderBy: { sortOrder: "asc" } },
-      category: { select: { name: true } },
-      flashSales: {
-        include: { flashSale: true },
+// Wrap the heavy feed query in `unstable_cache` so the 5 feed endpoints
+// (facebook.csv/.xml, google.csv/.xml, tiktok.csv) share one underlying
+// fetch instead of each running its own Prisma query.
+//
+// Tagged with both:
+//   - "feeds"     — admin "Refresh feeds now" button busts this directly.
+//   - "products"  — product CRUD routes (create/update/delete + price/stock
+//                   changes + flash sales) already call
+//                   revalidateTag("products"), so feeds auto-bust whenever
+//                   any catalog change happens. No extra wiring needed.
+//
+// 1 hour TTL = the same window the route-level `revalidate = 3600` used,
+// kept as the long-tail fallback in case revalidateTag misses a path.
+const fetchFeedItems = unstable_cache(
+  async (): Promise<FeedItem[]> => {
+    const defaults = await loadFeedDefaults();
+    const products = await prisma.product.findMany({
+      where: { isActive: true, deletedAt: null },
+      include: {
+        variants: { orderBy: { sortOrder: "asc" } },
+        category: { select: { name: true } },
+        flashSales: {
+          include: { flashSale: true },
+        },
       },
-    },
-    orderBy: { id: "asc" },
-  });
+      orderBy: { id: "asc" },
+    });
+    return products.flatMap((p) => mapProductToFeedItems(p, defaults));
+  },
+  ["feed-items"],
+  { tags: ["feeds", "products"], revalidate: 3600 },
+);
 
-  return products.flatMap((p) => mapProductToFeedItems(p, defaults));
+export async function loadFeedItems(): Promise<FeedItem[]> {
+  return fetchFeedItems();
 }
