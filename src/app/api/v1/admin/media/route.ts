@@ -5,7 +5,7 @@ import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
-import { isCloudinaryConfigured, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
+import { isCloudinaryConfigured, cloudinaryList, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
 
 const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
 const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
@@ -36,6 +36,27 @@ export async function GET(_request: NextRequest) {
         })
         .filter(Boolean)
         .sort((a, b) => new Date(b!.modified).getTime() - new Date(a!.modified).getTime());
+      return jsonResponse(media);
+    }
+
+    // Cloudinary fallback. Lists images via the Admin API (HTTP Basic auth)
+    // so the gallery widget shows previously-uploaded assets when R2 isn't
+    // configured. Only images are returned — Cloudinary's free tier doesn't
+    // support video listing the same way and storefront doesn't use video.
+    if (isCloudinaryConfigured()) {
+      const objects = await cloudinaryList();
+      const media = objects
+        .map((o) => ({
+          // url is the canonical Cloudinary delivery URL — what gets stored
+          // in product image fields; pass it as filename too so DELETE can
+          // round-trip via cloudinaryPublicIdFromUrl.
+          filename: o.url,
+          url: o.url,
+          size: o.size,
+          type: "image" as const,
+          modified: o.modified,
+        }))
+        .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
       return jsonResponse(media);
     }
 

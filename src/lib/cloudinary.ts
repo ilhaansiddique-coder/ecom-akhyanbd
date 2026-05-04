@@ -116,6 +116,55 @@ export async function cloudinaryDelete(publicId: string, resourceType: "image" |
 }
 
 /**
+ * List uploaded assets in the configured folder. Used by the admin media
+ * gallery widget to render a grid of all previously-uploaded images so the
+ * admin can re-pick instead of re-uploading.
+ *
+ * Cloudinary Admin API uses HTTP Basic auth (api_key:api_secret) — different
+ * from the signed POST flow used by uploads. Server-side only; never call
+ * from the browser.
+ *
+ * Returns a flat list of {key, url, size, modified, format}. Pagination via
+ * `next_cursor` — first call returns up to `max_results` (default 500). For
+ * stores with > 500 images, callers should re-call passing the cursor; this
+ * helper auto-paginates up to 5 pages (= 2500 images) which covers all
+ * reasonable BD merchant catalogs.
+ */
+export async function cloudinaryList(prefix?: string): Promise<Array<{ key: string; url: string; size: number; modified: string; format: string }>> {
+  if (!isCloudinaryConfigured()) return [];
+  const baseUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/resources/image`;
+  const auth = "Basic " + Buffer.from(`${API_KEY}:${API_SECRET}`).toString("base64");
+  const out: Array<{ key: string; url: string; size: number; modified: string; format: string }> = [];
+  let cursor: string | null = null;
+  const folder = prefix !== undefined ? prefix : FOLDER;
+  for (let page = 0; page < 5; page++) {
+    const params = new URLSearchParams({ max_results: "500", type: "upload" });
+    if (folder) params.set("prefix", folder);
+    if (cursor) params.set("next_cursor", cursor);
+    const res = await fetch(`${baseUrl}?${params}`, { headers: { Authorization: auth } });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[Cloudinary list] HTTP ${res.status}: ${text.slice(0, 200)}`);
+      break;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await res.json() as { resources?: any[]; next_cursor?: string };
+    for (const r of data.resources || []) {
+      out.push({
+        key: r.public_id,
+        url: r.secure_url || r.url,
+        size: r.bytes || 0,
+        modified: r.created_at || new Date().toISOString(),
+        format: r.format || "",
+      });
+    }
+    if (!data.next_cursor) break;
+    cursor = data.next_cursor;
+  }
+  return out;
+}
+
+/**
  * Extract the public_id from a Cloudinary delivery URL so callers that only
  * have the URL stored (e.g. a product image field) can still issue deletes.
  * Returns null when the URL doesn't match Cloudinary's pattern.
