@@ -33,9 +33,14 @@
   --youtube: #cd201f;
   --whatsapp: #25d366;
 
-  /* Customizer-driven tokens (typography + layout). */
-  --font-body-stack: var(--font-hind-siliguri), "Hind Siliguri", system-ui, sans-serif;
-  --font-heading-stack: var(--font-bricolage), "Bricolage Grotesque", system-ui, sans-serif;
+  /* Customizer-driven tokens (typography + layout).
+     Heading stack appends Hind Siliguri (+ Noto Sans Bengali) AFTER Bricolage
+     so Bengali glyphs in h1-h6 fall through to a real Bengali font instead
+     of system-ui — Vercel-served pages have no system Bengali available, so
+     headings rendered with default Sans before this. Body stack already had
+     Hind Siliguri primary so was unaffected. */
+  --font-body-stack: var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
+  --font-heading-stack: var(--font-bricolage), "Bricolage Grotesque", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
   --font-size-base: 16px;
   --line-height-base: 1.6;
   --radius-sm: 6px;
