@@ -992,7 +992,12 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
     if (shippingZones.length > 0) {
       setCreateForm(f => ({ ...f, shipping_cost: String(shippingZones[0].rate) }));
     }
-    // Fetch products for picker
+    // Fetch products for picker. Must include has_variations + variants so
+    // the dropdown can render the parent header + variant rows for variable
+    // products. Without this, admins clicked the parent and the order saved
+    // with variantId=null + parent price (often 0) — same data shape that
+    // customers were generating before the order POST hard-gate landed.
+    // Mirrors the openEdit mapper so create + edit pickers behave identically.
     api.admin.getProducts("per_page=200").then((res) => {
       const data = res.data || res || [];
       setAllProducts(Array.isArray(data) ? data.map((p: Record<string, unknown>) => ({
@@ -1002,6 +1007,16 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
         price: Number(p.price) || 0,
         stock: Number(p.stock) || 0,
         image: (p.image as string) || "",
+        has_variations: Boolean(p.has_variations),
+        variants: Array.isArray(p.variants) ? (p.variants as Record<string, unknown>[]).map((v) => ({
+          id: v.id as number,
+          label: (v.label as string) || "",
+          price: Number(v.price) || 0,
+          stock: Number(v.stock) || 0,
+          image: (v.image as string) || "",
+          unlimited_stock: Boolean(v.unlimited_stock),
+          is_active: v.is_active !== false,
+        })) : [],
       })) : []);
     }).catch(() => {});
   };
