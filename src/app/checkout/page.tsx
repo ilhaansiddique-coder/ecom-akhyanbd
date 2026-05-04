@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
-import { trackInitiateCheckout, trackPurchase, saveLastCustomer } from "@/lib/analytics";
+import { trackInitiateCheckout, trackPurchase, saveLastCustomer, feedContentId } from "@/lib/analytics";
 import { useFingerprint } from "@/hooks/useFingerprint";
 import { useBehavioralTracker } from "@/hooks/useBehavioralTracker";
 import { toBn } from "@/utils/toBn";
@@ -172,10 +172,11 @@ export default function CheckoutPage() {
           fn: name?.trim().split(/\s+/)[0] || undefined,
           ln: name?.trim().split(/\s+/).slice(1).join(" ") || undefined,
         } : undefined;
+        // Use feedContentId so variant lines match catalog rows like "40-v123".
         trackInitiateCheckout({
-          content_ids: items.map((i) => i.id),
+          content_ids: items.map((i) => feedContentId(i.id, i.variantId)),
           content_name: items.map((i) => i.name).join(", "),
-          contents: items.map((i) => ({ id: String(i.id), quantity: i.quantity, item_price: i.price })),
+          contents: items.map((i) => ({ id: feedContentId(i.id, i.variantId), quantity: i.quantity, item_price: i.price })),
           num_items: items.reduce((s, i) => s + i.quantity, 0),
           value: totalPrice,
         }, userData);
@@ -366,9 +367,9 @@ export default function CheckoutPage() {
       // Pathao parse from /api/v1/orders) and overrides `ct` with the real
       // district before sending to Facebook.
       trackPurchase({
-        content_ids: items.map((i) => i.id),
+        content_ids: items.map((i) => feedContentId(i.id, i.variantId)),
         content_name: items.map((i) => i.name).join(", "),
-        contents: items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+        contents: items.map((i) => ({ id: feedContentId(i.id, i.variantId), quantity: i.quantity, item_price: i.price })),
         num_items: items.reduce((s, i) => s + i.quantity, 0),
         value: res.total || totalPrice,
         order_id: String(res.id || ""),

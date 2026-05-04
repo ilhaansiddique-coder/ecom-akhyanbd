@@ -49,6 +49,16 @@ const nextConfig: NextConfig = {
       static: 300,
     },
   },
+  // Force inclusion of /public/fonts/* into the standalone output so Bengali
+  // digit fonts (AnekBangla-{400,700}.ttf) ship to non-Vercel hosts. Without
+  // this, `output: "standalone"` produces a tarball that omits public/ → the
+  // server returns 404 for /fonts/AnekBangla-*.ttf → Bengali digits and ৳
+  // fall back to system fonts and render broken on Hostinger / VPS / Docker.
+  // Vercel ignores `output: "standalone"` so this is a no-op there but
+  // doesn't hurt.
+  outputFileTracingIncludes: {
+    "/": ["./public/fonts/**/*"],
+  },
   // When R2 is configured, REDIRECT legacy /uploads/* + /storage/* URLs to
   // the Cloudflare CDN (308 permanent). Rewrites would proxy every image
   // through Next (browser → Next server → R2 → Next → browser) which kills

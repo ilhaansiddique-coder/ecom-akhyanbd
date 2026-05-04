@@ -6,6 +6,25 @@
  * so Facebook can deduplicate browser ↔ server events.
  */
 
+// --------------- content_id helper ---------------
+
+/**
+ * Build the same content_id format the product feed uses, so FB pixel/CAPI
+ * events match catalog entries. Without this, "Unmatched events" warnings
+ * pile up in FB Events Manager because pixel sent "40" while catalog had
+ * "40-v1", "40-v2", etc.
+ *
+ * - Simple product:                  "40"
+ * - Variable product variant:        "40-v123"
+ *
+ * Mirrors src/lib/feedMapper.ts where the feed builds the same shape:
+ *     id: String(product.id)            // simple
+ *     id: `${product.id}-v${v.id}`      // variant row
+ */
+export function feedContentId(productId: number | string, variantId?: number | null): string {
+  return variantId ? `${productId}-v${variantId}` : String(productId);
+}
+
 // --------------- helpers ---------------
 
 function getCookie(name: string): string | undefined {

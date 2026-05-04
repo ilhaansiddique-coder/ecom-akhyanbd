@@ -30,7 +30,12 @@ const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
   subsets: ["bengali", "latin"],
   weight: ["400", "500", "700"],
-  display: "block",
+  // "swap" instead of "block": shows fallback metrics-matched text immediately,
+  // then snaps to Hind Siliguri when loaded. With "block" the browser waited
+  // up to 3s for the font, and on slow mobile / Vercel cold cache it would
+  // give up — Bengali rendered with system Serif glyphs (looked broken).
+  // adjustFontFallback keeps metrics close so there's no visible CLS on swap.
+  display: "swap",
   preload: true,
   adjustFontFallback: true,
 });

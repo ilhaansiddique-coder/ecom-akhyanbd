@@ -11,7 +11,7 @@ import "swiper/css";
 import "swiper/css/pagination";
 import { api } from "@/lib/api";
 import { useOption } from "@/lib/SiteSettingsContext";
-import { trackViewContent, trackInitiateCheckout, trackPurchase, saveLastCustomer } from "@/lib/analytics";
+import { trackViewContent, trackInitiateCheckout, trackPurchase, saveLastCustomer, feedContentId } from "@/lib/analytics";
 
 interface ProductVariant {
   id: number; label: string; price: number; original_price?: number; stock: number; image?: string;
@@ -142,8 +142,11 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     // One ViewContent per product. For a single-product LP, mirrors PDP exactly.
     // For multi-product LP, FB still gets distinct content_ids per product.
     for (const p of products) {
+      // Send parent product id for ViewContent. For variable products, FB
+      // matches it via the catalog's item_group_id (parent grouping).
+      // Variant-specific IDs are reserved for AddToCart/IC/Purchase below.
       trackViewContent({
-        content_ids: [p.id],
+        content_ids: [feedContentId(p.id)],
         content_name: p.name,
         value: p.price,
         content_category: "landing-page",
@@ -165,11 +168,15 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       for (const e of entries) {
         if (e.isIntersecting && !checkoutTracked.current) {
           checkoutTracked.current = true;
+          // Use feedContentId so variant-aware IDs match catalog rows.
+          // For variable LP products with no variant selected yet at IC time,
+          // fall back to the parent id; FB matches loosely here and the
+          // Purchase event below carries the real variant id.
           trackInitiateCheckout({
-            content_ids: products.map((p) => p.id),
+            content_ids: products.map((p) => feedContentId(p.id, selectedVariants[p.id])),
             content_name: products.map((p) => p.name).join(", "),
             contents: products.map((p) => ({
-              id: String(p.id),
+              id: feedContentId(p.id, selectedVariants[p.id]),
               quantity: quantities[p.id] || 1,
               item_price: getProductPrice(p),
             })),
@@ -324,9 +331,12 @@ export default function LandingPageClient({ page }: { page: PageData }) {
       // Pathao parse). Browser pixel uses form value — dedup happens via
       // event_id so this just needs to match server's pre-override hash.
       trackPurchase({
-        content_ids: items.map((i) => i.product_id),
+        // Type narrowing: items array is a union of {..., variant_id?} (variable
+        // branch) and {product_id, ...} (simple branch). Cast to read variant_id
+        // optionally — feedContentId returns the bare id when variant absent.
+        content_ids: items.map((i) => feedContentId(i.product_id, (i as { variant_id?: number }).variant_id)),
         content_name: items.map((i) => i.product_name).join(", "),
-        contents: items.map((i) => ({ id: i.product_id, quantity: i.quantity, item_price: i.price })),
+        contents: items.map((i) => ({ id: feedContentId(i.product_id, (i as { variant_id?: number }).variant_id), quantity: i.quantity, item_price: i.price })),
         num_items: items.reduce((s, i) => s + i.quantity, 0),
         value: res.total || total,
         order_id: String(orderIdNum || ""),

@@ -7,7 +7,7 @@ import { useCart } from "@/lib/CartContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
-import { trackAddToCart, trackViewContent } from "@/lib/analytics";
+import { trackAddToCart, trackViewContent, feedContentId } from "@/lib/analytics";
 import { toBn } from "@/utils/toBn";
 import ProductGallery from "@/components/ProductGallery";
 
@@ -85,7 +85,7 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       unlimitedStock: activeUnlimited,
     }, quantity);
     trackAddToCart({
-      content_ids: [productId],
+      content_ids: [feedContentId(productId, selectedVariant?.id)],
       content_name: productName,
       value: activePrice * quantity,
       quantity,
@@ -106,7 +106,7 @@ export function AddToCartSection({ productId, productName, price, image, hasVari
       unlimitedStock: activeUnlimited,
     }, quantity);
     trackAddToCart({
-      content_ids: [productId],
+      content_ids: [feedContentId(productId, selectedVariant?.id)],
       content_name: productName,
       value: activePrice * quantity,
       quantity,
@@ -292,11 +292,17 @@ export function ProductGalleryWithVariants({
     setVariantImage(img);
   }, []);
 
-  // Track ViewContent on mount — defer so URL reflects current page after navigation
+  // Track ViewContent on mount — defer so URL reflects current page after navigation.
+  //
+  // content_ids: send the parent productId. For variable products, FB matches
+  // it against the catalog's item_group_id (which equals product.id in our
+  // feed) — that's FB's recommended pattern for group/parent views. The
+  // variant-specific id only matters for AddToCart/Purchase where the
+  // customer has actually picked a variant.
   useEffect(() => {
     const timer = setTimeout(() => {
       trackViewContent({
-        content_ids: [productId],
+        content_ids: [feedContentId(productId)],
         content_name: productName,
         value: price,
         content_type: "product",
