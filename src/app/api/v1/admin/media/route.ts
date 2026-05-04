@@ -5,6 +5,7 @@ import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
+import { isCloudinaryConfigured, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
 
 const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
 const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
@@ -95,6 +96,21 @@ export async function DELETE(request: NextRequest) {
       const ok = await r2Delete(key);
       if (!ok) return errorResponse("Failed to delete file", 500);
       return jsonResponse({ message: "File deleted" });
+    }
+    // Cloudinary fallback. The "filename" passed in is typically a delivery
+    // URL stored on a product; extract its public_id to issue the destroy
+    // call. If the URL doesn't match Cloudinary's pattern, fall through to
+    // the local disk path below.
+    if (isCloudinaryConfigured()) {
+      const publicId = cloudinaryPublicIdFromUrl(filename) || filename.replace(/\.[^/.]+$/, "");
+      const ok = await cloudinaryDelete(publicId, "image");
+      if (ok) return jsonResponse({ message: "File deleted" });
+      // If delete failed but URL clearly was Cloudinary, surface the error
+      // so admin sees the failure instead of silently nuking nothing.
+      if (filename.includes("cloudinary.com")) {
+        return errorResponse("Failed to delete Cloudinary asset", 500);
+      }
+      // Otherwise fall through to local disk delete (legacy file).
     }
 
     const safeName = path.basename(filename);

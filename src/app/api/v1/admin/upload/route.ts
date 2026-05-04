@@ -5,6 +5,7 @@ import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { requireStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2Upload } from "@/lib/r2";
+import { isCloudinaryConfigured, cloudinaryUpload } from "@/lib/cloudinary";
 import sharp from "sharp";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tiff"]);
@@ -72,10 +73,18 @@ export async function POST(request: NextRequest) {
     const uniqueName = `${basename}-${Date.now()}${finalExt}`;
     const contentType = MIME[finalExt] || "application/octet-stream";
 
-    // Prefer R2 when configured. Fall back to local disk otherwise so dev
-    // without credentials still works.
+    // Storage tier preference:
+    //   1. Cloudflare R2 (production primary)
+    //   2. Cloudinary (fallback when R2 missing — both tiers can be set on
+    //      the same env file; R2 still wins, Cloudinary takes over only if
+    //      R2 is unconfigured)
+    //   3. Local disk (dev fallback so missing creds don't break uploads)
     if (isR2Configured()) {
       const url = await r2Upload(uniqueName, buffer, contentType);
+      return jsonResponse({ url, path: url }, 201);
+    }
+    if (isCloudinaryConfigured()) {
+      const url = await cloudinaryUpload(uniqueName, buffer, contentType);
       return jsonResponse({ url, path: url }, 201);
     }
 

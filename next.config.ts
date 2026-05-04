@@ -28,6 +28,9 @@ const nextConfig: NextConfig = {
       },
       // Allow next/image to optimize R2-hosted assets
       ...(R2_HOSTNAME ? [{ protocol: "https" as const, hostname: R2_HOSTNAME, pathname: "/**" }] : []),
+      // Cloudinary fallback CDN. Always allow res.cloudinary.com — covers any
+      // CLOUDINARY_CLOUD_NAME setup without needing an env-derived hostname.
+      { protocol: "https" as const, hostname: "res.cloudinary.com", pathname: "/**" },
     ],
     formats: ["image/webp"],
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days cache
