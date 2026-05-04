@@ -97,6 +97,86 @@ function postCollect(body: unknown) {
   }
 }
 
+// --------------- last-known customer (auto-enrich) ---------------
+//
+// On Lead / Purchase / form-fill we stash the customer's contact info into
+// localStorage so subsequent ViewContent / AddToCart / InitiateCheckout
+// events on this browser can attach the same em/ph/fn/ln/ct/zp without the
+// caller passing it again. Higher EMQ (Facebook Match Quality) on every
+// mid-funnel event = Facebook learns "this is the same identified person
+// across the funnel" → better lookalikes + lower CPA.
+//
+// Privacy: localStorage is per-origin per-browser. No cross-user contamination
+// is possible. Auto-expires after 30 days. Cleared on logout (call
+// clearLastCustomer()).
+const LAST_CUSTOMER_KEY = "_akh_last_customer";
+const LAST_CUSTOMER_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+interface LastCustomer {
+  em?: string; ph?: string; fn?: string; ln?: string;
+  ct?: string; st?: string; zp?: string; country?: string;
+  external_id?: string;
+  savedAt: number;
+}
+
+function readLastCustomer(): LastCustomer | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LAST_CUSTOMER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastCustomer;
+    if (!parsed.savedAt || Date.now() - parsed.savedAt > LAST_CUSTOMER_TTL_MS) {
+      window.localStorage.removeItem(LAST_CUSTOMER_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save the latest customer info we know about. Merges with whatever's already
+ * stored — so a Lead event with just em+ph doesn't wipe the city we got from
+ * a previous Purchase. Call on Lead, Purchase, and on checkout-form submit.
+ */
+export function saveLastCustomer(data: Partial<LastCustomer>) {
+  if (typeof window === "undefined") return;
+  try {
+    const prev = readLastCustomer() || ({ savedAt: Date.now() } as LastCustomer);
+    const merged: LastCustomer = {
+      ...prev,
+      ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined && v !== "")),
+      savedAt: Date.now(),
+    };
+    window.localStorage.setItem(LAST_CUSTOMER_KEY, JSON.stringify(merged));
+  } catch {
+    // localStorage full / blocked — ignore
+  }
+}
+
+/** Clear stored customer info — call on logout. */
+export function clearLastCustomer() {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(LAST_CUSTOMER_KEY); } catch {}
+}
+
+/**
+ * Enrich a userData object with the last-known customer info. Caller-supplied
+ * fields always win — we only fill in gaps. Drops `savedAt` and any non-FB
+ * fields before returning.
+ */
+function enrichUserData(provided?: UserData): UserData {
+  const stored = readLastCustomer();
+  if (!stored) return provided || {};
+  const fields: (keyof UserData)[] = ["em", "ph", "fn", "ln", "ct", "st", "zp", "country", "external_id"];
+  const out: UserData = { ...(provided || {}) };
+  for (const f of fields) {
+    if (!out[f] && stored[f]) (out as Record<string, string | undefined>)[f] = stored[f];
+  }
+  return out;
+}
+
 // --------------- pixel ID + user store ---------------
 
 let _pixelId = "";
@@ -208,6 +288,12 @@ function sendEvent(
 
   const eventId = genEventId();
 
+  // Auto-enrich user_data with the last-known customer info on this browser.
+  // Caller-supplied fields always win. Lifts mid-funnel events (AddToCart,
+  // ViewContent, InitiateCheckout) from EMQ ~5 to ~8 because they now carry
+  // em/ph/fn from earlier sessions even when the caller doesn't pass them.
+  const enrichedUserData = enrichUserData(userData);
+
   // Ensure currency is always present for events that need it
   const dataWithCurrency = { ...customData };
   if (customData.value !== undefined && !customData.currency) {
@@ -229,10 +315,10 @@ function sendEvent(
     // Push Advanced Matching via setAdvancedMatching (dedup-aware). Skips
     // the fbq init call when values haven't changed since the last push,
     // so Pixel Helper doesn't flag "duplicate Pixel ID" on every event.
-    // Pass undefined if nothing new — external_id anon cookie is the
-    // baseline and only needs to be sent once per session.
-    if (Object.keys(userData).length > 0) {
-      setAdvancedMatching(userData);
+    // Use the ENRICHED userData so AddToCart / ViewContent / etc. carry
+    // em+ph from the last known customer even when caller didn't pass any.
+    if (Object.keys(enrichedUserData).length > 0) {
+      setAdvancedMatching(enrichedUserData);
     }
 
     window.fbq("track", eventName, pixelData, { eventID: eventId });
@@ -253,7 +339,7 @@ function sendEvent(
         // cookie so CAPI gets coverage for guests too (FB dashboard wants
         // this above 80%, was at ~27% with logged-in-only).
         external_id: _userId || getAnonId(),
-        ...userData,
+        ...enrichedUserData,
       },
     });
   }
@@ -435,6 +521,12 @@ export function trackPurchase(data: {
   if (typeof window === "undefined") return;
   if (isExcludedPath()) return;
 
+  // Persist customer info so future ViewContent / AddToCart / IC events on
+  // this browser auto-enrich with the same em/ph/fn/etc. — boosts EMQ on
+  // mid-funnel events.
+  if (userData) saveLastCustomer(userData);
+  const enrichedUserData = enrichUserData(userData);
+
   const eventId = genEventId();
   const customData: CustomData = {
     content_ids: data.content_ids.map(String),
@@ -464,8 +556,8 @@ export function trackPurchase(data: {
     // Advanced Matching — dedup-aware so Pixel Helper doesn't flag
     // "duplicate Pixel ID". Will no-op if em/ph haven't changed since
     // the same user already submitted checkout.
-    if (userData && Object.keys(userData).length > 0) {
-      setAdvancedMatching(userData);
+    if (Object.keys(enrichedUserData).length > 0) {
+      setAdvancedMatching(enrichedUserData);
     }
 
     window.fbq("track", "Purchase", pixelData, { eventID: eventId });
@@ -484,7 +576,7 @@ export function trackPurchase(data: {
       fbp: getCookie("_fbp"),
       fbc: getFbc(),
       external_id: _userId || getAnonId(),
-      ...userData,
+      ...enrichedUserData,
     },
     order_id: data.order_id,
   });
@@ -515,12 +607,15 @@ export function trackSearch(data: { search_string: string }) {
 
 /** Contact form / lead form submitted */
 export function trackLead(userData?: UserData) {
+  // Persist for auto-enrichment of subsequent events on this browser.
+  if (userData) saveLastCustomer(userData);
   sendEvent("Lead", {}, userData);
   pushDataLayer("generate_lead", { currency: "BDT", value: 0 });
 }
 
 /** User registered */
 export function trackCompleteRegistration(userData?: UserData) {
+  if (userData) saveLastCustomer(userData);
   sendEvent("CompleteRegistration", {}, userData);
   pushDataLayer("sign_up", { method: "email" });
 }

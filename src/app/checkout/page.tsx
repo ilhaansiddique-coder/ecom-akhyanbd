@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSiteSettings } from "@/lib/SiteSettingsContext";
 import { useLang } from "@/lib/LanguageContext";
 import { api } from "@/lib/api";
-import { trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
+import { trackInitiateCheckout, trackPurchase, saveLastCustomer } from "@/lib/analytics";
 import { useFingerprint } from "@/hooks/useFingerprint";
 import { useBehavioralTracker } from "@/hooks/useBehavioralTracker";
 import { toBn } from "@/utils/toBn";
@@ -163,17 +163,40 @@ export default function CheckoutPage() {
     if (hydrated && items.length > 0 && !initCheckoutTracked.current) {
       initCheckoutTracked.current = true;
       const timer = setTimeout(() => {
+        // Pass user_data when we already know it (e.g. logged-in user, or
+        // form pre-filled from saved address). enrichUserData inside the
+        // tracker also pulls from localStorage as a fallback.
+        const userData = (email || phone || name) ? {
+          em: email || undefined,
+          ph: phone || undefined,
+          fn: name?.trim().split(/\s+/)[0] || undefined,
+          ln: name?.trim().split(/\s+/).slice(1).join(" ") || undefined,
+        } : undefined;
         trackInitiateCheckout({
           content_ids: items.map((i) => i.id),
           content_name: items.map((i) => i.name).join(", "),
           contents: items.map((i) => ({ id: String(i.id), quantity: i.quantity, item_price: i.price })),
           num_items: items.reduce((s, i) => s + i.quantity, 0),
           value: totalPrice,
-        });
+        }, userData);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [hydrated, items, totalPrice]);
+  }, [hydrated, items, totalPrice, email, phone, name]);
+
+  // Persist customer info to localStorage as soon as they fill the form.
+  // Future events on this browser (next visit's ViewContent / AddToCart)
+  // will auto-enrich with this data → higher EMQ across the funnel.
+  useEffect(() => {
+    if (!email && !phone && !name) return;
+    saveLastCustomer({
+      em: email || undefined,
+      ph: phone || undefined,
+      fn: name?.trim().split(/\s+/)[0] || undefined,
+      ln: name?.trim().split(/\s+/).slice(1).join(" ") || undefined,
+      country: "bd",
+    });
+  }, [email, phone, name]);
 
   // Saved addresses
   const [savedAddresses, setSavedAddresses] = useState<{ id: number; label?: string; address: string; city: string; zip_code?: string }[]>([]);

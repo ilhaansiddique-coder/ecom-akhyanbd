@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { api } from "./api";
-import { setTrackingUserId } from "./analytics";
+import { setTrackingUserId, clearLastCustomer } from "./analytics";
 
 interface User {
   id: number;
@@ -84,6 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cookie is cleared by the server
     setUser(null);
     setCachedUser(null);
+    // Wipe per-browser customer cache so next visitor on this device doesn't
+    // get tracked as the previous user (shared family devices, public PCs).
+    clearLastCustomer();
   }, []);
 
   return (

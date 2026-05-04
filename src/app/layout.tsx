@@ -142,7 +142,35 @@ export default async function RootLayout({
 }>) {
   // Load all site settings server-side so the SiteSettingsContext hydrates synchronously.
   // This eliminates the logo flash on reload caused by the previous client-side fetch.
-  const settings = await loadSiteSettings();
+  const allSettings = await loadSiteSettings();
+
+  // STRIP PRIVATE KEYS before passing to the client. SiteSettingsContext is
+  // serialized into the HTML payload that ships to every visitor's browser
+  // — without this filter, FB CAPI tokens, SMTP password, courier creds,
+  // etc. would be readable by anyone hitting View Source. Mirrors the same
+  // PRIVATE_KEYS list the public /api/v1/settings endpoint enforces.
+  const PRIVATE_KEYS = new Set([
+    "fb_capi_access_token",
+    "fb_test_event_code",
+    "steadfast_api_key",
+    "steadfast_secret_key",
+    "smtp_pass",
+    "smtp_user",
+    "pathao_client_id",
+    "pathao_client_secret",
+    "pathao_username",
+    "pathao_password",
+    "pathao_access_token",
+    "pathao_refresh_token",
+    "pathao_token_expires_at",
+    "pathao_web_token",
+    "pathao_web_token_auto",
+    "admin_email",
+  ]);
+  const settings: Record<string, string | null> = {};
+  for (const k of Object.keys(allSettings)) {
+    if (!PRIVATE_KEYS.has(k)) settings[k] = allSettings[k];
+  }
 
   // Auto-capture the production site URL from the request host the first time
   // a non-local request reaches us. Fixes localhost-link-in-emails forever

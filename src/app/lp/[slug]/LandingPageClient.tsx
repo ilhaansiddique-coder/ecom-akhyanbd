@@ -11,7 +11,7 @@ import "swiper/css";
 import "swiper/css/pagination";
 import { api } from "@/lib/api";
 import { useOption } from "@/lib/SiteSettingsContext";
-import { trackViewContent, trackInitiateCheckout, trackPurchase } from "@/lib/analytics";
+import { trackViewContent, trackInitiateCheckout, trackPurchase, saveLastCustomer } from "@/lib/analytics";
 
 interface ProductVariant {
   id: number; label: string; price: number; original_price?: number; stock: number; image?: string;
@@ -84,6 +84,19 @@ export default function LandingPageClient({ page }: { page: PageData }) {
     Object.fromEntries(products.map((p) => [p.id, p.selected_quantity || 1]))
   );
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", city: "" });
+  // Persist customer info as soon as form fills — boosts EMQ on subsequent
+  // events on this browser (return visit → ViewContent already carries em/ph).
+  useEffect(() => {
+    if (!form.email && !form.phone && !form.name) return;
+    saveLastCustomer({
+      em: form.email || undefined,
+      ph: form.phone || undefined,
+      fn: form.name?.trim().split(/\s+/)[0] || undefined,
+      ln: form.name?.trim().split(/\s+/).slice(1).join(" ") || undefined,
+      ct: form.city || undefined,
+      country: "bd",
+    });
+  }, [form.email, form.phone, form.name, form.city]);
   // Variant selection: productId → selected variantId (undefined = none selected)
   const [selectedVariants, setSelectedVariants] = useState<Record<number, number | undefined>>({});
   const [submitting, setSubmitting] = useState(false);

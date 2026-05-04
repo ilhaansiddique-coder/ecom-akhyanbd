@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api-response";
 import { buildHashedUserData, sendToFacebookCAPI, getClientIp } from "@/lib/fbcapi";
+import { getSettings } from "@/lib/settingsCache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,17 +13,14 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: "Missing event_name or event_id" }, 400);
     }
 
-    // Read pixel config + deferred setting from DB
-    const settingsRows = await prisma.siteSetting.findMany({
-      where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"] } },
-    });
-    const settings: Record<string, string> = {};
-    for (const s of settingsRows) {
-      if (s.value) settings[s.key] = s.value;
-    }
+    // Read pixel config + deferred setting from cached settings map.
+    // 60s TTL + revalidateTag("settings") on admin save keeps this fresh.
+    // Defer toggle staleness is now harmless since the status route trusts
+    // trackingData presence rather than the live flag (see status route).
+    const settings = await getSettings(["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"]);
 
-    const pixelId = settings.fb_pixel_id;
-    const accessToken = settings.fb_capi_access_token;
+    const pixelId = settings.fb_pixel_id || undefined;
+    const accessToken = settings.fb_capi_access_token || undefined;
     const isDeferred = settings.fb_deferred_purchase === "true";
 
     if (!pixelId || !accessToken) {

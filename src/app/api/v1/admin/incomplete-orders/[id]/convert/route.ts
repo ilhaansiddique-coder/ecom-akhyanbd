@@ -8,6 +8,7 @@ import { bumpVersion } from "@/lib/sync";
 import { revalidateTag } from "next/cache";
 import { buildHashedUserData, sendToFacebookCAPI, getClientIp } from "@/lib/fbcapi";
 import { isValidBDPhone } from "@/lib/spamDetection";
+import { getSettings } from "@/lib/settingsCache";
 
 // POST /api/v1/admin/incomplete-orders/[id]/convert
 //
@@ -276,13 +277,10 @@ export async function POST(
     // organic deferred). When defer is OFF we fire CAPI immediately.
     void (async () => {
       try {
-        const settingsRows = await prisma.siteSetting.findMany({
-          where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"] } },
-        });
-        const settings: Record<string, string> = {};
-        for (const r of settingsRows) if (r.value) settings[r.key] = r.value;
-        const pixelId = settings.fb_pixel_id;
-        const accessToken = settings.fb_capi_access_token;
+        // Cached settings — same pattern as the status + collect routes.
+        const settings = await getSettings(["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code", "fb_deferred_purchase"]);
+        const pixelId = settings.fb_pixel_id || "";
+        const accessToken = settings.fb_capi_access_token || "";
         if (!pixelId || !accessToken || !createdOrder) return;
         const isDeferred = settings.fb_deferred_purchase === "true";
 

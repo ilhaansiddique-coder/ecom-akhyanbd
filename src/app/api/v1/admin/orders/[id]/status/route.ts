@@ -7,6 +7,7 @@ import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
 import { orderStatusSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
 import { sendToFacebookCAPI } from "@/lib/fbcapi";
+import { getSettings } from "@/lib/settingsCache";
 
 export async function PUT(
   request: NextRequest,
@@ -67,24 +68,37 @@ export async function PUT(
     // same event can never be re-fired. FB's event_id de-dup (~7d) is the
     // backstop for any pathological double-confirm.
     if (existing.trackingData) {
-      const credRows = await prisma.siteSetting.findMany({
-        where: { key: { in: ["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code"] } },
-      });
-      const creds: Record<string, string> = {};
-      for (const r of credRows) if (r.value) creds[r.key] = r.value;
-      const accessToken = creds.fb_capi_access_token;
+      // Cached settings (60s TTL, busted by admin save). 60s lag for a
+      // rotated FB token is acceptable — admin can re-save to invalidate.
+      const creds = await getSettings(["fb_pixel_id", "fb_capi_access_token", "fb_test_event_code"]);
+      const accessToken = creds.fb_capi_access_token || "";
 
       if (data.status === "confirmed") {
-        // Fire the stored Purchase event to Facebook CAPI
+        // Fire the stored Purchase event to Facebook CAPI.
+        //
+        // event_time: keep the ORIGINAL checkout timestamp the customer placed
+        // the order at. Facebook attribution windows + audiences use this to
+        // know when the actual purchase happened, not when admin verified it.
+        //
+        // Edge case: FB rejects events older than 7 days. If admin sat on a
+        // pending order longer than that, clamp to 6.5 days ago so the fire
+        // succeeds rather than silently failing — a slightly-shifted timestamp
+        // is better than no event at all.
         try {
           const stored = JSON.parse(existing.trackingData);
           const { eventData, pixelId, testEventCode } = stored;
 
           if (pixelId && accessToken && eventData) {
-            // Update event_time to now (when confirmed, not when ordered)
-            eventData.event_time = Math.floor(Date.now() / 1000);
+            const nowSec = Math.floor(Date.now() / 1000);
+            const sevenDaysAgo = nowSec - 7 * 24 * 60 * 60;
+            const sixHalfDaysAgo = nowSec - 6.5 * 24 * 60 * 60;
+            const originalTime = Number(eventData.event_time) || nowSec;
+            // Use original unless too old; never use a future time either.
+            eventData.event_time = (originalTime < sevenDaysAgo)
+              ? Math.floor(sixHalfDaysAgo)
+              : Math.min(originalTime, nowSec);
             await sendToFacebookCAPI(pixelId, accessToken, eventData, testEventCode);
-            console.log(`[FB CAPI] Purchase fired on confirm for order ${existing.id}`);
+            console.log(`[FB CAPI] Purchase fired on confirm for order ${existing.id}, event_time=${eventData.event_time}`);
           } else {
             console.warn(`[FB CAPI] Skipped Purchase fire for order ${existing.id}: pixelId=${!!pixelId} token=${!!accessToken} eventData=${!!eventData}`);
           }
