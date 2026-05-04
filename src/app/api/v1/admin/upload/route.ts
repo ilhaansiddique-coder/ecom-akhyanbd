@@ -79,13 +79,30 @@ export async function POST(request: NextRequest) {
     //      the same env file; R2 still wins, Cloudinary takes over only if
     //      R2 is unconfigured)
     //   3. Local disk (dev fallback so missing creds don't break uploads)
+    //
+    // Each tier is wrapped in its own try so a misconfig (bad keys, signature
+    // failure, network blip) returns the actual upstream error in the response
+    // and to server logs, instead of the previous blanket "Failed to upload"
+    // 500 that hid every real cause.
     if (isR2Configured()) {
-      const url = await r2Upload(uniqueName, buffer, contentType);
-      return jsonResponse({ url, path: url }, 201);
+      try {
+        const url = await r2Upload(uniqueName, buffer, contentType);
+        return jsonResponse({ url, path: url, tier: "r2" }, 201);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "R2 upload failed";
+        console.error("[upload] R2 failed:", msg);
+        return errorResponse(`R2 upload failed: ${msg}`, 500);
+      }
     }
     if (isCloudinaryConfigured()) {
-      const url = await cloudinaryUpload(uniqueName, buffer, contentType);
-      return jsonResponse({ url, path: url }, 201);
+      try {
+        const url = await cloudinaryUpload(uniqueName, buffer, contentType);
+        return jsonResponse({ url, path: url, tier: "cloudinary" }, 201);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Cloudinary upload failed";
+        console.error("[upload] Cloudinary failed:", msg);
+        return errorResponse(`Cloudinary upload failed: ${msg}`, 500);
+      }
     }
 
     const uploadDir = getUploadDir();
@@ -93,8 +110,10 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, uniqueName);
     await writeFile(filePath, buffer);
     const url = `/uploads/${uniqueName}`;
-    return jsonResponse({ url, path: url }, 201);
-  } catch {
-    return errorResponse("Failed to upload file", 500);
+    return jsonResponse({ url, path: url, tier: "local" }, 201);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    console.error("[upload] handler error:", msg);
+    return errorResponse(`Failed to upload file: ${msg}`, 500);
   }
 }

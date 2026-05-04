@@ -191,7 +191,22 @@ export function mapProductToFeedItems(
     }];
   }
 
-  // Variable product → row per variant.
+  // Variable product → row per variant. All variants share item_group_id so
+  // FB / Google / TikTok group them under one parent in the catalog UI.
+  //
+  // Title strategy follows Meta's official Catalog guidance: keep the title
+  // identical across variants of the same product and use size/color columns
+  // to differentiate. FB shows variants nested under the shared title via
+  // item_group_id; appending "- 2-3 YEAR" to every title was redundant noise
+  // that diluted keyword density and made the catalog UI look duplicated.
+  //
+  // Variation type lives on Product ("সাইজ" / "Size" / "রং" / "Color" /
+  // "ওজন" / "Weight" etc). Heuristic match the BN + EN names so admins
+  // typing either get the right column populated. Falls back to writing
+  // the label into BOTH size and color when unrecognised so FB still has
+  // SOMETHING to differentiate by — better than a null on both axes.
+  const isColor = /রং|color|colour/i.test(product.variationType || "");
+  const isSize = /সাইজ|size|মাপ/i.test(product.variationType || "");
   return variants.map((v: VariantLike) => {
     const stock = Number(v.stock || 0);
     const unlimited = v.unlimitedStock;
@@ -204,7 +219,8 @@ export function mapProductToFeedItems(
       ...baseItem,
       id: `${product.id}-v${v.id}`,
       itemGroupId: groupId,
-      title: `${product.name} - ${v.label}`,
+      // Title stays as parent name. Variant differentiation is in size/color.
+      title: product.name,
       imageLink: variantImage,
       additionalImageLinks: extraImages.slice(0, 10),
       availability: inStock ? "in stock" : "out of stock",
@@ -213,9 +229,12 @@ export function mapProductToFeedItems(
         ? fmtMoney(sale.salePrice, defaults.currency)
         : (variantOriginal ? fmtMoney(variantPrice, defaults.currency) : null),
       salePriceEffectiveDate: sale ? fmtRange(sale.from, sale.to) : null,
-      // Variation type lives on Product ("সাইজ" / "রং" / "ওজন"). Map heuristically.
-      color: /রং|color/i.test(product.variationType || "") ? v.label : null,
-      size: /সাইজ|size/i.test(product.variationType || "") ? v.label : null,
+      // Color/size columns. When variation type is unknown, default to `size`
+      // (most BD inventory is size-based: 2-3 YEAR, 3-4 YEAR, S, M, L, XL,
+      // 100g/500g/1kg). FB will reject a group with NULL size+color on every
+      // row, so something has to fill in.
+      color: isColor ? v.label : null,
+      size: isSize || (!isColor && !isSize) ? v.label : null,
     };
   });
 }
