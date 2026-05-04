@@ -148,9 +148,30 @@ export async function POST(request: NextRequest) {
             let variantLabel: string | null = null;
             let stockSource = product;
 
-            if (variantId && product.hasVariations) {
+            // HARD GATE: variable products MUST have a variant selected.
+            // Without this check, customers whose cart was populated before
+            // the product was converted to variable (or via a buggy add-to-cart
+            // path) ended up placing orders with variantId=null + parent
+            // price (often 0). They'd write the size in `notes` as a workaround
+            // and we'd ship the wrong size or the order wouldn't process.
+            // Now we refuse the order outright with a clear message so the
+            // customer goes back and picks a variant.
+            if (product.hasVariations && (product.variants?.length || 0) > 0) {
+              if (!variantId) {
+                throw new Error(
+                  lang === "en"
+                    ? `Please select a size/option for "${product.name}" before placing the order.`
+                    : `অর্ডার দেওয়ার আগে "${product.name}" এর জন্য সাইজ/অপশন নির্বাচন করুন।`
+                );
+              }
               const variant = product.variants?.find((v: any) => v.id === variantId);
-              if (!variant) return null; // stale variant → drop
+              if (!variant) {
+                throw new Error(
+                  lang === "en"
+                    ? `The selected option for "${product.name}" is no longer available. Please refresh and pick another.`
+                    : `"${product.name}" এর নির্বাচিত অপশনটি আর পাওয়া যাচ্ছে না। রিফ্রেশ করে অন্যটি নির্বাচন করুন।`
+                );
+              }
               price = variant.price;
               variantLabel = variant.label;
               stockSource = variant;

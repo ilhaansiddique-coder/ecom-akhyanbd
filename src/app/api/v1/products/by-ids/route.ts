@@ -32,6 +32,12 @@ export async function GET(req: NextRequest) {
       id: true,
       name: true,
       image: true,
+      // hasVariations exposed so the cart can detect lines that were saved
+      // BEFORE a product was converted to variable (or via a stale path)
+      // and prompt the customer to re-pick a variant. Without this flag the
+      // cart shipped items with variantId=null and the order POST would
+      // either reject them (post-fix) or silently use parent price 0.
+      hasVariations: true,
       variants: {
         where: { isActive: true },
         select: { id: true, label: true, image: true },
@@ -44,6 +50,7 @@ export async function GET(req: NextRequest) {
       id: p.id,
       name: p.name,
       image: p.image,
+      hasVariations: p.hasVariations,
       variants: p.variants,
     })),
   });

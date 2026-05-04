@@ -89,7 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     fetch(`/api/v1/products/by-ids?ids=${ids.join(",")}`)
       .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((data: { items: Array<{ id: number; image: string; variants?: Array<{ id: number; image?: string }> }> }) => {
+      .then((data: { items: Array<{ id: number; image: string; hasVariations?: boolean; variants?: Array<{ id: number; image?: string }> }> }) => {
         const byId = new Map(data.items.map((p) => [p.id, p]));
         setItems((prev) => {
           const next: CartItem[] = [];
@@ -106,6 +106,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (it.variantId != null) {
               const variantStillExists = p.variants?.some((v) => v.id === it.variantId);
               if (!variantStillExists) continue;
+            } else if (p.hasVariations && (p.variants?.length ?? 0) > 0) {
+              // Cart line has NO variantId but the product is now variable
+              // (likely added before the product was converted, or via a
+              // buggy add-to-cart path). The order POST would reject this
+              // anyway — drop it here so the cart doesn't carry a ghost
+              // line the customer can't check out with. They'll need to
+              // re-add via PDP and pick a size.
+              continue;
             }
             // Patch missing/stale image while we're here.
             const img = (it.image || "").trim();
