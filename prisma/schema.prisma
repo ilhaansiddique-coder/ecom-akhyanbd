@@ -118,6 +118,12 @@ model Product {
   @@index([brandId, isActive])
   @@index([isActive, soldCount])
   @@index([isActive, sortOrder])
+  // Default mobile/admin list path: WHERE deletedAt IS NULL [+ isActive]
+  // ORDER BY createdAt DESC. Without this, Postgres seq-scans the entire
+  // products table for every list request.
+  @@index([deletedAt, isActive, createdAt])
+  // Inventory list orders by stock ASC under the same deletedAt filter.
+  @@index([deletedAt, stock])
   @@map("products")
 }
 
@@ -306,6 +312,9 @@ model OrderItem {
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  // _count: { items } subquery on /m/orders list runs per-row (~20/page);
+  // an index on orderId turns each subquery into an index lookup.
+  @@index([orderId])
   @@map("order_items")
 }
 

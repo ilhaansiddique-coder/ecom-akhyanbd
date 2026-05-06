@@ -1,69 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
+import { jsonResponse, validationError, errorResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { productSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 import { revalidateAll } from "@/lib/revalidate";
-
-// Shape a Prisma product (with category/brand/variants joined) into the
-// camelCase Product envelope the Flutter client expects.
-type ProductWithRelations = Prisma.ProductGetPayload<{
-  include: {
-    category: true;
-    brand: true;
-    variants: true;
-  };
-}>;
-
-function shapeProduct(p: ProductWithRelations) {
-  return {
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    categoryId: p.categoryId,
-    brandId: p.brandId,
-    description: p.description,
-    price: p.price,
-    originalPrice: p.originalPrice,
-    image: p.image,
-    images: p.images,
-    badge: p.badge,
-    badgeColor: p.badgeColor,
-    weight: p.weight,
-    stock: p.stock,
-    unlimitedStock: p.unlimitedStock,
-    soldCount: p.soldCount,
-    isActive: p.isActive,
-    isFeatured: p.isFeatured,
-    hasVariations: p.hasVariations,
-    variationType: p.variationType,
-    customShipping: p.customShipping,
-    shippingCost: p.shippingCost,
-    sortOrder: p.sortOrder,
-    createdAt: p.createdAt?.toISOString() ?? null,
-    updatedAt: p.updatedAt?.toISOString() ?? null,
-    category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
-    variants: p.variants
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((v) => ({
-        id: v.id,
-        productId: v.productId,
-        label: v.label,
-        price: v.price,
-        originalPrice: v.originalPrice,
-        sku: v.sku,
-        stock: v.stock,
-        unlimitedStock: v.unlimitedStock,
-        image: v.image,
-        sortOrder: v.sortOrder,
-        isActive: v.isActive,
-      })),
-  };
-}
+import {
+  productListSelect,
+  productDetailSelect,
+  shapeListProduct,
+  shapeDetailProduct,
+} from "./_shared";
 
 export const GET = withStaff(async (request) => {
   const { searchParams } = request.nextUrl;
@@ -89,7 +37,7 @@ export const GET = withStaff(async (request) => {
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      select: productListSelect,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -97,15 +45,15 @@ export const GET = withStaff(async (request) => {
     prisma.product.count({ where }),
   ]);
 
-  return jsonResponse({
-    data: products.map(shapeProduct),
+  return cachedJsonResponse({
+    data: products.map(shapeListProduct),
     pagination: {
       page,
       pageSize,
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     },
-  });
+  }, { sMaxAge: 60 });
 });
 
 // POST mirrors the create logic in /admin/products/route.ts but returns the
@@ -181,12 +129,12 @@ export const POST = withStaff(async (request) => {
           },
         } : {}),
       },
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      select: productDetailSelect,
     });
 
     revalidateAll("products");
     bumpVersion("products");
-    return jsonResponse({ data: shapeProduct(product) }, 201);
+    return jsonResponse({ data: shapeDetailProduct(product) }, 201);
   } catch (error) {
     console.error("Mobile product create error:", error);
     const msg = error instanceof Error ? error.message : "Failed to create product";

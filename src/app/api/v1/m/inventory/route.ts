@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 
 const LOW_THRESHOLD = 5;
@@ -70,7 +70,7 @@ export const GET = withAdmin(async (request) => {
     variants: [],
   }));
 
-  return jsonResponse({
+  return cachedJsonResponse({
     data,
     pagination: {
       page,
@@ -82,5 +82,5 @@ export const GET = withAdmin(async (request) => {
       criticalCount,
       lowThreshold: LOW_THRESHOLD,
     },
-  });
+  }, { sMaxAge: 30 });
 });

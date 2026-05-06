@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 
 // Mobile-shaped orders list. Returns OrderListItem[] (camelCase) plus
@@ -70,7 +70,7 @@ export const GET = withStaff(async (request) => {
     createdAt: o.createdAt?.toISOString() ?? null,
   }));
 
-  return jsonResponse({
+  return cachedJsonResponse({
     data,
     pagination: {
       page,
@@ -78,5 +78,5 @@ export const GET = withStaff(async (request) => {
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     },
-  });
+  }, { sMaxAge: 15 });
 });

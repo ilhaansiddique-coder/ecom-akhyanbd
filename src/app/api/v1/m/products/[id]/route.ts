@@ -6,67 +6,16 @@ import { withStaff } from "@/lib/auth-helpers";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 import { revalidateAll } from "@/lib/revalidate";
-
-type ProductWithRelations = Prisma.ProductGetPayload<{
-  include: { category: true; brand: true; variants: true };
-}>;
-
-function shapeProduct(p: ProductWithRelations) {
-  return {
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    categoryId: p.categoryId,
-    brandId: p.brandId,
-    description: p.description,
-    price: p.price,
-    originalPrice: p.originalPrice,
-    image: p.image,
-    images: p.images,
-    badge: p.badge,
-    badgeColor: p.badgeColor,
-    weight: p.weight,
-    stock: p.stock,
-    unlimitedStock: p.unlimitedStock,
-    soldCount: p.soldCount,
-    isActive: p.isActive,
-    isFeatured: p.isFeatured,
-    hasVariations: p.hasVariations,
-    variationType: p.variationType,
-    customShipping: p.customShipping,
-    shippingCost: p.shippingCost,
-    sortOrder: p.sortOrder,
-    createdAt: p.createdAt?.toISOString() ?? null,
-    updatedAt: p.updatedAt?.toISOString() ?? null,
-    category: p.category ? { id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
-    brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
-    variants: p.variants
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((v) => ({
-        id: v.id,
-        productId: v.productId,
-        label: v.label,
-        price: v.price,
-        originalPrice: v.originalPrice,
-        sku: v.sku,
-        stock: v.stock,
-        unlimitedStock: v.unlimitedStock,
-        image: v.image,
-        sortOrder: v.sortOrder,
-        isActive: v.isActive,
-      })),
-  };
-}
+import { productDetailSelect, shapeDetailProduct } from "../_shared";
 
 export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const product = await prisma.product.findUnique({
     where: { id: Number(id) },
-    include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+    select: { ...productDetailSelect, deletedAt: true },
   });
   if (!product || product.deletedAt) return notFound("Product not found");
-  return jsonResponse({ data: shapeProduct(product) });
+  return jsonResponse({ data: shapeDetailProduct(product) });
 });
 
 // Partial update — accepts any subset of productSchema fields. We use a fully
@@ -192,13 +141,13 @@ export const PATCH = withStaff<{ params: Promise<{ id: string }> }>(async (reque
 
     const updated = await prisma.product.findUnique({
       where: { id: productId },
-      include: { category: true, brand: true, variants: { orderBy: { sortOrder: "asc" } } },
+      select: productDetailSelect,
     });
     if (!updated) return notFound("Product not found");
 
     revalidateAll("products");
     bumpVersion("products");
-    return jsonResponse({ data: shapeProduct(updated) });
+    return jsonResponse({ data: shapeDetailProduct(updated) });
   } catch (error) {
     console.error("Mobile product patch error:", error);
     return errorResponse("Failed to update product", 500);

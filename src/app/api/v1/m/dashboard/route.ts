@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { jsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 
 // Order statuses that should NOT count toward "sold" rollups. Cancelled,
@@ -137,7 +137,7 @@ export const GET = withAdmin(async (request) => {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  return jsonResponse({
+  return cachedJsonResponse({
     data: {
       stats: {
         totalOrders,
@@ -168,5 +168,5 @@ export const GET = withAdmin(async (request) => {
       })),
       topProducts,
     },
-  });
+  }, { sMaxAge: 30 });
 });

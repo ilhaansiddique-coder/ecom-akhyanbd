@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 
 function startOf(d: Date) {
@@ -97,7 +97,7 @@ export const GET = withAdmin(async (request) => {
   const statusBreakdown: Record<string, number> = {};
   for (const g of statusGroups) statusBreakdown[g.status] = g._count._all;
 
-  return jsonResponse({
+  return cachedJsonResponse({
     data: {
       period,
       range: { from: from.toISOString(), to: to.toISOString() },
@@ -112,5 +112,5 @@ export const GET = withAdmin(async (request) => {
       statusBreakdown,
       trafficSources: [],
     },
-  });
+  }, { sMaxAge: 60 });
 });

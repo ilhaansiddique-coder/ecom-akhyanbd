@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 
 // Customers = non-admin users with order rollups (count + total spent).
@@ -56,7 +56,7 @@ export const GET = withAdmin(async (request) => {
     totalSpent: u.orders.reduce((sum, o) => sum + (o.total ?? 0), 0),
   }));
 
-  return jsonResponse({
+  return cachedJsonResponse({
     data,
     pagination: {
       page,
@@ -64,5 +64,5 @@ export const GET = withAdmin(async (request) => {
       total,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     },
-  });
+  }, { sMaxAge: 60 });
 });
