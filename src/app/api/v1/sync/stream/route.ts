@@ -32,7 +32,9 @@ export const dynamic = "force-dynamic";
 // bump to 800 if the project moves to Pro. Below 300 means the function
 // terminates sooner; the Flutter client's watchdog reconnects on disconnect
 // so the user notices nothing — it just means slightly more reconnects.
-export const maxDuration = 300;
+// 299 not 300 — Vercel's "between 1 and 300" rejected 300 in practice on
+// Hobby; one second under the boundary is the safe value. Still 5 minutes.
+export const maxDuration = 299;
 
 const SEEDED_CHANNELS = [
   "orders", "products", "categories", "brands", "reviews",
