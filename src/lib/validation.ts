@@ -418,6 +418,64 @@ export const shortlinkUpdateSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// ─── Mobile: Coupons (camelCase body for Flutter app) ───
+export const mobileCouponCreateSchema = z.object({
+  code: z.string().min(1),
+  type: z.enum(["fixed", "percentage"]),
+  value: z.coerce.number(),
+  minOrderAmount: z.coerce.number().optional(),
+  maxUses: z.coerce.number().int().nullable().optional(),
+  startsAt: z.string().nullable().optional(),
+  expiresAt: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const mobileCouponUpdateSchema = mobileCouponCreateSchema.partial();
+
+// ─── Mobile: Flash Sales (camelCase body) ───
+export const mobileFlashSaleCreateSchema = z.object({
+  title: z.string().min(1),
+  startsAt: z.string().min(1),
+  endsAt: z.string().min(1),
+  isActive: z.boolean().optional(),
+  productIds: z.array(z.coerce.number().int()).optional(),
+});
+
+export const mobileFlashSaleUpdateSchema = z.object({
+  title: z.string().min(1).optional(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+  isActive: z.boolean().optional(),
+  productIds: z.array(z.coerce.number().int()).optional(),
+});
+
+// ─── Mobile: Shortlinks (camelCase body) ───
+export const mobileShortlinkCreateSchema = z.object({
+  slug: z.string().min(1),
+  targetUrl: z.string().min(1),
+  isActive: z.boolean().optional(),
+});
+
+export const mobileShortlinkUpdateSchema = z.object({
+  targetUrl: z.string().min(1).optional(),
+  isActive: z.boolean().optional(),
+});
+
+// ─── Mobile: Staff (camelCase body) ───
+export const mobileStaffCreateSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+  phone: z.string().nullable().optional(),
+  role: z.enum(["admin", "staff"]),
+});
+
+export const mobileStaffUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  phone: z.string().nullable().optional(),
+  role: z.enum(["admin", "staff"]).optional(),
+});
+
 // ─── Admin: Spam — blocked phone ───
 export const blockedPhoneSchema = z.object({
   phone: z.string().optional(),
