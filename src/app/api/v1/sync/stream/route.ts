@@ -28,9 +28,11 @@ import { eventStream, getVersion } from "@/lib/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Vercel: Hobby caps at 60s, Pro at 300s, Enterprise at 800s. We ask for
-// 800 — Vercel silently clamps to the plan max, so this is safe everywhere.
-export const maxDuration = 800;
+// Vercel plan caps: Hobby 300s, Pro 800s. Set to 300 so Hobby builds pass;
+// bump to 800 if the project moves to Pro. Below 300 means the function
+// terminates sooner; the Flutter client's watchdog reconnects on disconnect
+// so the user notices nothing — it just means slightly more reconnects.
+export const maxDuration = 300;
 
 const SEEDED_CHANNELS = [
   "orders", "products", "categories", "brands", "reviews",
