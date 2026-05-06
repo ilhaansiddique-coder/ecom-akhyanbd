@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       orderContext, // { phone, address, name } — for scoring at fingerprint time
     } = body;
 
-    if (!fpHash) return jsonResponse({ success: false }, 200);
+    if (!fpHash) return jsonResponse({ message: "Missing fpHash" }, 200);
 
     const ip = getClientIp(request);
     const ua = request.headers.get("user-agent") || undefined;
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     // Set or clear blocked cookie so middleware can check without DB
     const res = jsonResponse({
-      success: true,
+      message: "ok",
       blocked: shouldBlock,
       score: finalScore,
       flags: finalFlags,
@@ -131,6 +131,6 @@ export async function POST(request: NextRequest) {
 
     return res;
   } catch {
-    return jsonResponse({ success: true });
+    return jsonResponse({ message: "ok" });
   }
 }

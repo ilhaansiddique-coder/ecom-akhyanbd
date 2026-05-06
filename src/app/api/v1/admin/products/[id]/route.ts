@@ -136,8 +136,6 @@ export async function DELETE(
   const force = request.nextUrl.searchParams.get("force") === "1";
   const alreadyTrashed = !!existing.deletedAt;
 
-  console.log(`[products DELETE] id=${id} force=${force} alreadyTrashed=${alreadyTrashed}`);
-
   if (force && alreadyTrashed) {
     await prisma.product.delete({ where: { id: Number(id) } });
     revalidateAll("products");

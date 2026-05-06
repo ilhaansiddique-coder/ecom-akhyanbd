@@ -69,7 +69,7 @@ export async function PUT(request: Request) {
       })
     ));
 
-    return jsonResponse({ ok: true });
+    return jsonResponse({ message: "Saved" });
   } catch (e) {
     console.error("[Feeds] settings save error:", e);
     return errorResponse("Failed to save settings", 500);

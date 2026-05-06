@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     });
 
     return jsonResponse(result);
-  } catch (err: any) {
-    return errorResponse(err?.message || "Test failed", 500);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Test failed";
+    return errorResponse(message, 500);
   }
 }

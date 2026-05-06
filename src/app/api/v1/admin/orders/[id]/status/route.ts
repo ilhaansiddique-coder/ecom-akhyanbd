@@ -98,7 +98,6 @@ export async function PUT(
               ? Math.floor(sixHalfDaysAgo)
               : Math.min(originalTime, nowSec);
             await sendToFacebookCAPI(pixelId, accessToken, eventData, testEventCode);
-            console.log(`[FB CAPI] Purchase fired on confirm for order ${existing.id}, event_time=${eventData.event_time}`);
           } else {
             console.warn(`[FB CAPI] Skipped Purchase fire for order ${existing.id}: pixelId=${!!pixelId} token=${!!accessToken} eventData=${!!eventData}`);
           }

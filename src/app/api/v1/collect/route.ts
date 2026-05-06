@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { event_name, event_id, event_source_url, custom_data, user_data, order_id } = body;
 
     if (!event_name || !event_id) {
-      return jsonResponse({ success: false, error: "Missing event_name or event_id" }, 400);
+      return jsonResponse({ message: "Missing event_name or event_id" }, 400);
     }
 
     // Read pixel config + deferred setting from cached settings map.
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const isDeferred = settings.fb_deferred_purchase === "true";
 
     if (!pixelId || !accessToken) {
-      return jsonResponse({ success: false, error: "Pixel not configured" }, 200);
+      return jsonResponse({ message: "Pixel not configured" }, 200);
     }
 
     // ── City override for Purchase events ──
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         } catch {
           // Order not found — silently ignore
         }
-        return jsonResponse({ success: true, deferred: true });
+        return jsonResponse({ message: "Deferred", deferred: true });
       }
 
       // Deferred OFF: fire-and-forget so we return 200 to the browser before
@@ -100,17 +100,17 @@ export async function POST(request: NextRequest) {
       sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code).catch((err) => {
         console.error("[FB CAPI] Purchase send failed:", err);
       });
-      return jsonResponse({ success: true, deferred: false });
+      return jsonResponse({ message: "Sent", deferred: false });
     }
 
     // All other events: fire immediately to Facebook CAPI (fire-and-forget).
     sendToFacebookCAPI(pixelId, accessToken, eventData, settings.fb_test_event_code).catch((err) => {
       console.error(`[FB CAPI] ${event_name} send failed:`, err);
     });
-    return jsonResponse({ success: true });
+    return jsonResponse({ message: "Sent" });
   } catch (error) {
     console.error("[FB CAPI] Server error:", error);
-    return jsonResponse({ success: true });
+    return jsonResponse({ message: "Sent" });
   }
 }
 
@@ -142,6 +142,5 @@ async function waitForParsedCity(orderId: number, timeoutMs: number): Promise<st
     if (Date.now() + 200 > deadline) break;
     await new Promise((r) => setTimeout(r, 200));
   }
-  console.log(`[FB CAPI] parsedCity poll timeout for order ${orderId} after ${attempts} attempts`);
   return null;
 }

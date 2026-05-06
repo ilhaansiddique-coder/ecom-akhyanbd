@@ -71,9 +71,9 @@ export async function POST(request: NextRequest) {
       create: data,
     });
 
-    return jsonResponse({ ok: true });
+    return jsonResponse({ message: "Captured" });
   } catch (e) {
     console.error("[IncompleteOrder] capture error:", e);
-    return jsonResponse({ ok: false }, 200); // never break checkout flow
+    return jsonResponse({ message: "Capture failed" }, 200); // never break checkout flow
   }
 }
