@@ -522,7 +522,18 @@ export async function POST(request: NextRequest) {
     items: orderItems,
   });
 
-  bumpVersion("orders");
+  // Push a real-time notification to admin clients. Title carries the
+  // short order id, body shows the amount + customer name so admins can
+  // triage without opening the order. The deep-link (`href`) lets the
+  // Flutter NotificationStore route on tap straight to the detail screen.
+  bumpVersion("orders", {
+    kind: "order.created",
+    title: `New order #${order.id}`,
+    body: `৳${Math.round(order.total)} from ${customerName}`,
+    href: `/orders/${order.id}`,
+    icon: "shopping_bag",
+    severity: "info",
+  });
   // Bust the dashboard products cache so live sales counts refresh immediately
   revalidateTag("products", "max");
 

@@ -151,7 +151,14 @@ export const POST = withStaff(async (request) => {
     });
 
     revalidateAll("products");
-    bumpVersion("products");
+    bumpVersion("products", {
+      kind: "product.created",
+      title: "New product added",
+      body: product.name,
+      href: `/products/${product.id}`,
+      icon: "inventory_2",
+      severity: "info",
+    });
     return jsonResponse(serialize(product), 201);
   } catch (error) {
     console.error("Product create error:", error);

@@ -133,7 +133,20 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
     // Include "products" so the dashboard products list re-aggregates sold counts
     // (e.g. cancellation should decrement the live Sales column).
     revalidateAll("orders", "products");
-    bumpVersion("orders");
+    // Notify other admin clients that the status moved. The triggering
+    // admin will get the event too, but the Flutter store dedupes by
+    // (kind+id+version) so it shows up once. Severity escalates for
+    // cancelled/trashed since those are reversible-but-loud actions.
+    const newStatus = String(nextStatus);
+    const isLoud = newStatus === "cancelled" || newStatus === "trashed";
+    bumpVersion("orders", {
+      kind: "order.status_changed",
+      title: `Order #${order.id} → ${newStatus}`,
+      body: `${order.customerName} • ৳${Math.round(order.total)}`,
+      href: `/orders/${order.id}`,
+      icon: isLoud ? "report" : "local_shipping",
+      severity: isLoud ? "warn" : "info",
+    });
     return jsonResponse(serialize(order));
   } catch (error) {
     return errorResponse("Failed to update order status", 500);
