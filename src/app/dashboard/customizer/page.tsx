@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { snapshotTokens, TOKEN_KEYS } from "@/lib/theme-tokens";
 import { snapshotOptions, OPTION_KEYS } from "@/lib/theme-options";
@@ -11,7 +11,7 @@ import CustomizerClient from "./CustomizerClient";
 export const dynamic = "force-dynamic";
 
 export default async function CustomizerPage() {
-  // Server-side admin guard — bypass the dashboard shell, so we can't rely on
+  // Server-side admin guard â€” bypass the dashboard shell, so we can't rely on
   // the client-side redirect that DashboardLayoutShell normally provides.
   const user = await getSessionUser();
   if (!user || user.role !== "admin") redirect("/");
@@ -42,3 +42,5 @@ export default async function CustomizerPage() {
     />
   );
 }
+
+

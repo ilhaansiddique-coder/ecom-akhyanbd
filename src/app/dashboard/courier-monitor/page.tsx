@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+﻿import { Suspense } from "react";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import CourierMonitorClient from "./CourierMonitorClient";
@@ -14,3 +14,5 @@ export default async function CourierMonitorPage() {
     </Suspense>
   );
 }
+
+

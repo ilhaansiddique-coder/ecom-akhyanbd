@@ -33,6 +33,24 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.production.example
+# Plain `env` (no dot) — Prisma 7 generates this; it holds the same secrets
+# as .env. Without this rule a blind `git add` would push prod credentials.
+/env
+# Stray Flutter scaffold leftover from earlier sessions — the real Flutter
+# project lives at D:\Development\AkhiyanFlutterApp.
+/lib/
+
+# Migration / sync / one-off ops scripts that hardcode production DB
+# connection strings. Keep these on disk for manual ops, never in git.
+# (Audited 2026-05-06 — confirmed prod Neon creds inside.) Add new
+# entries here whenever you write a script that bakes in credentials,
+# or refactor the script to read DATABASE_URL from env instead.
+scripts/sync-live-db.mjs
+scripts/migrate-to-new-db.sh
+scripts/migrate-data.mjs
+scripts/create-test-admin.mjs
+scripts/create-test-admin-sql.mjs
+scripts/create-user-admin.mjs
 
 # vercel
 .vercel

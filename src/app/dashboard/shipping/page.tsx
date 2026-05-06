@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ShippingClient from "./ShippingClient";
@@ -28,3 +28,5 @@ export default async function ShippingPage() {
     return <ShippingClient initialData={{ items: [] }} />;
   }
 }
+
+

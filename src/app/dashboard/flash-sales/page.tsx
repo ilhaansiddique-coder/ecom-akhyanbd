@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import FlashSalesClient from "./FlashSalesClient";
@@ -31,3 +31,5 @@ export default async function FlashSalesPage() {
     return <FlashSalesClient initialData={{ items: [] }} />;
   }
 }
+
+

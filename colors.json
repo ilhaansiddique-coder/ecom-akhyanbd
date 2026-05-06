@@ -1,0 +1,217 @@
+{
+  "colorPalette": {
+    "primaryAccent": {
+      "saleRed": {
+        "name": "Sale Red",
+        "hex": "#e91024",
+        "rgb": "rgb(233, 16, 36)",
+        "description": "Used for sale badges, alerts, discount labels, logout buttons, error states",
+        "usage": "CTAs, alerts, error indicators"
+      },
+      "white": {
+        "name": "White",
+        "hex": "#ffffff",
+        "rgb": "rgb(255, 255, 255)",
+        "description": "Primary background, text on dark backgrounds",
+        "usage": "Background, light text on dark"
+      }
+    },
+    "neutral": {
+      "foreground": {
+        "name": "Foreground (Dark Gray)",
+        "hex": "#333333",
+        "rgb": "rgb(51, 51, 51)",
+        "description": "Main heading text, primary body text, strong emphasis",
+        "usage": "Primary text, headings",
+        "wcag": "AA+ on white"
+      },
+      "textBody": {
+        "name": "Text Body",
+        "hex": "#555555",
+        "rgb": "rgb(85, 85, 85)",
+        "description": "Secondary text, product descriptions, body copy",
+        "usage": "Body text, secondary content",
+        "wcag": "AA on white"
+      },
+      "textMuted": {
+        "name": "Text Muted",
+        "hex": "#888888",
+        "rgb": "rgb(136, 136, 136)",
+        "description": "Disabled state text, helper text, captions, metadata",
+        "usage": "Disabled states, hints",
+        "wcag": "Limited contrast"
+      },
+      "textLight": {
+        "name": "Text Light",
+        "hex": "#aaaaaa",
+        "rgb": "rgb(170, 170, 170)",
+        "description": "Placeholder text, very subtle hints",
+        "usage": "Placeholder text",
+        "wcag": "Insufficient contrast"
+      },
+      "backgroundAlt": {
+        "name": "Background Alt",
+        "hex": "#f7f7f7",
+        "rgb": "rgb(247, 247, 247)",
+        "description": "Card backgrounds, section separations, alternate backgrounds",
+        "usage": "Card backgrounds, sections"
+      },
+      "border": {
+        "name": "Border",
+        "hex": "#e8e8e8",
+        "rgb": "rgb(232, 232, 232)",
+        "description": "Dividers, borders, subtle separations",
+        "usage": "Borders, dividers"
+      },
+      "scrollbarGray": {
+        "name": "Scrollbar Gray (Inactive)",
+        "hex": "#d1d5db",
+        "rgb": "rgb(209, 213, 219)",
+        "description": "Inactive scrollbar thumb, subtle UI elements",
+        "usage": "Inactive scrollbar"
+      },
+      "scrollbarHover": {
+        "name": "Scrollbar Hover (Active)",
+        "hex": "#9ca3af",
+        "rgb": "rgb(156, 163, 175)",
+        "description": "Active scrollbar thumb, hover states",
+        "usage": "Active scrollbar, hover states"
+      }
+    },
+    "socialMedia": {
+      "facebook": {
+        "name": "Facebook",
+        "hex": "#3b5998",
+        "rgb": "rgb(59, 89, 152)",
+        "description": "Facebook links, social login integration",
+        "usage": "Facebook branding",
+        "official": true
+      },
+      "instagram": {
+        "name": "Instagram",
+        "hex": "#8a3ab9",
+        "rgb": "rgb(138, 58, 185)",
+        "description": "Instagram links, social sharing",
+        "usage": "Instagram branding",
+        "official": true
+      },
+      "youtube": {
+        "name": "YouTube",
+        "hex": "#cd201f",
+        "rgb": "rgb(205, 32, 31)",
+        "description": "YouTube links, video embeds",
+        "usage": "YouTube branding",
+        "official": true
+      },
+      "whatsapp": {
+        "name": "WhatsApp",
+        "hex": "#25d366",
+        "rgb": "rgb(37, 211, 102)",
+        "description": "WhatsApp contact links, messaging CTA",
+        "usage": "WhatsApp branding",
+        "official": true
+      }
+    }
+  },
+  "cssVariables": {
+    "primary": "var(--primary)",
+    "white": "var(--white)",
+    "background": "var(--background)",
+    "backgroundAlt": "var(--background-alt)",
+    "foreground": "var(--foreground)",
+    "textBody": "var(--text-body)",
+    "textMuted": "var(--text-muted)",
+    "textLight": "var(--text-light)",
+    "border": "var(--border)",
+    "saleRed": "var(--sale-red)",
+    "badgeGreen": "var(--badge-green)",
+    "facebook": "var(--facebook)",
+    "instagram": "var(--instagram)",
+    "youtube": "var(--youtube)",
+    "whatsapp": "var(--whatsapp)"
+  },
+  "tailwindClasses": {
+    "text": {
+      "foreground": "text-foreground",
+      "textBody": "text-text-body",
+      "textMuted": "text-text-muted",
+      "textLight": "text-text-light",
+      "saleRed": "text-sale-red",
+      "facebook": "text-facebook",
+      "instagram": "text-instagram",
+      "youtube": "text-youtube",
+      "whatsapp": "text-whatsapp"
+    },
+    "background": {
+      "white": "bg-white",
+      "backgroundAlt": "bg-background-alt",
+      "saleRed": "bg-sale-red",
+      "facebook": "bg-facebook",
+      "instagram": "bg-instagram",
+      "youtube": "bg-youtube",
+      "whatsapp": "bg-whatsapp"
+    },
+    "border": {
+      "border": "border-border",
+      "saleRed": "border-sale-red",
+      "facebook": "border-facebook"
+    }
+  },
+  "accessibility": {
+    "wcagAAPlus": [
+      {
+        "color": "#333333",
+        "background": "#ffffff",
+        "ratio": "16.51:1",
+        "level": "AAA"
+      },
+      {
+        "color": "#555555",
+        "background": "#ffffff",
+        "ratio": "8.59:1",
+        "level": "AA"
+      }
+    ],
+    "limitedContrast": [
+      {
+        "color": "#888888",
+        "background": "#ffffff",
+        "ratio": "3.93:1",
+        "note": "Use for secondary info only"
+      }
+    ],
+    "insufficientContrast": [
+      {
+        "color": "#aaaaaa",
+        "background": "#ffffff",
+        "ratio": "2.62:1",
+        "note": "Avoid for important text"
+      }
+    ]
+  },
+  "colorCombinations": {
+    "darkOnLight": [
+      "#333333 on #ffffff",
+      "#555555 on #ffffff"
+    ],
+    "lightOnDark": [
+      "#ffffff on #3b5998",
+      "#ffffff on #8a3ab9",
+      "#ffffff on #cd201f",
+      "#ffffff on #25d366"
+    ],
+    "accentOnWhite": [
+      "#e91024",
+      "#3b5998",
+      "#8a3ab9"
+    ]
+  },
+  "metadata": {
+    "version": "1.0",
+    "lastUpdated": "2026-05-05",
+    "project": "Akhiyan Ecom",
+    "framework": "Next.js 16 + Tailwind CSS v4",
+    "cssFile": "src/app/globals.css",
+    "palettePage": "/color-palette"
+  }
+}

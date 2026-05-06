@@ -60,30 +60,36 @@ const getFlashSale = unstable_cache(
 
 const getProducts = unstable_cache(
   async (): Promise<{ products: Product[]; total: number }> => {
-    const [rows, total] = await Promise.all([
-      prisma.product.findMany({
-        where: { isActive: true, AND: [inStockWhere] },
-        select: {
-          id: true, name: true, slug: true, price: true, originalPrice: true,
-          image: true, images: true, badge: true, badgeColor: true, weight: true,
-          stock: true, unlimitedStock: true, soldCount: true, isActive: true,
-          isFeatured: true, hasVariations: true, variationType: true,
-          customShipping: true, shippingCost: true, sortOrder: true, createdAt: true,
-          category: { select: { id: true, name: true, slug: true } },
-          brand: { select: { id: true, name: true, slug: true } },
-          variants: {
-            where: { isActive: true },
-            orderBy: { sortOrder: "asc" },
-            select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true },
+    try {
+      const [rows, total] = await Promise.all([
+        prisma.product.findMany({
+          where: { isActive: true, AND: [inStockWhere] },
+          select: {
+            id: true, name: true, slug: true, price: true, originalPrice: true,
+            image: true, images: true, badge: true, badgeColor: true, weight: true,
+            stock: true, unlimitedStock: true, soldCount: true, isActive: true,
+            isFeatured: true, hasVariations: true, variationType: true,
+            customShipping: true, shippingCost: true, sortOrder: true, createdAt: true,
+            category: { select: { id: true, name: true, slug: true } },
+            brand: { select: { id: true, name: true, slug: true } },
+            variants: {
+              where: { isActive: true },
+              orderBy: { sortOrder: "asc" },
+              select: { id: true, label: true, price: true, originalPrice: true, stock: true, unlimitedStock: true, image: true, sortOrder: true },
+            },
           },
-        },
-        orderBy: { sortOrder: "asc" },
-        take: 20,
-      }),
-      prisma.product.count({ where: { isActive: true, AND: [inStockWhere] } }),
-    ]);
+          orderBy: { sortOrder: "asc" },
+          take: 20,
+        }),
+        prisma.product.count({ where: { isActive: true, AND: [inStockWhere] } }),
+      ]);
 
-    return { products: rows.map((p) => mapApiProduct(serialize(p))), total };
+      console.log(`[getProducts] Query returned ${rows.length} rows, total count: ${total}`);
+      return { products: rows.map((p) => mapApiProduct(serialize(p))), total };
+    } catch (error) {
+      console.error("[getProducts] Error:", error);
+      throw error;
+    }
   },
   ["homepage-products"],
   { tags: ["products"], revalidate: 60 }
@@ -144,7 +150,9 @@ export default async function Home() {
       getHomepageContent(),
       getHomeSections(),
     ]);
-  } catch {
+    console.log(`[HOME] Products loaded: ${products.length} products, total: ${total}`);
+  } catch (error) {
+    console.error("[HOME] Error loading homepage data:", error);
     // DB unavailable at build time — page will be empty shell, revalidated on first request
   }
 

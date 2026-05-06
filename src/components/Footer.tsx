@@ -101,7 +101,7 @@ export default function Footer() {
       <footer className="bg-primary-dark text-white">
         <div className="container mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={32} height={26} className={`h-7 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized />
+            <Image src={settings.site_logo || "/Logo.webp"} alt="Site Logo" width={32} height={26} className={`h-7 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized suppressHydrationWarning />
             <span className="font-bold text-white text-sm">{siteName}</span>
           </div>
           {showSocials && socialLinks.length > 0 && (
@@ -128,7 +128,7 @@ export default function Footer() {
         <div className={`grid ${gridCols} gap-10 md:gap-8`}>
           <MotionFadeIn>
             <div className="flex items-center gap-2.5 mb-4">
-              <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={40} height={32} className={`h-8 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized />
+              <Image src={settings.site_logo || "/Logo.webp"} alt="Site Logo" width={40} height={32} className={`h-8 w-auto ${settings.site_logo ? "" : "brightness-200"}`} unoptimized suppressHydrationWarning />
               <div>
                 <h3 className="text-base font-bold text-white">{siteName}</h3>
                 <p className="text-[10px] text-white/60">{siteTagline}</p>

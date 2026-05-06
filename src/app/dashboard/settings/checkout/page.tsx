@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import CheckoutClient from "./CheckoutClient";
@@ -17,3 +17,5 @@ export default async function CheckoutSettingsPage() {
     return <CheckoutClient />;
   }
 }
+
+

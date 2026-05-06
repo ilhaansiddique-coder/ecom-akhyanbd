@@ -14,20 +14,21 @@
  * page render, so editing it here only changes the no-DB defaults.
  */
 :root {
-  --primary: #0f5931;
-  --primary-light: #12693a;
-  --primary-dark: #0a3d22;
-  --primary-darker: #072b18;
+  --primary: #ea580c;
+  --primary-light: #fb923c;
+  --primary-dark: #c2410c;
+  --primary-darker: #9a3412;
+  --secondary: #14b8a6;
   --white: #ffffff;
-  --background: #ffffff;
-  --background-alt: #f7f7f7;
-  --foreground: #333333;
-  --text-body: #555555;
+  --background: #fffbf5;
+  --background-alt: #fff7ed;
+  --foreground: #431407;
+  --text-body: #404040;
   --text-muted: #888888;
   --text-light: #aaaaaa;
-  --border: #e8e8e8;
-  --sale-red: #e91024;
-  --badge-green: #4caf50;
+  --border: #fed7aa;
+  --sale-red: #dc2626;
+  --badge-green: #14b8a6;
   --facebook: #3b5998;
   --instagram: #8a3ab9;
   --youtube: #cd201f;
@@ -56,6 +57,7 @@
   --color-primary-light: var(--primary-light);
   --color-primary-dark: var(--primary-dark);
   --color-primary-darker: var(--primary-darker);
+  --color-secondary: var(--secondary);
   --color-background: var(--background);
   --color-background-alt: var(--background-alt);
   --color-foreground: var(--foreground);
@@ -69,8 +71,8 @@
   --color-instagram: var(--instagram);
   --color-youtube: var(--youtube);
   --color-whatsapp: var(--whatsapp);
-  --font-sans: var(--font-hind-siliguri);
-  --font-bangla: var(--font-hind-siliguri);
+  --font-sans: var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
+  --font-bangla: var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
 }
 
 /* ==================== LANGUAGE FONT SWITCHING ==================== */
@@ -122,6 +124,11 @@
 
 * {
   /* scroll-behavior is set via data-scroll-behavior attr on <html> — required by Next.js 16 */
+  font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif !important;
+}
+
+html {
+  font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif !important;
 }
 
 body {
@@ -133,6 +140,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-family: "BanglaDigits", var(--font-hind-siliguri), "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif !important;
 }
 
 h1, h2, h3, h4, h5, h6 {

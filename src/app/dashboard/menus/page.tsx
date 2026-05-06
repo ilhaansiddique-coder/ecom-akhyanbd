@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import MenusClient from "./MenusClient";
@@ -27,3 +27,5 @@ export default async function MenusPage() {
     return <MenusClient initialData={{ items: [] }} />;
   }
 }
+
+

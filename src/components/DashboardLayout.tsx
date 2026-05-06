@@ -64,60 +64,8 @@ interface NavGroup {
   href?: string;
 }
 
-// Routes a "staff" role can navigate to. Anything outside this list is hidden
-// from the sidebar AND blocked by the per-page server guards. Keep in sync
-// with the page-level `isStaffOrAdmin` checks in the dashboard route segments.
-const STAFF_ALLOWED_PREFIXES = [
-  "/dashboard/products",        // products list + new + [id]/edit
-  "/dashboard/categories",      // taxonomy needed for product creation
-  "/dashboard/brands",          // taxonomy needed for product creation
-  "/dashboard/orders",          // orders list + [id]/details
-  "/dashboard/spam",            // spam detection (orders-related)
-  "/dashboard/landing-pages",   // landing pages list + create + edit
-];
 
-export function isStaffAllowedPath(pathname: string): boolean {
-  // Exact "/dashboard" or starts with one of the allowed prefixes followed by /
-  return STAFF_ALLOWED_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(p + "/")
-  );
-}
-
-function buildNavGroups(t: (key: string) => string, role: string): NavGroup[] {
-  const isStaffOnly = role === "staff";
-
-  // Staff sidebar — Products/Categories/Brands + Orders/Spam + Landing Pages.
-  // Settings, Users, Customizer, Marketing remain admin-only.
-  if (isStaffOnly) {
-    return [
-      {
-        label: t("dash.productMgmt"),
-        icon: FiBox,
-        items: [
-          { label: t("dash.allProducts"), href: "/dashboard/products", icon: FiBox },
-          { label: t("dash.categories"), href: "/dashboard/categories", icon: FiTag },
-          { label: t("dash.brands"), href: "/dashboard/brands", icon: FiAward },
-        ],
-      },
-      {
-        label: t("dash.orderMgmt"),
-        icon: FiShoppingBag,
-        items: [
-          { label: t("dash.allOrders"), href: "/dashboard/orders", icon: FiShoppingBag },
-          { label: t("dash.incompleteOrders") || "Incomplete Orders", href: "/dashboard/orders/incomplete", icon: FiShoppingBag },
-          { label: t("dash.spamDetection") || "Spam Detection", href: "/dashboard/spam", icon: FiShield },
-        ],
-      },
-      {
-        label: t("dash.content"),
-        icon: FiLayout,
-        items: [
-          { label: t("dash.landingPages"), href: "/dashboard/landing-pages", icon: FiLayout },
-        ],
-      },
-    ];
-  }
-
+function buildNavGroups(t: (key: string) => string): NavGroup[] {
   return [
     {
       label: t("dash.dashboard"),
@@ -234,14 +182,20 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
   const { user, loading, logout } = useAuth();
   const { t } = useLang();
   const settings = useSiteSettings();
-  const siteLogo = settings.site_logo || "/logo.svg";
+  const [isHydrated, setIsHydrated] = useState(false);
+  // Use fixed fallback during SSR/initial hydration to prevent mismatch,
+  // then switch to real settings after hydration completes
+  const siteLogo = isHydrated && settings.site_logo ? settings.site_logo : "/Logo.webp";
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Start expanded on both SSR + first client render to avoid hydration mismatch,
   // then sync to the persisted preference in a layout effect (runs before paint).
   const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => { setCollapsed(readCollapsed()); }, []);
+  useEffect(() => {
+    setCollapsed(readCollapsed());
+    setIsHydrated(true);
+  }, []);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const navGroups = buildNavGroups(t, user?.role ?? "");
+  const navGroups = buildNavGroups(t);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -275,26 +229,19 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
 
   // Redirect rules:
   //   - Not logged in or customer role → kick to home.
-  //   - Staff role → allowed only on STAFF_ALLOWED_PREFIXES; if they land on
-  //     anything else (e.g. /dashboard/customizer via direct URL), bounce to
-  //     /dashboard so they get a graceful experience instead of a 403.
-  const isStaff = user?.role === "staff";
   const isAdmin = user?.role === "admin";
-  const shouldRedirectHome = !loading && (!user || (!isAdmin && !isStaff));
-  const shouldRedirectStaff = !loading && isStaff && !isStaffAllowedPath(pathname ?? "");
+  const shouldRedirectHome = !loading && (!user || !isAdmin);
 
   useEffect(() => {
     if (shouldRedirectHome) router.push("/");
-    // Staff have no /dashboard home anymore — send them to their first allowed page.
-    else if (shouldRedirectStaff) router.push("/dashboard/products");
-  }, [shouldRedirectHome, shouldRedirectStaff, router]);
+  }, [shouldRedirectHome, router]);
 
   // Expanded sidebar content (used for desktop expanded + mobile)
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 py-5 border-b border-white/10 flex justify-center">
-        <Image src={siteLogo} alt="Site Logo" width={160} height={48} className="h-10 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "block"; }} />
+        <Image src={siteLogo} alt="Site Logo" width={160} height={48} className="h-10 w-auto" unoptimized suppressHydrationWarning onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "block"; }} />
         <div className="hidden text-center">
           <div className="text-white font-bold text-lg leading-tight">{t("footer.companyName")}</div>
           <div className="text-white/60 text-xs mt-1 font-medium tracking-wide uppercase">{t("dash.adminPanel")}</div>
@@ -403,7 +350,7 @@ export function DashboardLayoutShell({ children, initialTitle = "" }: { children
     <div className="flex flex-col h-full items-center overflow-visible">
       {/* Collapsed header */}
       <div className="py-5 border-b border-white/10 w-full flex justify-center">
-        <Image src={siteLogo} alt="Site Logo" width={36} height={28} className="h-7 w-auto" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"; }} />
+        <Image src={siteLogo} alt="Site Logo" width={36} height={28} className="h-7 w-auto" unoptimized suppressHydrationWarning onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex"; }} />
         <div className="hidden w-9 h-9 rounded-xl bg-white/20 items-center justify-center text-white font-bold text-sm">ম</div>
       </div>
 

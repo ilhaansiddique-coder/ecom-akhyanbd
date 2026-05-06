@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import CouponsClient from "./CouponsClient";
@@ -32,3 +32,5 @@ export default async function CouponsPage() {
     return <CouponsClient initialData={{ items: [] }} />;
   }
 }
+
+

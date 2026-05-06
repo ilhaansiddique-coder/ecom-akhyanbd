@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { toBilingual } from "@/lib/bilingual";
@@ -7,46 +7,46 @@ import PolicyPageEditor, { type PolicyContent } from "../privacy/PolicyPageEdito
 export const dynamic = "force-dynamic";
 
 const DEFAULT_REFUND: PolicyContent = {
-  title: { en: "Refund Policy", bn: "রিফান্ড পলিসি" },
-  lastUpdated: { en: "January 1, 2025", bn: "১ জানুয়ারি ২০২৫" },
+  title: { en: "Refund Policy", bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦ªà¦²à¦¿à¦¸à¦¿" },
+  lastUpdated: { en: "January 1, 2025", bn: "à§§ à¦œà¦¾à¦¨à§à¦¯à¦¼à¦¾à¦°à¦¿ à§¨à§¦à§¨à§«" },
   intro: {
     en: "We give your satisfaction the highest priority. Our refund policy is completely transparent and simple. If you are not satisfied with our products for any reason, follow the guidelines below to apply for a refund or exchange.",
-    bn: "আমরা আপনার সন্তুষ্টিকে সর্বোচ্চ অগ্রাধিকার দেই। আমাদের রিফান্ড পলিসি সম্পূর্ণ স্বচ্ছ ও সহজ।",
+    bn: "à¦†à¦®à¦°à¦¾ à¦†à¦ªà¦¨à¦¾à¦° à¦¸à¦¨à§à¦¤à§à¦·à§à¦Ÿà¦¿à¦•à§‡ à¦¸à¦°à§à¦¬à§‹à¦šà§à¦š à¦…à¦—à§à¦°à¦¾à¦§à¦¿à¦•à¦¾à¦° à¦¦à§‡à¦‡à¥¤ à¦†à¦®à¦¾à¦¦à§‡à¦° à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦ªà¦²à¦¿à¦¸à¦¿ à¦¸à¦®à§à¦ªà§‚à¦°à§à¦£ à¦¸à§à¦¬à¦šà§à¦› à¦“ à¦¸à¦¹à¦œà¥¤",
   },
   sections: [
     {
-      title: { en: "Refund Eligibility", bn: "রিফান্ড যোগ্যতা" },
+      title: { en: "Refund Eligibility", bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦¯à§‹à¦—à§à¦¯à¦¤à¦¾" },
       content: {
-        en: "You will be eligible for a refund in the following cases:\n- Wrong product delivered — if a different product was sent instead of the ordered product.\n- Product arrived damaged — if the product was broken or damaged during delivery.\n- Substandard product received — if the product quality does not match the description.\n- Product not received — if delivery shows complete but product was not received.\n\nNote: Refund request must be made within 7 days of receiving the product. Product must be unused and returned with original packaging.",
-        bn: "নিম্নলিখিত ক্ষেত্রে আপনি রিফান্ডের জন্য যোগ্য হবেন:\n- ভুল পণ্য ডেলিভারি হলে।\n- পণ্য ক্ষতিগ্রস্ত অবস্থায় পৌঁছালে।\n- মানহীন পণ্য পেলে।\n- মেয়াদ উত্তীর্ণ পণ্য পেলে।\n- পণ্য না পেলে।\n\nদ্রষ্টব্য: পণ্য পাওয়ার ৭ দিনের মধ্যে রিফান্ডের আবেদন করতে হবে।",
+        en: "You will be eligible for a refund in the following cases:\n- Wrong product delivered â€” if a different product was sent instead of the ordered product.\n- Product arrived damaged â€” if the product was broken or damaged during delivery.\n- Substandard product received â€” if the product quality does not match the description.\n- Product not received â€” if delivery shows complete but product was not received.\n\nNote: Refund request must be made within 7 days of receiving the product. Product must be unused and returned with original packaging.",
+        bn: "à¦¨à¦¿à¦®à§à¦¨à¦²à¦¿à¦–à¦¿à¦¤ à¦•à§à¦·à§‡à¦¤à§à¦°à§‡ à¦†à¦ªà¦¨à¦¿ à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡à§‡à¦° à¦œà¦¨à§à¦¯ à¦¯à§‹à¦—à§à¦¯ à¦¹à¦¬à§‡à¦¨:\n- à¦­à§à¦² à¦ªà¦£à§à¦¯ à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¹à¦²à§‡à¥¤\n- à¦ªà¦£à§à¦¯ à¦•à§à¦·à¦¤à¦¿à¦—à§à¦°à¦¸à§à¦¤ à¦…à¦¬à¦¸à§à¦¥à¦¾à¦¯à¦¼ à¦ªà§Œà¦à¦›à¦¾à¦²à§‡à¥¤\n- à¦®à¦¾à¦¨à¦¹à§€à¦¨ à¦ªà¦£à§à¦¯ à¦ªà§‡à¦²à§‡à¥¤\n- à¦®à§‡à¦¯à¦¼à¦¾à¦¦ à¦‰à¦¤à§à¦¤à§€à¦°à§à¦£ à¦ªà¦£à§à¦¯ à¦ªà§‡à¦²à§‡à¥¤\n- à¦ªà¦£à§à¦¯ à¦¨à¦¾ à¦ªà§‡à¦²à§‡à¥¤\n\nà¦¦à§à¦°à¦·à§à¦Ÿà¦¬à§à¦¯: à¦ªà¦£à§à¦¯ à¦ªà¦¾à¦“à¦¯à¦¼à¦¾à¦° à§­ à¦¦à¦¿à¦¨à§‡à¦° à¦®à¦§à§à¦¯à§‡ à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡à§‡à¦° à¦†à¦¬à§‡à¦¦à¦¨ à¦•à¦°à¦¤à§‡ à¦¹à¦¬à§‡à¥¤",
       },
     },
     {
-      title: { en: "Refund Process", bn: "রিফান্ড প্রক্রিয়া" },
+      title: { en: "Refund Process", bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦ªà§à¦°à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾" },
       content: {
         en: "Follow these steps for a refund:\n1. Call the number on our contact page or send an email.\n2. Share your order number, description of the problem and photos (if applicable).\n3. We will review your application within 24 hours and inform you of the decision.\n4. If refund is approved, instructions for returning the product will be given.\n5. After receiving the returned product, the refund process will be completed within the specified time.",
-        bn: "রিফান্ডের জন্য নিচের ধাপগুলি অনুসরণ করুন:\n১. আমাদের যোগাযোগ পেজে দেওয়া নম্বরে ফোন করুন অথবা ইমেইল পাঠান।\n২. আপনার অর্ডার নম্বর, সমস্যার বিবরণ এবং সমস্যার ছবি শেয়ার করুন।\n৩. আমরা ২৪ ঘণ্টার মধ্যে আপনার আবেদন পর্যালোচনা করব।\n৪. রিফান্ড অনুমোদন হলে পণ্য ফেরত পাঠানোর নির্দেশনা দেওয়া হবে।\n৫. পণ্য ফেরত পাওয়ার পর নির্ধারিত সময়ের মধ্যে রিফান্ড সম্পন্ন হবে।",
+        bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡à§‡à¦° à¦œà¦¨à§à¦¯ à¦¨à¦¿à¦šà§‡à¦° à¦§à¦¾à¦ªà¦—à§à¦²à¦¿ à¦…à¦¨à§à¦¸à¦°à¦£ à¦•à¦°à§à¦¨:\nà§§. à¦†à¦®à¦¾à¦¦à§‡à¦° à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦ªà§‡à¦œà§‡ à¦¦à§‡à¦“à¦¯à¦¼à¦¾ à¦¨à¦®à§à¦¬à¦°à§‡ à¦«à§‹à¦¨ à¦•à¦°à§à¦¨ à¦…à¦¥à¦¬à¦¾ à¦‡à¦®à§‡à¦‡à¦² à¦ªà¦¾à¦ à¦¾à¦¨à¥¤\nà§¨. à¦†à¦ªà¦¨à¦¾à¦° à¦…à¦°à§à¦¡à¦¾à¦° à¦¨à¦®à§à¦¬à¦°, à¦¸à¦®à¦¸à§à¦¯à¦¾à¦° à¦¬à¦¿à¦¬à¦°à¦£ à¦à¦¬à¦‚ à¦¸à¦®à¦¸à§à¦¯à¦¾à¦° à¦›à¦¬à¦¿ à¦¶à§‡à¦¯à¦¼à¦¾à¦° à¦•à¦°à§à¦¨à¥¤\nà§©. à¦†à¦®à¦°à¦¾ à§¨à§ª à¦˜à¦£à§à¦Ÿà¦¾à¦° à¦®à¦§à§à¦¯à§‡ à¦†à¦ªà¦¨à¦¾à¦° à¦†à¦¬à§‡à¦¦à¦¨ à¦ªà¦°à§à¦¯à¦¾à¦²à§‹à¦šà¦¨à¦¾ à¦•à¦°à¦¬à¥¤\nà§ª. à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦…à¦¨à§à¦®à§‹à¦¦à¦¨ à¦¹à¦²à§‡ à¦ªà¦£à§à¦¯ à¦«à§‡à¦°à¦¤ à¦ªà¦¾à¦ à¦¾à¦¨à§‹à¦° à¦¨à¦¿à¦°à§à¦¦à§‡à¦¶à¦¨à¦¾ à¦¦à§‡à¦“à¦¯à¦¼à¦¾ à¦¹à¦¬à§‡à¥¤\nà§«. à¦ªà¦£à§à¦¯ à¦«à§‡à¦°à¦¤ à¦ªà¦¾à¦“à¦¯à¦¼à¦¾à¦° à¦ªà¦° à¦¨à¦¿à¦°à§à¦§à¦¾à¦°à¦¿à¦¤ à¦¸à¦®à¦¯à¦¼à§‡à¦° à¦®à¦§à§à¦¯à§‡ à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦¸à¦®à§à¦ªà¦¨à§à¦¨ à¦¹à¦¬à§‡à¥¤",
       },
     },
     {
-      title: { en: "Refund Timeline", bn: "রিফান্ডের সময়সীমা" },
+      title: { en: "Refund Timeline", bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡à§‡à¦° à¦¸à¦®à¦¯à¦¼à¦¸à§€à¦®à¦¾" },
       content: {
-        en: "After refund approval, time depends on payment method:\n- bKash / Nagad / Rocket: 3–5 business days\n- Debit / Credit Card: 7–10 business days\n- Bank Transfer: 7–10 business days\n- Cash on Delivery: 3–7 business days (via bKash)\n\n* Bank holidays are not counted as business days.",
-        bn: "রিফান্ড অনুমোদন হওয়ার পর পেমেন্ট মেথড অনুযায়ী সময় লাগবে:\n- বিকাশ / নগদ / রকেট: ৩–৫ কার্যদিবস\n- ডেবিট / ক্রেডিট কার্ড: ৭–১০ কার্যদিবস\n- ব্যাংক ট্রান্সফার: ৭–১০ কার্যদিবস\n- ক্যাশ অন ডেলিভারি: ৩–৭ কার্যদিবস (বিকাশে)\n\n* ব্যাংক ছুটির দিনগুলি কার্যদিবস হিসেবে গণনা করা হয় না।",
+        en: "After refund approval, time depends on payment method:\n- bKash / Nagad / Rocket: 3â€“5 business days\n- Debit / Credit Card: 7â€“10 business days\n- Bank Transfer: 7â€“10 business days\n- Cash on Delivery: 3â€“7 business days (via bKash)\n\n* Bank holidays are not counted as business days.",
+        bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦…à¦¨à§à¦®à§‹à¦¦à¦¨ à¦¹à¦“à¦¯à¦¼à¦¾à¦° à¦ªà¦° à¦ªà§‡à¦®à§‡à¦¨à§à¦Ÿ à¦®à§‡à¦¥à¦¡ à¦…à¦¨à§à¦¯à¦¾à¦¯à¦¼à§€ à¦¸à¦®à¦¯à¦¼ à¦²à¦¾à¦—à¦¬à§‡:\n- à¦¬à¦¿à¦•à¦¾à¦¶ / à¦¨à¦—à¦¦ / à¦°à¦•à§‡à¦Ÿ: à§©â€“à§« à¦•à¦¾à¦°à§à¦¯à¦¦à¦¿à¦¬à¦¸\n- à¦¡à§‡à¦¬à¦¿à¦Ÿ / à¦•à§à¦°à§‡à¦¡à¦¿à¦Ÿ à¦•à¦¾à¦°à§à¦¡: à§­â€“à§§à§¦ à¦•à¦¾à¦°à§à¦¯à¦¦à¦¿à¦¬à¦¸\n- à¦¬à§à¦¯à¦¾à¦‚à¦• à¦Ÿà§à¦°à¦¾à¦¨à§à¦¸à¦«à¦¾à¦°: à§­â€“à§§à§¦ à¦•à¦¾à¦°à§à¦¯à¦¦à¦¿à¦¬à¦¸\n- à¦•à§à¦¯à¦¾à¦¶ à¦…à¦¨ à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿: à§©â€“à§­ à¦•à¦¾à¦°à§à¦¯à¦¦à¦¿à¦¬à¦¸ (à¦¬à¦¿à¦•à¦¾à¦¶à§‡)\n\n* à¦¬à§à¦¯à¦¾à¦‚à¦• à¦›à§à¦Ÿà¦¿à¦° à¦¦à¦¿à¦¨à¦—à§à¦²à¦¿ à¦•à¦¾à¦°à§à¦¯à¦¦à¦¿à¦¬à¦¸ à¦¹à¦¿à¦¸à§‡à¦¬à§‡ à¦—à¦£à¦¨à¦¾ à¦•à¦°à¦¾ à¦¹à¦¯à¦¼ à¦¨à¦¾à¥¤",
       },
     },
     {
-      title: { en: "Exchange Policy", bn: "এক্সচেঞ্জ নীতি" },
+      title: { en: "Exchange Policy", bn: "à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œ à¦¨à§€à¦¤à¦¿" },
       content: {
         en: "You can exchange the product instead of a refund. The following rules apply for exchange:\n- Free exchange with a product of the same value.\n- For exchange with a higher-priced product, the price difference must be paid.\n- For exchange with a lower-priced product, the difference will be refunded.\n- For exchange, the product must also be unused with original packaging.\n- A product can be exchanged a maximum of once.",
-        bn: "আপনি রিফান্ডের পরিবর্তে পণ্য এক্সচেঞ্জ করতে পারবেন:\n- একই মূল্যের পণ্যের সাথে বিনামূল্যে এক্সচেঞ্জ করা যাবে।\n- বেশি মূল্যের পণ্যের সাথে এক্সচেঞ্জের ক্ষেত্রে মূল্যের পার্থক্য পরিশোধ করতে হবে।\n- কম মূল্যের পণ্যের সাথে এক্সচেঞ্জের ক্ষেত্রে পার্থক্য ফেরত দেওয়া হবে।\n- এক্সচেঞ্জের জন্যও পণ্য মূল প্যাকেজিংসহ অব্যবহৃত থাকতে হবে।\n- একটি পণ্য সর্বোচ্চ একবার এক্সচেঞ্জ করা যাবে।",
+        bn: "à¦†à¦ªà¦¨à¦¿ à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡à§‡à¦° à¦ªà¦°à¦¿à¦¬à¦°à§à¦¤à§‡ à¦ªà¦£à§à¦¯ à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œ à¦•à¦°à¦¤à§‡ à¦ªà¦¾à¦°à¦¬à§‡à¦¨:\n- à¦à¦•à¦‡ à¦®à§‚à¦²à§à¦¯à§‡à¦° à¦ªà¦£à§à¦¯à§‡à¦° à¦¸à¦¾à¦¥à§‡ à¦¬à¦¿à¦¨à¦¾à¦®à§‚à¦²à§à¦¯à§‡ à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œ à¦•à¦°à¦¾ à¦¯à¦¾à¦¬à§‡à¥¤\n- à¦¬à§‡à¦¶à¦¿ à¦®à§‚à¦²à§à¦¯à§‡à¦° à¦ªà¦£à§à¦¯à§‡à¦° à¦¸à¦¾à¦¥à§‡ à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œà§‡à¦° à¦•à§à¦·à§‡à¦¤à§à¦°à§‡ à¦®à§‚à¦²à§à¦¯à§‡à¦° à¦ªà¦¾à¦°à§à¦¥à¦•à§à¦¯ à¦ªà¦°à¦¿à¦¶à§‹à¦§ à¦•à¦°à¦¤à§‡ à¦¹à¦¬à§‡à¥¤\n- à¦•à¦® à¦®à§‚à¦²à§à¦¯à§‡à¦° à¦ªà¦£à§à¦¯à§‡à¦° à¦¸à¦¾à¦¥à§‡ à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œà§‡à¦° à¦•à§à¦·à§‡à¦¤à§à¦°à§‡ à¦ªà¦¾à¦°à§à¦¥à¦•à§à¦¯ à¦«à§‡à¦°à¦¤ à¦¦à§‡à¦“à¦¯à¦¼à¦¾ à¦¹à¦¬à§‡à¥¤\n- à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œà§‡à¦° à¦œà¦¨à§à¦¯à¦“ à¦ªà¦£à§à¦¯ à¦®à§‚à¦² à¦ªà§à¦¯à¦¾à¦•à§‡à¦œà¦¿à¦‚à¦¸à¦¹ à¦…à¦¬à§à¦¯à¦¬à¦¹à§ƒà¦¤ à¦¥à¦¾à¦•à¦¤à§‡ à¦¹à¦¬à§‡à¥¤\n- à¦à¦•à¦Ÿà¦¿ à¦ªà¦£à§à¦¯ à¦¸à¦°à§à¦¬à§‹à¦šà§à¦š à¦à¦•à¦¬à¦¾à¦° à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œ à¦•à¦°à¦¾ à¦¯à¦¾à¦¬à§‡à¥¤",
       },
     },
     {
-      title: { en: "Contact", bn: "যোগাযোগ" },
+      title: { en: "Contact", bn: "à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦—" },
       content: {
         en: "For any questions about refunds or exchanges, please visit our contact page. We are always ready to resolve your issues quickly. Customer satisfaction is our highest priority.",
-        bn: "রিফান্ড বা এক্সচেঞ্জ সংক্রান্ত যেকোনো প্রশ্নের জন্য আমাদের যোগাযোগ পেজ দেখুন। আমরা আপনার সমস্যা দ্রুত সমাধান করতে সর্বদা প্রস্তুত।",
+        bn: "à¦°à¦¿à¦«à¦¾à¦¨à§à¦¡ à¦¬à¦¾ à¦à¦•à§à¦¸à¦šà§‡à¦žà§à¦œ à¦¸à¦‚à¦•à§à¦°à¦¾à¦¨à§à¦¤ à¦¯à§‡à¦•à§‹à¦¨à§‹ à¦ªà§à¦°à¦¶à§à¦¨à§‡à¦° à¦œà¦¨à§à¦¯ à¦†à¦®à¦¾à¦¦à§‡à¦° à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦ªà§‡à¦œ à¦¦à§‡à¦–à§à¦¨à¥¤ à¦†à¦®à¦°à¦¾ à¦†à¦ªà¦¨à¦¾à¦° à¦¸à¦®à¦¸à§à¦¯à¦¾ à¦¦à§à¦°à§à¦¤ à¦¸à¦®à¦¾à¦§à¦¾à¦¨ à¦•à¦°à¦¤à§‡ à¦¸à¦°à§à¦¬à¦¦à¦¾ à¦ªà§à¦°à¦¸à§à¦¤à§à¦¤à¥¤",
       },
     },
   ],
@@ -79,3 +79,5 @@ export default async function RefundEditorPage() {
     return <PolicyPageEditor initialData={DEFAULT_REFUND} settingKey="page_refund" pageLabel="Refund Policy" />;
   }
 }
+
+

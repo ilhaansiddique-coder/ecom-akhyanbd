@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import FormSubmissionsClient from "./FormSubmissionsClient";
@@ -32,3 +32,5 @@ export default async function FormSubmissionsPage() {
     return <FormSubmissionsClient initialData={{ items: [] }} />;
   }
 }
+
+

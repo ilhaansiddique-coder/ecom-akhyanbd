@@ -26,6 +26,11 @@ const nextConfig: NextConfig = {
         hostname: "mavesoj.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "cdn.akhiyanbd.com",
+        pathname: "/**",
+      },
       // Allow next/image to optimize R2-hosted assets
       ...(R2_HOSTNAME ? [{ protocol: "https" as const, hostname: R2_HOSTNAME, pathname: "/**" }] : []),
       // Cloudinary fallback CDN. Always allow res.cloudinary.com — covers any
@@ -110,7 +115,20 @@ const nextConfig: NextConfig = {
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" },
       { key: "X-DNS-Prefetch-Control", value: "on" },
     ];
+
+    // CORS headers for API routes (allows Flutter and other clients)
+    const corsHeaders = [
+      { key: "Access-Control-Allow-Credentials", value: "true" },
+      { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, PATCH, OPTIONS" },
+      { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, X-Requested-With" },
+    ];
+
     return [
+      {
+        // API routes — CORS enabled for Flutter and cross-origin requests
+        source: "/api/:path*",
+        headers: [...securityHeaders, ...corsHeaders],
+      },
       {
         // Global — applies to every path. Per-path rules below merge
         // additional headers (Cache-Control etc.) on top.

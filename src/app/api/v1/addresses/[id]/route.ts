@@ -5,6 +5,22 @@ import { addressSchema } from "@/lib/validation";
 import { jsonResponse, validationError, notFound, unauthorized } from "@/lib/api-response";
 import { getSessionUser } from "@/lib/auth-helpers";
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  const { id } = await params;
+  const address = await prisma.address.findFirst({
+    where: { id: Number(id), userId: user.id },
+  });
+  if (!address) return notFound("Address not found");
+
+  return jsonResponse(serialize(address));
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

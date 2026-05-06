@@ -28,6 +28,22 @@ const menuKeys = [
 function AuthButton({ onAuthOpen, mobile = false }: { onAuthOpen: () => void; mobile?: boolean }) {
   const { user, logout } = useAuth();
   const { t } = useLang();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  if (!isHydrated) {
+    return (
+      <button
+        className={`${mobile ? "flex" : "hidden sm:flex"} items-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition-colors`}
+      >
+        <FiUser className="w-4 h-4" />
+        <span>{t("nav.login")}</span>
+      </button>
+    );
+  }
 
   if (user) {
     return (
@@ -159,7 +175,7 @@ export default function Navbar({ onSearchOpen, onCartOpen, onAuthOpen }: NavbarP
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 shrink-0">
-              <Image src={settings.site_logo || "/logo.svg"} alt="Site Logo" width={48} height={38} className="h-9 lg:h-11" style={{ width: "auto" }} priority unoptimized={!!settings.site_logo} />
+              <Image src={settings.site_logo || "/Logo.webp"} alt="Site Logo" width={48} height={38} className="h-9 lg:h-11" style={{ width: "auto" }} priority unoptimized suppressHydrationWarning />
               {showBrandText && (
                 <div className="hidden sm:block">
                   <h1 className="text-base lg:text-lg font-bold text-primary leading-tight tracking-tight">

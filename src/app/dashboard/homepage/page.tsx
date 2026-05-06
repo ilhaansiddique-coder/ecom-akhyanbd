@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import HomepageClient from "./HomepageClient";
@@ -6,7 +6,7 @@ import HomepageClient from "./HomepageClient";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_CONTENT = {
-  hero: { badge: "", title: "", subtitle: "", description: "", cta_primary: "", cta_secondary: "", trust_1: "", trust_2: "", trust_3: "", hero_logo: "", floating_tags: [{ emoji: "🌿", label: "" }, { emoji: "🍵", label: "" }, { emoji: "❤️", label: "" }] },
+  hero: { badge: "", title: "", subtitle: "", description: "", cta_primary: "", cta_secondary: "", trust_1: "", trust_2: "", trust_3: "", hero_logo: "", floating_tags: [{ emoji: "ðŸŒ¿", label: "" }, { emoji: "ðŸµ", label: "" }, { emoji: "â¤ï¸", label: "" }] },
   features: [
     { icon: "truck", title: "", description: "" },
     { icon: "headphones", title: "", description: "" },
@@ -39,3 +39,5 @@ export default async function HomepagePage() {
     return <HomepageClient initialData={DEFAULT_CONTENT} />;
   }
 }
+
+

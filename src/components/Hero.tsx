@@ -77,7 +77,7 @@ export default function Hero({ content }: { content?: HeroContent }) {
                       stays so it doesn't compete with below-the-fold images. unoptimized
                       removed — R2-hosted logos go through next/image AVIF/WebP pipeline
                       now, cutting ~30-100KB. */}
-                  <Image src={content?.hero_logo || "/logo.svg"} alt="Site Logo" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl object-contain" style={{ height: "auto" }} priority sizes="(min-width: 1280px) 224px, 192px" />
+                  <Image src={content?.hero_logo || "/Logo.webp"} alt="Site Logo" width={220} height={170} className="w-48 xl:w-56 drop-shadow-2xl object-contain" style={{ height: "auto" }} priority sizes="(min-width: 1280px) 224px, 192px" suppressHydrationWarning />
                 </div>
               </div>
               <HeroFloatingTags tags={content?.floating_tags} />

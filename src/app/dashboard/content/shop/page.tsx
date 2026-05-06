@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { toBilingual } from "@/lib/bilingual";
@@ -7,17 +7,17 @@ import ShopPageEditor, { type ShopContent } from "./ShopPageEditor";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_SHOP: ShopContent = {
-  heroBadge: { en: "Browse Products", bn: "পণ্য ব্রাউজ করুন" },
-  heroTitle: { en: "Shop", bn: "শপ" },
-  heroSubtitle: { en: "Discover quality products at great prices", bn: "চমৎকার মূল্যে মানসম্পন্ন পণ্য আবিষ্কার করুন" },
-  filtersTitle: { en: "Filters", bn: "ফিল্টার" },
-  categoryLabel: { en: "Category", bn: "ক্যাটাগরি" },
-  brandLabel: { en: "Brand", bn: "ব্র্যান্ড" },
-  priceLabel: { en: "Price Range", bn: "মূল্য সীমা" },
-  sortLabel: { en: "Sort by", bn: "সাজান" },
-  emptyTitle: { en: "No products found", bn: "কোনো পণ্য পাওয়া যায়নি" },
-  emptyDescription: { en: "Try adjusting your filters or search criteria", bn: "আপনার ফিল্টার বা সার্চ পরিবর্তন করে দেখুন" },
-  loadMoreText: { en: "Load More", bn: "আরও দেখুন" },
+  heroBadge: { en: "Browse Products", bn: "à¦ªà¦£à§à¦¯ à¦¬à§à¦°à¦¾à¦‰à¦œ à¦•à¦°à§à¦¨" },
+  heroTitle: { en: "Shop", bn: "à¦¶à¦ª" },
+  heroSubtitle: { en: "Discover quality products at great prices", bn: "à¦šà¦®à§Žà¦•à¦¾à¦° à¦®à§‚à¦²à§à¦¯à§‡ à¦®à¦¾à¦¨à¦¸à¦®à§à¦ªà¦¨à§à¦¨ à¦ªà¦£à§à¦¯ à¦†à¦¬à¦¿à¦·à§à¦•à¦¾à¦° à¦•à¦°à§à¦¨" },
+  filtersTitle: { en: "Filters", bn: "à¦«à¦¿à¦²à§à¦Ÿà¦¾à¦°" },
+  categoryLabel: { en: "Category", bn: "à¦•à§à¦¯à¦¾à¦Ÿà¦¾à¦—à¦°à¦¿" },
+  brandLabel: { en: "Brand", bn: "à¦¬à§à¦°à§à¦¯à¦¾à¦¨à§à¦¡" },
+  priceLabel: { en: "Price Range", bn: "à¦®à§‚à¦²à§à¦¯ à¦¸à§€à¦®à¦¾" },
+  sortLabel: { en: "Sort by", bn: "à¦¸à¦¾à¦œà¦¾à¦¨" },
+  emptyTitle: { en: "No products found", bn: "à¦•à§‹à¦¨à§‹ à¦ªà¦£à§à¦¯ à¦ªà¦¾à¦“à¦¯à¦¼à¦¾ à¦¯à¦¾à¦¯à¦¼à¦¨à¦¿" },
+  emptyDescription: { en: "Try adjusting your filters or search criteria", bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦«à¦¿à¦²à§à¦Ÿà¦¾à¦° à¦¬à¦¾ à¦¸à¦¾à¦°à§à¦š à¦ªà¦°à¦¿à¦¬à¦°à§à¦¤à¦¨ à¦•à¦°à§‡ à¦¦à§‡à¦–à§à¦¨" },
+  loadMoreText: { en: "Load More", bn: "à¦†à¦°à¦“ à¦¦à§‡à¦–à§à¦¨" },
 };
 
 function normalize(raw: unknown): ShopContent {
@@ -47,3 +47,5 @@ export default async function ShopEditorPage() {
   } catch { /* */ }
   return <ShopPageEditor initialData={content} />;
 }
+
+

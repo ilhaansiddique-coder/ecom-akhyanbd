@@ -3,6 +3,22 @@ import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const origin = request.headers.get("origin") || "";
+
+  // ── CORS handling for API routes (allow Flutter and cross-origin requests) ──
+  const isApi = path.startsWith("/api/");
+  if (isApi && request.method === "OPTIONS") {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": origin || "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
 
   // ── Spam block check (cookie-based, no DB hit) ──
   // The /api/v1/fingerprint endpoint sets this cookie when a device is blocked
@@ -32,6 +48,13 @@ export function proxy(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
+  // Add CORS headers to actual API responses (not just preflight)
+  if (isApi) {
+    response.headers.set("Access-Control-Allow-Origin", origin || "*");
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+    response.headers.set("Vary", "Origin");
+  }
+
   // Add aggressive caching for image requests
   if (path.startsWith("/_next/image")) {
     response.headers.set("Cache-Control", "public, max-age=31536000, immutable");
@@ -53,6 +76,8 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // API routes — needed so CORS preflight + headers work for Flutter/cross-origin clients
+    "/api/:path*",
     "/_next/image/:path*",
     "/uploads/:path*",
     "/",

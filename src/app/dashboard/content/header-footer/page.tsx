@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { toBilingual } from "@/lib/bilingual";
@@ -20,20 +20,20 @@ const DEFAULT_HEADER_DISPLAY: HeaderDisplay = {
 const DEFAULT_HF: HeaderFooterContent = {
   topbar: {
     enabled: true,
-    text1: { en: "Fast delivery across Bangladesh", bn: "সারা বাংলাদেশে দ্রুত ডেলিভারি" },
-    text2: { en: "Order with confidence", bn: "নিশ্চিন্তে অর্ডার করুন" },
+    text1: { en: "Fast delivery across Bangladesh", bn: "à¦¸à¦¾à¦°à¦¾ à¦¬à¦¾à¦‚à¦²à¦¾à¦¦à§‡à¦¶à§‡ à¦¦à§à¦°à§à¦¤ à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿" },
+    text2: { en: "Order with confidence", bn: "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¨à§à¦¤à§‡ à¦…à¦°à§à¦¡à¦¾à¦° à¦•à¦°à§à¦¨" },
   },
   footer: {
-    description: { en: "Welcome to our store. Quality products delivered to your door.", bn: "আমাদের দোকানে স্বাগত। মানসম্পন্ন পণ্য আপনার দোরগোড়ায়।" },
-    copyrightText: { en: "© Contra Digital. All rights reserved.", bn: "© Contra Digital। সর্বস্বত্ব সংরক্ষিত।" },
-    quickLinksTitle: { en: "Quick Links", bn: "দ্রুত লিংক" },
-    contactTitle: { en: "Contact", bn: "যোগাযোগ" },
-    legalTitle: { en: "Legal", bn: "আইনি" },
-    newsletterTitle: { en: "Subscribe to our newsletter", bn: "আমাদের নিউজলেটারে সাবস্ক্রাইব করুন" },
-    newsletterSubtitle: { en: "Get updates on new products and offers", bn: "নতুন পণ্য ও অফারের আপডেট পান" },
-    newsletterPlaceholder: { en: "Email address", bn: "ইমেইল ঠিকানা" },
-    newsletterButton: { en: "Subscribe", bn: "সাবস্ক্রাইব" },
-    developedByText: { en: "Developed by", bn: "ডেভেলপ করেছেন" },
+    description: { en: "Welcome to our store. Quality products delivered to your door.", bn: "à¦†à¦®à¦¾à¦¦à§‡à¦° à¦¦à§‹à¦•à¦¾à¦¨à§‡ à¦¸à§à¦¬à¦¾à¦—à¦¤à¥¤ à¦®à¦¾à¦¨à¦¸à¦®à§à¦ªà¦¨à§à¦¨ à¦ªà¦£à§à¦¯ à¦†à¦ªà¦¨à¦¾à¦° à¦¦à§‹à¦°à¦—à§‹à¦¡à¦¼à¦¾à¦¯à¦¼à¥¤" },
+    copyrightText: { en: "Â© Contra Digital. All rights reserved.", bn: "Â© Contra Digitalà¥¤ à¦¸à¦°à§à¦¬à¦¸à§à¦¬à¦¤à§à¦¬ à¦¸à¦‚à¦°à¦•à§à¦·à¦¿à¦¤à¥¤" },
+    quickLinksTitle: { en: "Quick Links", bn: "à¦¦à§à¦°à§à¦¤ à¦²à¦¿à¦‚à¦•" },
+    contactTitle: { en: "Contact", bn: "à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦—" },
+    legalTitle: { en: "Legal", bn: "à¦†à¦‡à¦¨à¦¿" },
+    newsletterTitle: { en: "Subscribe to our newsletter", bn: "à¦†à¦®à¦¾à¦¦à§‡à¦° à¦¨à¦¿à¦‰à¦œà¦²à§‡à¦Ÿà¦¾à¦°à§‡ à¦¸à¦¾à¦¬à¦¸à§à¦•à§à¦°à¦¾à¦‡à¦¬ à¦•à¦°à§à¦¨" },
+    newsletterSubtitle: { en: "Get updates on new products and offers", bn: "à¦¨à¦¤à§à¦¨ à¦ªà¦£à§à¦¯ à¦“ à¦…à¦«à¦¾à¦°à§‡à¦° à¦†à¦ªà¦¡à§‡à¦Ÿ à¦ªà¦¾à¦¨" },
+    newsletterPlaceholder: { en: "Email address", bn: "à¦‡à¦®à§‡à¦‡à¦² à¦ à¦¿à¦•à¦¾à¦¨à¦¾" },
+    newsletterButton: { en: "Subscribe", bn: "à¦¸à¦¾à¦¬à¦¸à§à¦•à§à¦°à¦¾à¦‡à¦¬" },
+    developedByText: { en: "Developed by", bn: "à¦¡à§‡à¦­à§‡à¦²à¦ª à¦•à¦°à§‡à¦›à§‡à¦¨" },
   },
 };
 
@@ -62,7 +62,7 @@ function normalize(raw: unknown): HeaderFooterContent {
   };
 }
 
-/** Coerce any stored value into a boolean — DB stores "true"/"false" strings. */
+/** Coerce any stored value into a boolean â€” DB stores "true"/"false" strings. */
 function toBool(v: string | null | undefined, fallback: boolean): boolean {
   if (v === "true" || v === "1") return true;
   if (v === "false" || v === "0") return false;
@@ -116,3 +116,5 @@ export default async function HeaderFooterEditorPage() {
 
   return <HeaderFooterEditor initialData={content} initialDisplay={display} />;
 }
+
+

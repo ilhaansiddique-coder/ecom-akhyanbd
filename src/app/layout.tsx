@@ -29,13 +29,8 @@ import { autoCaptureSiteUrl } from "@/lib/auto-site-url";
 const hindSiliguri = Hind_Siliguri({
   variable: "--font-hind-siliguri",
   subsets: ["bengali", "latin"],
-  weight: ["400", "500", "700"],
-  // "swap" instead of "block": shows fallback metrics-matched text immediately,
-  // then snaps to Hind Siliguri when loaded. With "block" the browser waited
-  // up to 3s for the font, and on slow mobile / Vercel cold cache it would
-  // give up — Bengali rendered with system Serif glyphs (looked broken).
-  // adjustFontFallback keeps metrics close so there's no visible CLS on swap.
-  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
+  display: "block",
   preload: true,
   adjustFontFallback: true,
 });
@@ -100,10 +95,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const settings = await loadSiteSettings();
   const siteName = settings.site_name || "Site";
   const description = settings.site_description || settings.meta_description || "";
-  const logo = settings.site_logo || "/logo.svg";
+  const logo = settings.site_logo || "/Logo.webp";
   // Favicon comes from the dashboard setting; fall back to the site logo, then a default.
   // Append a short hash so browsers refetch when the admin uploads a new one.
-  const faviconRaw = settings.favicon || settings.site_logo || "/logo.svg";
+  const faviconRaw = settings.favicon || settings.site_logo || "/Logo.webp";
   const faviconVersion = (faviconRaw.match(/\d{6,}/)?.[0] ?? "1").slice(-6);
   const faviconUrl = `${faviconRaw}${faviconRaw.includes("?") ? "&" : "?"}v=${faviconVersion}`;
   const faviconType = faviconRaw.toLowerCase().endsWith(".svg")
@@ -186,7 +181,7 @@ export default async function RootLayout({
   const siteName = settings.site_name || "Site";
   const siteLogoUrl = settings.site_logo
     ? (settings.site_logo.startsWith("http") ? settings.site_logo : `${SITE_URL}${settings.site_logo}`)
-    : `${SITE_URL}/logo.svg`;
+    : `${SITE_URL}/Logo.webp`;
   const orgPhone = settings.phone || "";
   const sameAs = [settings.facebook, settings.instagram, settings.youtube].filter(Boolean) as string[];
 

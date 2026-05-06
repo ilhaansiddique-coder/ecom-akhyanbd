@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { toBilingual, type Bilingual } from "@/lib/bilingual";
@@ -10,46 +10,46 @@ const EMPTY_BI: Bilingual = { en: "", bn: "" };
 
 const DEFAULT_TEMPLATES: EmailTemplates = {
   welcome: {
-    subject: { en: "Welcome! Your account is created", bn: "স্বাগতম! আপনার অ্যাকাউন্ট তৈরি হয়েছে" },
+    subject: { en: "Welcome! Your account is created", bn: "à¦¸à§à¦¬à¦¾à¦—à¦¤à¦®! à¦†à¦ªà¦¨à¦¾à¦° à¦…à§à¦¯à¦¾à¦•à¦¾à¦‰à¦¨à§à¦Ÿ à¦¤à§ˆà¦°à¦¿ à¦¹à¦¯à¦¼à§‡à¦›à§‡" },
     intro: {
       en: "Welcome to {{site_name}}. Browse our products and order what you like.",
-      bn: "{{site_name}}-এ আপনাকে স্বাগত জানাই। আমাদের পণ্য ব্রাউজ করুন এবং আপনার পছন্দের পণ্য অর্ডার করুন।",
+      bn: "{{site_name}}-à¦ à¦†à¦ªà¦¨à¦¾à¦•à§‡ à¦¸à§à¦¬à¦¾à¦—à¦¤ à¦œà¦¾à¦¨à¦¾à¦‡à¥¤ à¦†à¦®à¦¾à¦¦à§‡à¦° à¦ªà¦£à§à¦¯ à¦¬à§à¦°à¦¾à¦‰à¦œ à¦•à¦°à§à¦¨ à¦à¦¬à¦‚ à¦†à¦ªà¦¨à¦¾à¦° à¦ªà¦›à¦¨à§à¦¦à§‡à¦° à¦ªà¦£à§à¦¯ à¦…à¦°à§à¦¡à¦¾à¦° à¦•à¦°à§à¦¨à¥¤",
     },
-    button_text: { en: "Start Shopping", bn: "এখনই শপিং শুরু করুন" },
+    button_text: { en: "Start Shopping", bn: "à¦à¦–à¦¨à¦‡ à¦¶à¦ªà¦¿à¦‚ à¦¶à§à¦°à§ à¦•à¦°à§à¦¨" },
     button_url: "",
-    closing: { en: "Thanks,\n{{site_name}}", bn: "ধন্যবাদ,\n{{site_name}}" },
+    closing: { en: "Thanks,\n{{site_name}}", bn: "à¦§à¦¨à§à¦¯à¦¬à¦¾à¦¦,\n{{site_name}}" },
     before_block: { ...EMPTY_BI },
     after_block: { ...EMPTY_BI },
   },
   order_confirmation: {
-    subject: { en: "Order Confirmation #{{order_id}}", bn: "অর্ডার নিশ্চিতকরণ #{{order_id}}" },
-    heading: { en: "Thank you, {{customer_name}}!", bn: "ধন্যবাদ, {{customer_name}}!" },
+    subject: { en: "Order Confirmation #{{order_id}}", bn: "à¦…à¦°à§à¦¡à¦¾à¦° à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤à¦•à¦°à¦£ #{{order_id}}" },
+    heading: { en: "Thank you, {{customer_name}}!", bn: "à¦§à¦¨à§à¦¯à¦¬à¦¾à¦¦, {{customer_name}}!" },
     intro: {
       en: "Your order #{{order_id}} has been received successfully.",
-      bn: "আপনার অর্ডার #{{order_id}} সফলভাবে গৃহীত হয়েছে।",
+      bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦…à¦°à§à¦¡à¦¾à¦° #{{order_id}} à¦¸à¦«à¦²à¦­à¦¾à¦¬à§‡ à¦—à§ƒà¦¹à§€à¦¤ à¦¹à¦¯à¦¼à§‡à¦›à§‡à¥¤",
     },
     closing: {
       en: "We will process your order shortly and notify you about the delivery.",
-      bn: "আমরা শীঘ্রই আপনার অর্ডার প্রসেস করব এবং ডেলিভারি সম্পর্কে আপনাকে জানাব।",
+      bn: "à¦†à¦®à¦°à¦¾ à¦¶à§€à¦˜à§à¦°à¦‡ à¦†à¦ªà¦¨à¦¾à¦° à¦…à¦°à§à¦¡à¦¾à¦° à¦ªà§à¦°à¦¸à§‡à¦¸ à¦•à¦°à¦¬ à¦à¦¬à¦‚ à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¸à¦®à§à¦ªà¦°à§à¦•à§‡ à¦†à¦ªà¦¨à¦¾à¦•à§‡ à¦œà¦¾à¦¨à¦¾à¦¬à¥¤",
     },
     show_customer_info: true,
     show_items_table: true,
     show_totals: true,
     show_track_button: true,
-    track_button_text: { en: "Track Your Order", bn: "আপনার অর্ডার ট্র্যাক করুন" },
+    track_button_text: { en: "Track Your Order", bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦…à¦°à§à¦¡à¦¾à¦° à¦Ÿà§à¦°à§à¦¯à¦¾à¦• à¦•à¦°à§à¦¨" },
     before_block: { ...EMPTY_BI },
     after_block: { ...EMPTY_BI },
   },
   password_reset: {
-    subject: { en: "Your Password Reset Code", bn: "আপনার পাসওয়ার্ড রিসেট কোড" },
-    heading: { en: "Password Reset", bn: "পাসওয়ার্ড রিসেট" },
+    subject: { en: "Your Password Reset Code", bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦ªà¦¾à¦¸à¦“à¦¯à¦¼à¦¾à¦°à§à¦¡ à¦°à¦¿à¦¸à§‡à¦Ÿ à¦•à§‹à¦¡" },
+    heading: { en: "Password Reset", bn: "à¦ªà¦¾à¦¸à¦“à¦¯à¦¼à¦¾à¦°à§à¦¡ à¦°à¦¿à¦¸à§‡à¦Ÿ" },
     intro: {
       en: "Use the code below to reset your password.",
-      bn: "আপনার পাসওয়ার্ড রিসেট করার জন্য নিচে একটি কোড দেওয়া হলো।",
+      bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦ªà¦¾à¦¸à¦“à¦¯à¦¼à¦¾à¦°à§à¦¡ à¦°à¦¿à¦¸à§‡à¦Ÿ à¦•à¦°à¦¾à¦° à¦œà¦¨à§à¦¯ à¦¨à¦¿à¦šà§‡ à¦à¦•à¦Ÿà¦¿ à¦•à§‹à¦¡ à¦¦à§‡à¦“à¦¯à¦¼à¦¾ à¦¹à¦²à§‹à¥¤",
     },
     footer: {
       en: "If you didn't request this, you can safely ignore this email.",
-      bn: "যদি আপনি পাসওয়ার্ড রিসেট করার অনুরোধ না করে থাকেন, তাহলে এই ইমেইলটি উপেক্ষা করুন।",
+      bn: "à¦¯à¦¦à¦¿ à¦†à¦ªà¦¨à¦¿ à¦ªà¦¾à¦¸à¦“à¦¯à¦¼à¦¾à¦°à§à¦¡ à¦°à¦¿à¦¸à§‡à¦Ÿ à¦•à¦°à¦¾à¦° à¦…à¦¨à§à¦°à§‹à¦§ à¦¨à¦¾ à¦•à¦°à§‡ à¦¥à¦¾à¦•à§‡à¦¨, à¦¤à¦¾à¦¹à¦²à§‡ à¦à¦‡ à¦‡à¦®à§‡à¦‡à¦²à¦Ÿà¦¿ à¦‰à¦ªà§‡à¦•à§à¦·à¦¾ à¦•à¦°à§à¦¨à¥¤",
     },
     button_text: { ...EMPTY_BI },
     button_url: "",
@@ -58,13 +58,13 @@ const DEFAULT_TEMPLATES: EmailTemplates = {
   },
   admin_order_notification: {
     subject: {
-      en: "🛒 New Order #{{order_id}} — ৳{{total}} — {{customer_name}}",
-      bn: "🛒 নতুন অর্ডার #{{order_id}} — ৳{{total}} — {{customer_name}}",
+      en: "ðŸ›’ New Order #{{order_id}} â€” à§³{{total}} â€” {{customer_name}}",
+      bn: "ðŸ›’ à¦¨à¦¤à§à¦¨ à¦…à¦°à§à¦¡à¦¾à¦° #{{order_id}} â€” à§³{{total}} â€” {{customer_name}}",
     },
-    heading: { en: "New Order Received", bn: "নতুন অর্ডার এসেছে" },
+    heading: { en: "New Order Received", bn: "à¦¨à¦¤à§à¦¨ à¦…à¦°à§à¦¡à¦¾à¦° à¦à¦¸à§‡à¦›à§‡" },
     intro: {
       en: "A new order has been placed on your store.",
-      bn: "আপনার স্টোরে একটি নতুন অর্ডার এসেছে।",
+      bn: "à¦†à¦ªà¦¨à¦¾à¦° à¦¸à§à¦Ÿà§‹à¦°à§‡ à¦à¦•à¦Ÿà¦¿ à¦¨à¦¤à§à¦¨ à¦…à¦°à§à¦¡à¦¾à¦° à¦à¦¸à§‡à¦›à§‡à¥¤",
     },
     show_customer_info: true,
     show_items_table: true,
@@ -75,13 +75,13 @@ const DEFAULT_TEMPLATES: EmailTemplates = {
   },
   admin_contact_notification: {
     subject: {
-      en: "📬 New Contact Form Submission from {{name}}",
-      bn: "📬 নতুন যোগাযোগ ফর্ম জমা — {{name}}",
+      en: "ðŸ“¬ New Contact Form Submission from {{name}}",
+      bn: "ðŸ“¬ à¦¨à¦¤à§à¦¨ à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦«à¦°à§à¦® à¦œà¦®à¦¾ â€” {{name}}",
     },
-    heading: { en: "New Contact Form Submission", bn: "নতুন যোগাযোগ বার্তা" },
+    heading: { en: "New Contact Form Submission", bn: "à¦¨à¦¤à§à¦¨ à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦¬à¦¾à¦°à§à¦¤à¦¾" },
     intro: {
       en: "Someone submitted the contact form on your site.",
-      bn: "কেউ আপনার সাইটের যোগাযোগ ফর্ম পূরণ করেছেন।",
+      bn: "à¦•à§‡à¦‰ à¦†à¦ªà¦¨à¦¾à¦° à¦¸à¦¾à¦‡à¦Ÿà§‡à¦° à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦«à¦°à§à¦® à¦ªà§‚à¦°à¦£ à¦•à¦°à§‡à¦›à§‡à¦¨à¥¤",
     },
     button_text: { ...EMPTY_BI },
     button_url: "",
@@ -195,3 +195,5 @@ export default async function EmailTemplatesEditorPage() {
   }
   return <EmailTemplatesEditor initialData={data} />;
 }
+
+

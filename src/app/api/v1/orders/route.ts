@@ -459,17 +459,21 @@ export async function POST(request: NextRequest) {
         const bcrypt = await import("bcryptjs");
         // Random password — guest must use "forgot password" to set their own
         const randomPass = randomBytes(16).toString("hex");
-        const customerEmail = (data.customer_email || data.email || "").trim() || null;
-        await prisma.user.create({
-          data: {
-            name: customerName,
-            email: customerEmail, // null when guest didn't supply one
-            password: await bcrypt.hash(randomPass, 10),
-            phone: customerPhone,
-            address: customerAddress || null,
-            role: "customer",
-          },
-        }).catch(() => {}); // Silently fail on unique-email collision
+        const customerEmail = (data.customer_email || data.email || "").trim();
+        // User.email is required + unique. Skip user creation when guest didn't
+        // supply one — phone-only guests are tracked via Order.customerPhone.
+        if (customerEmail) {
+          await prisma.user.create({
+            data: {
+              fullName: customerName,
+              email: customerEmail,
+              passwordHash: await bcrypt.hash(randomPass, 10),
+              phone: customerPhone,
+              address: customerAddress || null,
+              role: "customer",
+            },
+          }).catch(() => {}); // Silently fail on unique-email collision
+        }
       } else {
         // Update existing guest's address + name if they placed another order.
         // Backfill email if previously null and they supplied one this time.
@@ -477,7 +481,7 @@ export async function POST(request: NextRequest) {
         await prisma.user.update({
           where: { id: existing.id },
           data: {
-            name: customerName,
+            fullName: customerName,
             address: customerAddress || existing.address,
             ...(newEmail && !existing.email ? { email: newEmail } : {}),
           },

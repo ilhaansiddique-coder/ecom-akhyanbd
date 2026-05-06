@@ -179,7 +179,7 @@ export default function SettingsClient({ initialData }: { initialData?: Settings
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Used in header, footer, and admin sidebar. Falls back to /logo.svg if empty.</p>
+                <p className="text-xs text-gray-400 mt-2">Used in header, footer, and admin sidebar. Falls back to /Logo.webp if empty.</p>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">

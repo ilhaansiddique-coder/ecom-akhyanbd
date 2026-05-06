@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ReviewsClient from "./ReviewsClient";
@@ -36,3 +36,5 @@ export default async function ReviewsPage() {
     return <ReviewsClient initialData={{ items: [], total: 0 }} />;
   }
 }
+
+

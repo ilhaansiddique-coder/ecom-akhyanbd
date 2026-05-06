@@ -1,8 +1,8 @@
 /**
- * Custom Server Entry Point
+ * Next.js Custom Server Entry Point with CORS Support
  *
- * This is an alternative to using ecosystem.config.js
- * Use this if you want more control over the server startup
+ * For Flutter Web or any cross-origin requests, CORS is configured here.
+ * For Flutter Mobile (iOS/Android), CORS is not needed.
  */
 
 const { createServer } = require('http');
@@ -20,6 +20,30 @@ app.prepare().then(() => {
   createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
+
+      // Add CORS headers for API routes (before any other handling)
+      if (req.url.startsWith('/api/v1')) {
+        const origin = req.headers.origin || '*';
+
+        // Handle preflight requests FIRST, before Next.js sees them
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200, {
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie, X-Requested-With',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400',
+          });
+          res.end();
+          console.log(`CORS preflight OK: ${req.url} from ${origin}`);
+          return;
+        }
+
+        // Set CORS headers for actual requests
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
@@ -37,5 +61,6 @@ app.prepare().then(() => {
           dev ? 'development' : process.env.NODE_ENV
         }`
       );
+      console.log(`> CORS enabled for API routes (/api/v1/*)`);
     });
 });

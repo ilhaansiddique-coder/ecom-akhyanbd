@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import DashboardPage from "../DashboardHomeClient";
@@ -8,17 +8,14 @@ export const dynamic = "force-dynamic";
 export default async function DashboardServerPage() {
   const user = await getSessionUser();
 
-  // Staff have no dashboard home — bounce them to their first allowed page.
-  if (user?.role === "staff") redirect("/dashboard/products");
-
-  // Customers + unauthenticated users get the customer-view fallback (the
-  // client decides what to render). Only admin sees the full analytics block.
+  // Non-admins get the customer-view fallback (the client decides what to render).
+  // Only super-admins see the full analytics block.
   if (!user || user.role !== "admin") {
     return <DashboardPage />;
   }
 
   try {
-    // BD timezone (UTC+6, no DST). Computed first — referenced by all queries.
+    // BD timezone (UTC+6, no DST). Computed first â€” referenced by all queries.
     const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
     const nowMs = Date.now();
     const bdDayStartShifted = Math.floor((nowMs + BD_OFFSET_MS) / 86400000) * 86400000;
@@ -32,7 +29,7 @@ export default async function DashboardServerPage() {
       days.push(new Date(today.getTime() - i * 86400000));
     }
 
-    // ── Single Promise.all — all queries fire in parallel, zero waterfalls ──
+    // â”€â”€ Single Promise.all â€” all queries fire in parallel, zero waterfalls â”€â”€
     const [
       totalOrders,
       pendingOrders,
@@ -50,7 +47,7 @@ export default async function DashboardServerPage() {
       topProductsRaw,
       ...dailyCounts
     ] = await Promise.all([
-      // Order counts / aggregates — all scoped to today (default view)
+      // Order counts / aggregates â€” all scoped to today (default view)
       prisma.order.count({ where: { status: { not: "trashed" }, createdAt: { gte: today } } }),
       prisma.order.count({ where: { status: "pending", createdAt: { gte: today } } }),
       prisma.order.aggregate({
@@ -62,8 +59,8 @@ export default async function DashboardServerPage() {
         where: { status: "cancelled", createdAt: { gte: today } },
       }),
       prisma.product.count(),
-      prisma.user.count({ where: { role: "customer" } }),
-      // Only select columns the dashboard actually renders — avoids pulling
+      prisma.user.count({ where: { isSuperAdmin: false } }),
+      // Only select columns the dashboard actually renders â€” avoids pulling
       // address, notes, createdBy, etc. over the wire.
       prisma.order.findMany({
         take: 10,
@@ -83,7 +80,7 @@ export default async function DashboardServerPage() {
           },
         },
       }),
-      // Courier-sent ("actual sales") — today-scoped for SSR default.
+      // Courier-sent ("actual sales") â€” today-scoped for SSR default.
       // Anchored on courierSentAt (dispatch day) not createdAt, and uses
       // the courierSent flag rather than status="shipped" so orders that
       // were sent today but already delivered/cancelled still count.
@@ -100,21 +97,21 @@ export default async function DashboardServerPage() {
         by: ["customerPhone"],
         where: { courierSent: true, status: { not: "trashed" }, courierSentAt: { gte: today } },
       }),
-      // Status breakdown — previously a sequential await after the first batch
+      // Status breakdown â€” previously a sequential await after the first batch
       prisma.order.groupBy({
         by: ["status"],
         _count: { id: true },
         where: { createdAt: { gte: today } },
       }),
-      // Revenue by status — previously a sequential await after statusCountsRaw
+      // Revenue by status â€” previously a sequential await after statusCountsRaw
       prisma.order.groupBy({
         by: ["status"],
         _sum: { total: true, shippingCost: true },
         where: { status: { notIn: ["cancelled", "trashed"] }, createdAt: { gte: today } },
       }),
-      // Low stock — threshold ≤ 10. Split simple vs variable:
-      //  - Simple:   parent.stock ≤ 10 AND !unlimited.
-      //  - Variable: ANY active variant with stock ≤ 10 AND !unlimited.
+      // Low stock â€” threshold â‰¤ 10. Split simple vs variable:
+      //  - Simple:   parent.stock â‰¤ 10 AND !unlimited.
+      //  - Variable: ANY active variant with stock â‰¤ 10 AND !unlimited.
       // Parent.stock is stale on variable products (admin edits per-variant);
       // old `stock: lte: N` query falsely flagged every variable product whose
       // parent column was 0 even when every variant had healthy stock.
@@ -136,13 +133,13 @@ export default async function DashboardServerPage() {
           },
         },
       }),
-      // Top products — previously a sequential await, now parallel
+      // Top products â€” previously a sequential await, now parallel
       prisma.product.findMany({
         orderBy: { soldCount: "desc" },
         take: 5,
         select: { id: true, name: true, soldCount: true, price: true, image: true },
       }),
-      // Daily bar chart — last 7 BD days, spread inline to avoid a second Promise.all
+      // Daily bar chart â€” last 7 BD days, spread inline to avoid a second Promise.all
       ...days.map((day) => {
         const next = new Date(day.getTime() + 86400000);
         return prisma.order.count({
@@ -157,7 +154,7 @@ export default async function DashboardServerPage() {
       if (s.status in orderCounts) orderCounts[s.status] = s._count.id;
     }
     // Roll up confirmed + processing + shipped + delivered into "confirmed".
-    // Once an order is confirmed it never reverts — shipping/delivery are
+    // Once an order is confirmed it never reverts â€” shipping/delivery are
     // downstream stages of the same locked-in sale, so the merchant-facing
     // "Confirmed" count covers all of them. Mirrors the same rollup in
     // /api/v1/admin/dashboard so SSR and client-fetch agree.
@@ -194,8 +191,8 @@ export default async function DashboardServerPage() {
       low_stock_count: lowStockRaw.length,
       shipped_orders: shippedCount,
       shipped_revenue: shippedRevenue,
-      today_shipped: shippedCount,          // same scope → same value
-      today_shipped_revenue: shippedRevenue, // same scope → same value
+      today_shipped: shippedCount,          // same scope â†’ same value
+      today_shipped_revenue: shippedRevenue, // same scope â†’ same value
       shipped_customers: shippedCustomerGroups.length,
     };
 
@@ -261,3 +258,5 @@ export default async function DashboardServerPage() {
     return <DashboardPage />;
   }
 }
+
+
