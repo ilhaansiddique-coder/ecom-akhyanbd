@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { paginatedResponse } from "@/lib/paginate";
 import { requireStaff } from "@/lib/auth-helpers";
 
 // Lazy auto-purge: drop unconverted rows older than 10 days on every list call.
@@ -60,7 +61,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return jsonResponse({ data: filtered.map(serialize) });
+    return jsonResponse(
+      paginatedResponse(filtered, {
+        page: 1,
+        perPage: filtered.length || 1,
+        total: filtered.length,
+      }),
+    );
   } catch (e) {
     console.error("[IncompleteOrder] list error:", e);
     return errorResponse("Failed to fetch incomplete orders", 500);

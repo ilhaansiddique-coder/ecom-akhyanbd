@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, unauthorized } from "@/lib/api-response";
-import { getSessionUser, deriveRole } from "@/lib/auth";
+import { getSessionUser, serializePublicUser } from "@/lib/auth";
 
+// Returns the current user as a flat object. Used by the dashboard frontend.
+// Flutter clients should call /auth/me which wraps the same payload in
+// { data: ... }; both endpoints share serializePublicUser() so the shape
+// inside is identical.
 export async function GET() {
   const sessionUser = await getSessionUser();
   if (!sessionUser) return unauthorized();
@@ -13,13 +17,5 @@ export async function GET() {
 
   if (!user) return unauthorized();
 
-  return jsonResponse({
-    id: user.id,
-    name: user.fullName,
-    email: user.email,
-    phone: user.phone,
-    role: deriveRole(user),
-    avatar: user.image,
-    createdAt: user.createdAt,
-  });
+  return jsonResponse(serializePublicUser(user));
 }

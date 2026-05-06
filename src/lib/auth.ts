@@ -29,6 +29,42 @@ export function deriveRole(user: { role?: string | null; isSuperAdmin?: boolean 
 }
 
 /**
+ * Canonical public shape for a user object across /auth/user, /auth/me,
+ * and /auth/profile. Keep this the only place the shape is defined so
+ * the three endpoints stay in sync.
+ */
+export interface PublicUser {
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  role: string;
+  avatar: string | null;
+  createdAt: Date | null;
+}
+
+export function serializePublicUser(user: {
+  id: string;
+  fullName: string | null;
+  email: string;
+  phone: string | null;
+  role?: string | null;
+  isSuperAdmin?: boolean | null;
+  image: string | null;
+  createdAt: Date | null;
+}): PublicUser {
+  return {
+    id: user.id,
+    name: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: deriveRole(user),
+    avatar: user.image,
+    createdAt: user.createdAt,
+  };
+}
+
+/**
  * Create a JWT token for a user.
  */
 export async function createToken(user: SessionUser): Promise<string> {

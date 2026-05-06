@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse } from "@/lib/api-response";
+import { paginatedResponse } from "@/lib/paginate";
 
 export async function GET() {
   const brands = await prisma.brand.findMany({
@@ -11,11 +12,12 @@ export async function GET() {
     },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = brands.map((b: any) => ({
+  const result = brands.map((b) => ({
     ...serialize(b),
     products_count: b._count.products,
   }));
 
-  return jsonResponse(result);
+  return jsonResponse(
+    paginatedResponse(result, { page: 1, perPage: result.length || 1, total: result.length }),
+  );
 }
