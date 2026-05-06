@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
-import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
+import { jsonResponse, notFound, errorResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
+import { deviceStatusSchema } from "@/lib/validation";
 
 export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
@@ -32,7 +34,11 @@ export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_reques
 export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const body = await request.json();
-  const { status, blockReason } = body;
+  const parsed = deviceStatusSchema.safeParse(body);
+  if (!parsed.success) {
+    return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+  }
+  const { status, blockReason } = parsed.data;
 
   const existing = await prisma.deviceFingerprint.findUnique({
     where: { id: Number(id) },
@@ -41,8 +47,7 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
   if (!existing) return notFound("Device not found");
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {};
+    const updateData: Prisma.DeviceFingerprintUncheckedUpdateInput = {};
 
     if (status === "blocked") {
       updateData.status = "blocked";

@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
+import { shortlinkSchema } from "@/lib/validation";
 
 // GET — list all shortlinks (newest first). Staff + admin can manage.
 export const GET = withStaff(async (request) => {
@@ -23,10 +24,15 @@ export const POST = withStaff(async (request) => {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
+    const parsed = shortlinkSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+    const data = parsed.data;
 
-    const slug = String(body.slug || "").trim().toLowerCase();
-    const targetUrl = String(body.target_url || "").trim();
-    const isActive = body.is_active === false ? false : true;
+    const slug = String(data.slug || "").trim().toLowerCase();
+    const targetUrl = String(data.target_url || "").trim();
+    const isActive = data.is_active === false ? false : true;
 
     const v = isValidShortlinkSlug(slug);
     if (!v.ok) return errorResponse(v.reason, 422);

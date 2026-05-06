@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
@@ -12,8 +13,7 @@ export const GET = withStaff(async (request) => {
   const minScore = Number(sp.get("minScore")) || 0;
   const search = sp.get("search") || undefined;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
+  const where: Prisma.DeviceFingerprintWhereInput = {};
   if (status) where.status = status;
   if (minScore > 0) where.riskScore = { gte: minScore };
   if (search) {

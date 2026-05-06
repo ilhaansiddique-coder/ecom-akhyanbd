@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
@@ -20,8 +21,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
 
     const data = parsed.data;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {
+    const updateData: Prisma.UserUpdateInput = {
       fullName: data.name,
       email: data.email,
       phone: data.phone ?? null,

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
@@ -44,8 +45,7 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
       nextStatus = "shipped";
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = { status: nextStatus };
+    const updateData: Prisma.OrderUncheckedUpdateInput = { status: nextStatus };
     if (data.payment_status) updateData.paymentStatus = data.payment_status;
 
     // Handle Purchase / OrderCancelled event based on new status.

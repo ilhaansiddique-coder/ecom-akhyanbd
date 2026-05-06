@@ -1,12 +1,18 @@
 import { NextRequest } from "next/server";
-import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { testSmtpConnection, clearSmtpCache } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { smtpTestSchema } from "@/lib/validation";
 
 export const POST = withAdmin(async (request) => {
   try {
-    const { host, port, user, pass, from } = await request.json();
+    const body = await request.json();
+    const parsed = smtpTestSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+    const { host, port, user, pass, from } = parsed.data;
 
     // Save to DB first
     const keys: Record<string, string> = {

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
@@ -16,8 +17,7 @@ export const GET = withAdmin(async (request) => {
   const role = searchParams.get("role");
   const search = searchParams.get("search");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
+  const where: Prisma.UserWhereInput = {};
   if (role) where.isSuperAdmin = role === "admin";
   if (search) {
     where.OR = [

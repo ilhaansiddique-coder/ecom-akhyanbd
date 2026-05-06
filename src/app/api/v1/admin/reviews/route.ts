@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse } from "@/lib/api-response";
@@ -10,8 +11,7 @@ export const GET = withAdmin(async (request) => {
   const perPage = 15;
   const isApproved = searchParams.get("is_approved");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
+  const where: Prisma.ReviewWhereInput = {};
   if (isApproved === "1" || isApproved === "true") where.isApproved = true;
   if (isApproved === "0" || isApproved === "false") where.isApproved = false;
 

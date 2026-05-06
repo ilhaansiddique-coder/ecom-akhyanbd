@@ -4,6 +4,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { normalizePhone, isValidBDPhone } from "@/lib/spamDetection";
+import { blockedPhoneSchema } from "@/lib/validation";
 
 export const GET = withStaff(async (request) => {
   const rows = await prisma.blockedPhone.findMany({ orderBy: { createdAt: "desc" } });
@@ -12,13 +13,18 @@ export const GET = withStaff(async (request) => {
 
 export const POST = withStaff(async (request, _ctx, admin) => {
   const body = await request.json();
-  const rawPhone: string = body.phone || body.phone_number || "";
+  const parsed = blockedPhoneSchema.safeParse(body);
+  if (!parsed.success) {
+    return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+  }
+  const data = parsed.data;
+  const rawPhone: string = data.phone || data.phone_number || "";
   if (!rawPhone.trim()) return validationError({ phone: ["Phone is required"] });
   if (!isValidBDPhone(rawPhone)) return validationError({ phone: ["Invalid BD phone number"] });
 
   const phone = normalizePhone(rawPhone);
-  const reason: string = body.reason?.trim() || "manual_block";
-  const orderId = Number(body.order_id) || null;
+  const reason: string = data.reason?.trim() || "manual_block";
+  const orderId = data.order_id ? Number(data.order_id) : null;
 
   const blocked = await prisma.blockedPhone.upsert({
     where: { phone },

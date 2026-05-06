@@ -2,10 +2,11 @@ import { NextRequest } from "next/server";
 import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
-import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { clearSmtpCache, clearEmailBrandCache } from "@/lib/email";
 import { clearEmailTemplatesCache } from "@/lib/email-templates";
+import { siteSettingsSchema } from "@/lib/validation";
 
 export const GET = withAdmin(async (_request) => {
   const settings = await prisma.siteSetting.findMany();
@@ -39,9 +40,14 @@ export const GET = withAdmin(async (_request) => {
 export const PUT = withAdmin(async (request) => {
   try {
     const body = await request.json();
+    const parsed = siteSettingsSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+    const data = parsed.data;
 
     // Skip masked values — don't overwrite secrets with "••••••••"
-    const incoming = Object.entries(body).filter(([_, v]) => v !== "••••••••");
+    const incoming = Object.entries(data).filter(([_, v]) => v !== "••••••••");
     if (incoming.length === 0) return jsonResponse({ message: "Nothing to update" });
 
     // Only upsert keys whose value actually changed — saves N round trips per save.

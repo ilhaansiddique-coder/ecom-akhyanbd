@@ -345,3 +345,128 @@ export const orderStatusSchema = z.object({
   status: z.enum(["pending", "processing", "on_hold", "confirmed", "shipped", "delivered", "cancelled", "trashed"]),
   payment_status: z.enum(["unpaid", "paid"]).optional(),
 });
+
+// ─── Admin: Order edit (PUT /admin/orders/[id]) ───
+// Partial update — every field optional. Caller's existing handler walks
+// each `body.x !== undefined`, so we mirror that with `.optional()` on
+// everything. `items` replaces the entire order line set when provided.
+export const adminOrderUpdateSchema = z.object({
+  customer_name: z.string().optional(),
+  customer_phone: z.string().optional(),
+  customer_email: z.string().nullable().optional().or(z.literal("")),
+  customer_address: z.string().optional(),
+  city: z.string().optional(),
+  zip_code: z.string().nullable().optional().or(z.literal("")),
+  status: z.string().optional(),
+  payment_status: z.string().optional(),
+  payment_method: z.string().optional(),
+  shipping_cost: z.coerce.number().optional(),
+  discount: z.coerce.number().optional(),
+  notes: z.string().nullable().optional().or(z.literal("")),
+  courier_sent: z.boolean().optional(),
+  consignment_id: z.string().nullable().optional().or(z.literal("")),
+  courier_status: z.string().nullable().optional().or(z.literal("")),
+  courier_type: z.string().nullable().optional().or(z.literal("")),
+  subtotal: z.coerce.number().optional(),
+  total: z.coerce.number().optional(),
+  items: z.array(z.object({
+    product_id: z.coerce.number().nullable().optional(),
+    product_name: z.string().optional(),
+    variant_id: z.coerce.number().nullable().optional(),
+    variant_label: z.string().nullable().optional(),
+    price: z.coerce.number(),
+    quantity: z.coerce.number(),
+  })).optional(),
+});
+
+// ─── Admin: Review update ───
+export const adminReviewUpdateSchema = z.object({
+  is_approved: z.boolean().optional(),
+  rating: z.coerce.number().optional(),
+  review: z.string().optional(),
+  customer_name: z.string().optional(),
+  image: z.string().nullable().optional().or(z.literal("")),
+});
+
+// ─── Admin: SMTP test ───
+export const smtpTestSchema = z.object({
+  host: z.string().optional(),
+  port: z.coerce.number().optional(),
+  user: z.string().optional(),
+  pass: z.string().optional(),
+  from: z.string().optional(),
+});
+
+// ─── Admin: Feed defaults ───
+export const feedDefaultsSchema = z.object({
+  brand: z.string().optional(),
+  condition: z.enum(["new", "refurbished", "used"]).optional(),
+  google_product_category: z.string().optional(),
+  site_url: z.string().optional(),
+});
+
+// ─── Admin: Shortlinks ───
+export const shortlinkSchema = z.object({
+  slug: z.string().min(1),
+  target_url: z.string().min(1),
+  is_active: z.boolean().optional(),
+});
+
+export const shortlinkUpdateSchema = z.object({
+  slug: z.string().optional(),
+  target_url: z.string().optional(),
+  is_active: z.boolean().optional(),
+});
+
+// ─── Admin: Spam — blocked phone ───
+export const blockedPhoneSchema = z.object({
+  phone: z.string().optional(),
+  phone_number: z.string().optional(),
+  reason: z.string().optional(),
+  order_id: z.coerce.number().nullable().optional(),
+});
+
+// ─── Admin: Spam — blocked IP ───
+export const blockedIpSchema = z.object({
+  ip_address: z.string().optional(),
+  reason: z.string().nullable().optional(),
+});
+
+// ─── Admin: Spam — device status ───
+export const deviceStatusSchema = z.object({
+  status: z.enum(["blocked", "safe", "active"]).optional(),
+  blockReason: z.string().nullable().optional(),
+});
+
+// ─── Admin: Block-from-order ───
+export const blockFromOrderSchema = z.object({
+  reason: z.string().optional(),
+});
+
+// ─── Admin: Users bulk ───
+export const usersBulkSchema = z.object({
+  action: z.enum(["delete", "update_role"]),
+  ids: z.array(z.union([z.string(), z.number()])).optional(),
+  role: z.enum(["customer", "staff", "admin"]).optional(),
+});
+
+// ─── Admin: Form submission update ───
+export const formSubmissionUpdateSchema = z.object({
+  status: z.string().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+// ─── Admin: Slug generation ───
+export const generateSlugSchema = z.object({
+  name: z.string().min(1),
+});
+
+// ─── Admin: Media delete ───
+export const mediaDeleteSchema = z.object({
+  filename: z.string().min(1),
+});
+
+// ─── Admin: Site settings (PUT) ───
+// Settings is an open-ended key/value bag — admin can save any setting key.
+// We only validate that the body is an object whose values are stringable.
+export const siteSettingsSchema = z.record(z.string(), z.unknown());

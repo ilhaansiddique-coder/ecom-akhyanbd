@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
-import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
 import { isCloudinaryConfigured, cloudinaryList, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
+import { mediaDeleteSchema } from "@/lib/validation";
 
 const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
 const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
@@ -102,10 +103,12 @@ export const GET = withStaff(async (_request) => {
  */
 export const DELETE = withStaff(async (request) => {
   try {
-    const { filename } = await request.json();
-    if (!filename || typeof filename !== "string") {
-      return errorResponse("Filename required", 400);
+    const body = await request.json();
+    const parsed = mediaDeleteSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
     }
+    const { filename } = parsed.data;
 
     if (isR2Configured()) {
       // Accept keys that may have a leading slash or path prefix

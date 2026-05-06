@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
@@ -21,8 +22,7 @@ export const GET = withStaff(async (request) => {
   const categoryId = searchParams.get("category_id");
   const trash      = searchParams.get("trash") === "1";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
+  const where: Prisma.ProductWhereInput = {};
   if (search)     where.name = { contains: search, mode: "insensitive" };
   if (categoryId) where.categoryId = Number(categoryId);
   // Trash view shows only soft-deleted; default view excludes them.

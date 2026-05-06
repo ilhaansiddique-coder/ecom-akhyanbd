@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
+import { jsonResponse, errorResponse, notFound, validationError } from "@/lib/api-response";
 import { withAdmin, withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
+import { shortlinkUpdateSchema } from "@/lib/validation";
 
 // PUT — update. Body can change slug, target_url, is_active.
 export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
@@ -13,13 +15,17 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
 
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
+    const parsed = shortlinkUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+    const input = parsed.data;
 
     // Build the partial update — only touch fields the caller actually sent.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: any = {};
+    const data: Prisma.ShortlinkUncheckedUpdateInput = {};
 
-    if (body.slug !== undefined) {
-      const slug = String(body.slug).trim().toLowerCase();
+    if (input.slug !== undefined) {
+      const slug = String(input.slug).trim().toLowerCase();
       const v = isValidShortlinkSlug(slug);
       if (!v.ok) return errorResponse(v.reason, 422);
       // Reject collision with another row.
@@ -30,8 +36,8 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
       data.slug = slug;
     }
 
-    if (body.target_url !== undefined) {
-      const targetUrl = String(body.target_url).trim();
+    if (input.target_url !== undefined) {
+      const targetUrl = String(input.target_url).trim();
       if (!targetUrl) return errorResponse("Target URL is required.", 422);
       if (/^\s*(javascript|data|vbscript):/i.test(targetUrl)) {
         return errorResponse("Target URL scheme not allowed.", 422);
@@ -39,8 +45,8 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
       data.targetUrl = targetUrl;
     }
 
-    if (body.is_active !== undefined) {
-      data.isActive = !!body.is_active;
+    if (input.is_active !== undefined) {
+      data.isActive = !!input.is_active;
     }
 
     if (Object.keys(data).length === 0) return errorResponse("Nothing to update", 400);

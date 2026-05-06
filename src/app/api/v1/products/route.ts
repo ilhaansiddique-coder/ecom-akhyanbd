@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
 import { inStockWhere } from "@/lib/productFilters";
@@ -25,8 +26,7 @@ function buildCachedQuery(
   };
   const orderByField = sortMap[sortBy] || "sortOrder";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { isActive: true, deletedAt: null };
+  const where: Prisma.ProductWhereInput = { isActive: true, deletedAt: null };
   if (categoryId) {
     const catId = Number(categoryId);
     where.OR = [
@@ -46,7 +46,8 @@ function buildCachedQuery(
 
   // Hide fully-out-of-stock products from customers. AND'd onto the existing
   // filter so categoryId/featured constraints still apply.
-  where.AND = [...(where.AND ?? []), inStockWhere];
+  const existingAnd = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+  where.AND = [...existingAnd, inStockWhere];
 
   const cacheKey = `products:${page}:${perPage}:${categoryId}:${brandId}:${isFeatured}:${sortBy}:${sortDir}:x${excludeCategoryId || ""}:i${excludeId || ""}`;
 

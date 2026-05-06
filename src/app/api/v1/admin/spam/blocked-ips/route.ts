@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
+import { blockedIpSchema } from "@/lib/validation";
 
 export const GET = withStaff(async (request) => {
   const ips = await prisma.blockedIp.findMany({ orderBy: { createdAt: "desc" } });
@@ -11,7 +12,11 @@ export const GET = withStaff(async (request) => {
 
 export const POST = withStaff(async (request) => {
   const body = await request.json();
-  const { ip_address, reason } = body;
+  const parsed = blockedIpSchema.safeParse(body);
+  if (!parsed.success) {
+    return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+  }
+  const { ip_address, reason } = parsed.data;
 
   if (!ip_address?.trim()) {
     return validationError({ ip_address: ["IP address is required"] });

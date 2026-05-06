@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse } from "@/lib/api-response";
@@ -16,8 +17,7 @@ export const GET = withStaff(async (request) => {
   const dateFrom = searchParams.get("date_from"); // YYYY-MM-DD
   const dateTo = searchParams.get("date_to");     // YYYY-MM-DD
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {};
+  const where: Prisma.OrderWhereInput = {};
   if (status) {
     where.status = status;
   } else {
@@ -42,9 +42,10 @@ export const GET = withStaff(async (request) => {
       const [yy, mm, dd] = ymd.split("-").map(Number);
       return Date.UTC(yy, (mm || 1) - 1, dd || 1) - 6 * 3600 * 1000;
     };
-    where.createdAt = {};
-    if (dateFrom) where.createdAt.gte = new Date(toBdMidnightMs(dateFrom));
-    if (dateTo) where.createdAt.lte = new Date(toBdMidnightMs(dateTo) + 86400000 - 1);
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (dateFrom) createdAt.gte = new Date(toBdMidnightMs(dateFrom));
+    if (dateTo) createdAt.lte = new Date(toBdMidnightMs(dateTo) + 86400000 - 1);
+    where.createdAt = createdAt;
   }
 
   const [orders, total] = await Promise.all([

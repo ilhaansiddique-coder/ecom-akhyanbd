@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
+import { usersBulkSchema } from "@/lib/validation";
 
 /**
  * Bulk operations on users.
@@ -22,11 +23,13 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const b = body as { action?: unknown; ids?: unknown; role?: unknown };
-  const action = String(b?.action ?? "");
-  const rawIds = Array.isArray(b?.ids) ? b.ids : [];
+  const parsed = usersBulkSchema.safeParse(body);
+  if (!parsed.success) {
+    return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+  }
+  const { action, ids: rawIds = [], role } = parsed.data;
   const ids = rawIds
-    .map((x: unknown) => (typeof x === "string" ? x : String(x ?? "")))
+    .map((x) => (typeof x === "string" ? x : String(x ?? "")))
     .filter((s: string) => s.length > 0)
     .filter((s: string) => s !== admin.id);
 
@@ -40,8 +43,7 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
   }
 
   if (action === "update_role") {
-    const role = String(b?.role ?? "");
-    if (!["customer", "staff", "admin"].includes(role)) {
+    if (!role) {
       return validationError({ role: ["Role must be customer, staff, or admin"] });
     }
     const result = await prisma.user.updateMany({

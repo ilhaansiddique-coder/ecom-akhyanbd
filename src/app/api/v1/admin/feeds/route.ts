@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, errorResponse } from "@/lib/api-response";
+import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { loadFeedDefaults, loadFeedItems } from "@/lib/feedSource";
+import { feedDefaultsSchema } from "@/lib/validation";
 
 // Lightweight stats for the /dashboard/feeds page. Counts how many products
 // + variant rows the feeds expose, plus the active flash-sale tally so admin
@@ -44,17 +45,22 @@ export const PUT = withStaff(async (request) => {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
+    const parsed = feedDefaultsSchema.safeParse(body);
+    if (!parsed.success) {
+      return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    }
+    const data = parsed.data;
 
     const updates: { key: string; value: string }[] = [];
-    if (typeof body.brand === "string") updates.push({ key: "feed_brand", value: body.brand.trim() });
-    if (body.condition === "new" || body.condition === "refurbished" || body.condition === "used") {
-      updates.push({ key: "feed_condition", value: body.condition });
+    if (typeof data.brand === "string") updates.push({ key: "feed_brand", value: data.brand.trim() });
+    if (data.condition) {
+      updates.push({ key: "feed_condition", value: data.condition });
     }
-    if (typeof body.google_product_category === "string") {
-      updates.push({ key: "feed_google_category", value: body.google_product_category.trim() });
+    if (typeof data.google_product_category === "string") {
+      updates.push({ key: "feed_google_category", value: data.google_product_category.trim() });
     }
-    if (typeof body.site_url === "string") {
-      updates.push({ key: "site_url", value: body.site_url.trim().replace(/\/$/, "") });
+    if (typeof data.site_url === "string") {
+      updates.push({ key: "site_url", value: data.site_url.trim().replace(/\/$/, "") });
     }
     if (updates.length === 0) return errorResponse("Nothing to update", 400);
 
