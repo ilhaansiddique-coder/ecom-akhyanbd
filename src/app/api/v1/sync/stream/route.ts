@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
       // Send a snapshot of current versions so a fresh tab can sync state
       // without having to wait for the next bump.
-      const initial = ["orders", "products", "categories", "brands", "reviews"]
+      const initial = ["orders", "products", "categories", "brands", "reviews", "theme", "settings", "banners", "menus", "flash-sales"]
         .filter((c) => !filter || c === filter)
         .map((c) => ({ channel: c, version: getVersion(c) }));
       for (const e of initial) safeEnqueue(`data: ${JSON.stringify(e)}\n\n`);

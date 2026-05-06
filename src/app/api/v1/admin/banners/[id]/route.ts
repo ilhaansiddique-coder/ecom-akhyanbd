@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { bannerSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -38,6 +39,8 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     revalidateAll("banners");
+
+    bumpVersion("banners");
     return jsonResponse(serialize(banner));
   } catch (error) {
     return errorResponse("Failed to update banner", 500);
@@ -51,5 +54,6 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   await prisma.banner.delete({ where: { id: Number(id) } });
   revalidateAll("banners");
+  bumpVersion("banners");
   return jsonResponse({ message: "Banner deleted" });
 });

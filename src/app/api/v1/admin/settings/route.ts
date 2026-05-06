@@ -7,6 +7,7 @@ import { withAdmin } from "@/lib/auth-helpers";
 import { clearSmtpCache, clearEmailBrandCache } from "@/lib/email";
 import { clearEmailTemplatesCache } from "@/lib/email-templates";
 import { siteSettingsSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (_request) => {
   const settings = await prisma.siteSetting.findMany();
@@ -82,6 +83,17 @@ export const PUT = withAdmin(async (request) => {
     if (changed.some(([k]) => k === "email_templates")) {
       clearEmailTemplatesCache();
     }
+
+    // Push live updates to subscribed clients (Flutter / open browser tabs).
+    // Split bumps so the Flutter SSE client knows whether to re-fetch
+    // /api/v1/theme (theme channel) or /api/v1/settings (settings channel)
+    // — a typography change shouldn't force a full settings refetch and
+    // vice versa.
+    const themePrefixes = ["theme.", "site_logo", "favicon", "site_name", "site_tagline", "site_description"];
+    const isThemeChange = changed.some(([k]) => themePrefixes.some((p) => k === p || k.startsWith(p)));
+    if (isThemeChange) bumpVersion("theme");
+    bumpVersion("settings");
+
     return jsonResponse({ message: "Settings updated", changed: changed.length });
   } catch (error) {
     console.error("Settings PUT error:", error);

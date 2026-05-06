@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { bannerSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (_request) => {
   const banners = await prisma.banner.findMany({
@@ -41,6 +42,8 @@ export const POST = withAdmin(async (request) => {
     });
 
     revalidateAll("banners");
+
+    bumpVersion("banners");
     return jsonResponse(serialize(banner), 201);
   } catch (error) {
     return errorResponse("Failed to create banner", 500);

@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { flashSaleSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (_request) => {
   const flashSales = await prisma.flashSale.findMany({
@@ -44,6 +45,8 @@ export const POST = withAdmin(async (request) => {
     });
 
     revalidateAll("flash-sales");
+
+    bumpVersion("flash-sales");
     return jsonResponse(serialize(flashSale), 201);
   } catch (error) {
     return errorResponse("Failed to create flash sale", 500);

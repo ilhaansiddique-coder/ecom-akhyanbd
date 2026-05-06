@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { menuSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -32,6 +33,8 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     revalidateAll("menus");
+
+    bumpVersion("menus");
     return jsonResponse(serialize(menu));
   } catch (error) {
     return errorResponse("Failed to update menu", 500);
@@ -45,5 +48,6 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   await prisma.navMenu.delete({ where: { id: Number(id) } });
   revalidateAll("menus");
+  bumpVersion("menus");
   return jsonResponse({ message: "Menu deleted" });
 });
