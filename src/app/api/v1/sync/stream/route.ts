@@ -1,36 +1,48 @@
 /**
  * GET /api/v1/sync/stream
  *
- * Server-Sent Events feed. Replaces the 5-second `/api/v1/sync` polling.
- * One long-lived connection per browser tab; server pushes events when any
- * `bumpVersion(channel)` call fires from a write route. Idle traffic = 0.
+ * Server-Sent Events feed. One long-lived connection per client; the server
+ * pushes events when any `bumpVersion(channel)` call fires from a write
+ * route. Idle traffic ≈ 1 Redis command per 25s per connected client.
  *
  * Wire format (SSE):
- *   data: {"channel":"orders","version":42}\n\n
+ *   data: {"channel":"orders","version":42,"ts":1700000000000,"notify":{...}}\n\n
  *
  * Heartbeat (`: ping\n\n`) every 25s keeps proxies (Cloudflare default 100s
- * idle close, Nginx default 60s) from killing the connection. EventSource
- * auto-reconnects on close, so a dropped link self-heals.
+ * idle close, Nginx default 60s) from killing the connection. Clients
+ * auto-reconnect on close, so a dropped link self-heals.
+ *
+ * Backed by `eventStream()` in `lib/sync.ts`, which is Redis-backed when
+ * `UPSTASH_REDIS_REST_*` env vars are present (production on Vercel) and
+ * EventEmitter-backed otherwise (local dev / single-process self-hosted).
  *
  * Runtime:
- *   - Forced to `nodejs` because Edge has no EventEmitter access to the
- *     same module-singleton our writes mutate.
- *   - `dynamic = "force-dynamic"` prevents static optimization.
+ *   - `nodejs`: needed for the Redis client and the long-running iterator.
+ *   - `force-dynamic`: prevents static optimization of an inherently live route.
+ *   - `maxDuration`: extend Vercel's per-request limit. The client's
+ *     watchdog reconnects on disconnect, so even if a function hits the
+ *     limit, the user notices nothing.
  */
 import { NextRequest } from "next/server";
-import { subscribe, getVersion } from "@/lib/sync";
+import { eventStream, getVersion } from "@/lib/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Vercel: Hobby caps at 60s, Pro at 300s, Enterprise at 800s. We ask for
+// 800 — Vercel silently clamps to the plan max, so this is safe everywhere.
+export const maxDuration = 800;
+
+const SEEDED_CHANNELS = [
+  "orders", "products", "categories", "brands", "reviews",
+  "theme", "settings", "banners", "menus", "flash-sales",
+];
 
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
-  // Optional channel filter — if provided, only push events for that channel.
-  // Default = subscribe to all channels (clients filter in JS).
   const filter = request.nextUrl.searchParams.get("channel");
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       let closed = false;
       const safeEnqueue = (chunk: string) => {
         if (closed) return;
@@ -38,31 +50,42 @@ export async function GET(request: NextRequest) {
         catch { closed = true; }
       };
 
-      // Send a snapshot of current versions so a fresh tab can sync state
-      // without having to wait for the next bump.
-      const initial = ["orders", "products", "categories", "brands", "reviews", "theme", "settings", "banners", "menus", "flash-sales"]
-        .filter((c) => !filter || c === filter)
-        .map((c) => ({ channel: c, version: getVersion(c) }));
+      // Snapshot current versions so a fresh client syncs without waiting
+      // for the next bump. Parallel reads — Redis pipelines under the hood.
+      const channels = SEEDED_CHANNELS.filter((c) => !filter || c === filter);
+      const initial = await Promise.all(
+        channels.map(async (c) => ({ channel: c, version: await getVersion(c) }))
+      );
       for (const e of initial) safeEnqueue(`data: ${JSON.stringify(e)}\n\n`);
 
       // Heartbeat — keeps idle proxies from closing the connection.
       const heartbeat = setInterval(() => safeEnqueue(`: ping\n\n`), 25_000);
 
-      // Pub/sub subscription
-      const unsubscribe = subscribe((evt) => {
-        if (filter && evt.channel !== filter) return;
-        safeEnqueue(`data: ${JSON.stringify(evt)}\n\n`);
-      });
-
-      // Cleanup on client disconnect
+      // Wire client abort to our local AbortController so the iterator stops.
+      const ac = new AbortController();
       const onAbort = () => {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
-        unsubscribe();
+        ac.abort();
         try { controller.close(); } catch {}
       };
       request.signal.addEventListener("abort", onAbort);
+
+      // Drain the event iterator. This loop runs for the lifetime of the
+      // connection. `eventStream()` blocks on Redis XREAD (25s) or the
+      // EventEmitter, so we don't busy-loop.
+      try {
+        for await (const evt of eventStream({ signal: ac.signal })) {
+          if (closed) break;
+          if (filter && evt.channel !== filter) continue;
+          safeEnqueue(`data: ${JSON.stringify(evt)}\n\n`);
+        }
+      } catch (e) {
+        console.error("[sync/stream] iterator error:", e);
+      } finally {
+        onAbort();
+      }
     },
   });
 
@@ -71,7 +94,6 @@ export async function GET(request: NextRequest) {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
-      // Disable buffering on Nginx / CF / Vercel layers that respect this hint.
       "X-Accel-Buffering": "no",
     },
   });
