@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validation";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
-import { setSessionCookie } from "@/lib/auth";
+import { setSessionCookie, createToken, deriveRole } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -21,23 +21,26 @@ export async function POST(request: NextRequest) {
   const { email, password } = parsed.data;
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (!user || !(await bcrypt.compare(password, user.password))) {
+  if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     return validationError({ email: ["ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।"] });
   }
 
   const sessionUser = {
     id: user.id,
-    name: user.name,
+    name: user.fullName || email,
     email: user.email,
     phone: user.phone,
-    role: user.role,
+    role: deriveRole(user),
   };
 
-  // Set httpOnly JWT cookie
+  // Set httpOnly JWT cookie (works for same-origin browser clients)
   await setSessionCookie(sessionUser);
+  // Also return JWT in response body — required for cross-origin Flutter web
+  // (SameSite=Lax cookies are dropped on cross-origin fetch) and mobile clients.
+  const token = await createToken(sessionUser);
 
   return jsonResponse({
     user: sessionUser,
-    token: "session",
+    token,
   });
 }

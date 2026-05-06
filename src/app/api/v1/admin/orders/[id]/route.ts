@@ -15,7 +15,10 @@ export async function GET(
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id: Number(id) },
-    include: { items: { include: { product: { select: { image: true } } } }, user: true },
+    include: {
+      items: { include: { product: { select: { image: true } } } },
+      user: { select: { id: true, fullName: true, email: true, phone: true, image: true } },
+    },
   });
 
   if (!order) return notFound("Order not found");
@@ -154,7 +157,10 @@ export async function PUT(
     const order = await prisma.order.update({
       where: { id: Number(id) },
       data: updateData,
-      include: { items: true, user: true },
+      include: {
+        items: true,
+        user: { select: { id: true, fullName: true, email: true, phone: true, image: true } },
+      },
     });
 
     bumpVersion("orders");

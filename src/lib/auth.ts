@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 if (!process.env.NEXTAUTH_SECRET) {
   throw new Error("NEXTAUTH_SECRET environment variable is required. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
@@ -9,11 +9,23 @@ const COOKIE_NAME = "akhiyan_session";
 const MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
 export interface SessionUser {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone?: string | null;
   role: string;
+}
+
+/**
+ * Single source of truth for deriving the JWT `role` claim from a User row.
+ * Respects the `role` column (so DB-set "staff" reaches `requireStaff()`)
+ * and promotes `isSuperAdmin` users to "admin" regardless of their stored role.
+ */
+export function deriveRole(user: { role?: string | null; isSuperAdmin?: boolean | null }): string {
+  if (user.isSuperAdmin) return "admin";
+  const r = (user.role || "customer").toLowerCase();
+  if (r === "admin" || r === "staff") return r;
+  return "customer";
 }
 
 /**
@@ -67,13 +79,21 @@ export async function clearSessionCookie(): Promise<void> {
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(COOKIE_NAME)?.value;
+    // Prefer Authorization: Bearer <jwt> (used by Flutter web/mobile clients
+    // since SameSite=Lax cookies are dropped on cross-origin fetch).
+    let token: string | undefined;
+    const headerStore = await headers();
+    const auth = headerStore.get("authorization") || headerStore.get("Authorization");
+    if (auth?.startsWith("Bearer ")) token = auth.slice(7).trim();
+    if (!token) {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    }
     if (!token) return null;
 
     const { payload } = await jwtVerify(token, SECRET);
     return {
-      id: payload.id as number,
+      id: payload.id as string,
       name: payload.name as string,
       email: payload.email as string,
       phone: (payload.phone as string | null) || null,

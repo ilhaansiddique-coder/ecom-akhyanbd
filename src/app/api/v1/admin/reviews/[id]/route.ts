@@ -31,7 +31,7 @@ export async function PUT(
     const review = await prisma.review.update({
       where: { id: Number(id) },
       data: updateData,
-      include: { product: true, user: true },
+      include: { product: true },
     });
 
     revalidateAll("reviews");

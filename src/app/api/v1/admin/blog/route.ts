@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   const [posts, total] = await Promise.all([
     prisma.blogPost.findMany({
-      include: { author: true },
+      include: { author: { select: { id: true, fullName: true, email: true, image: true } } },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
       take: perPage,
@@ -58,11 +58,11 @@ export async function POST(request: NextRequest) {
         metaDescription: data.meta_description ?? null,
         metaKeywords: data.meta_keywords ?? null,
         ogImage: data.og_image ?? null,
-        authorId: Number(admin.id),
+        authorId: admin.id,
         isPublished: data.is_published ?? false,
         publishedAt: data.published_at ? new Date(data.published_at) : null,
       },
-      include: { author: true },
+      include: { author: { select: { id: true, fullName: true, email: true, image: true } } },
     });
 
     revalidateAll("blog");

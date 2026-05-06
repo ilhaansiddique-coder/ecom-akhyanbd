@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const [reviews, total] = await Promise.all([
     prisma.review.findMany({
       where,
-      include: { product: true, user: true },
+      include: { product: true },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
       take: perPage,

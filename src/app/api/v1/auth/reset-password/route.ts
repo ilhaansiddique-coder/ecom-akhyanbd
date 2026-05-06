@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { resetPasswordSchema } from "@/lib/validation";
-import { setSessionCookie } from "@/lib/auth";
+import { setSessionCookie, createToken, deriveRole } from "@/lib/auth";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -32,17 +32,24 @@ export async function POST(request: NextRequest) {
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { password: await bcrypt.hash(password, 12) },
+    data: { passwordHash: await bcrypt.hash(password, 12) },
   });
 
   await prisma.passwordResetToken.delete({ where: { email } });
 
-  const sessionUser = { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role };
+  const sessionUser = {
+    id: user.id,
+    name: user.fullName || email,
+    email: user.email,
+    phone: user.phone,
+    role: deriveRole(user),
+  };
   await setSessionCookie(sessionUser);
+  const token = await createToken(sessionUser);
 
   return jsonResponse({
     message: "পাসওয়ার্ড রিসেট সফল হয়েছে।",
     user: sessionUser,
-    token: "session",
+    token,
   });
 }

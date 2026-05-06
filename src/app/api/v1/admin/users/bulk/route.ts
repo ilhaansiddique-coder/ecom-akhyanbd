@@ -7,8 +7,8 @@ import { requireAdmin } from "@/lib/auth-helpers";
  * Bulk operations on users.
  *
  * POST /api/v1/admin/users/bulk
- *   { action: "delete", ids: number[] }
- *   { action: "update_role", ids: number[], role: "customer" | "staff" | "admin" }
+ *   { action: "delete", ids: string[] }
+ *   { action: "update_role", ids: string[], role: "customer" | "staff" | "admin" }
  *
  * The acting admin's own id is always stripped from the ids list before
  * the operation runs — so a stray select-all + delete can never lock the
@@ -25,15 +25,13 @@ export async function POST(request: NextRequest) {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const b = body as any;
+  const b = body as { action?: unknown; ids?: unknown; role?: unknown };
   const action = String(b?.action ?? "");
   const rawIds = Array.isArray(b?.ids) ? b.ids : [];
   const ids = rawIds
-    .map((x: unknown) => Number(x))
-    .filter((n: number) => Number.isFinite(n) && n > 0)
-    // never let a bulk action touch the acting admin's own account
-    .filter((n: number) => n !== Number(admin.id));
+    .map((x: unknown) => (typeof x === "string" ? x : String(x ?? "")))
+    .filter((s: string) => s.length > 0)
+    .filter((s: string) => s !== admin.id);
 
   if (ids.length === 0) {
     return validationError({ ids: ["No valid ids provided (or only the current admin was selected)"] });

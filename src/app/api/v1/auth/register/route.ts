@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validation";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
-import { setSessionCookie } from "@/lib/auth";
+import { setSessionCookie, createToken, deriveRole } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
@@ -34,22 +34,21 @@ export async function POST(request: NextRequest) {
 
   const hashedPassword = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { name, email, password: hashedPassword, phone: phone || null, role: "customer" },
+    data: { fullName: name, email, passwordHash: hashedPassword, phone: phone || null },
   });
 
   const sessionUser = {
     id: user.id,
-    name: user.name,
+    name: user.fullName || email,
     email: user.email,
     phone: user.phone,
-    role: user.role,
+    role: deriveRole(user),
   };
 
-  // Set httpOnly JWT cookie
   await setSessionCookie(sessionUser);
+  const token = await createToken(sessionUser);
 
-  // Send welcome email (non-blocking)
-  sendWelcomeEmail(email, name);
+  sendWelcomeEmail(email, user.fullName || name);
 
-  return jsonResponse({ user: sessionUser, token: "session" }, 201);
+  return jsonResponse({ user: sessionUser, token }, 201);
 }

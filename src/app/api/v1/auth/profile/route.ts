@@ -4,6 +4,7 @@ import { serialize } from "@/lib/serialize";
 import { updateProfileSchema } from "@/lib/validation";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-helpers";
+import { deriveRole } from "@/lib/auth";
 
 export async function PUT(request: NextRequest) {
   let user;
@@ -28,11 +29,19 @@ export async function PUT(request: NextRequest) {
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: {
-      ...(data.name !== undefined && { name: data.name }),
+      ...(data.name !== undefined && { fullName: data.name }),
       ...(data.email !== undefined && { email: data.email }),
       ...(data.phone !== undefined && { phone: data.phone }),
     },
   });
 
-  return jsonResponse(serialize(updated));
+  return jsonResponse({
+    id: updated.id,
+    name: updated.fullName,
+    email: updated.email,
+    phone: updated.phone,
+    role: deriveRole(updated),
+    avatar: updated.image,
+    createdAt: updated.createdAt,
+  });
 }
