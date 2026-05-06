@@ -1,4 +1,4 @@
-# Ma Bhesoj Commerce (মা ভেষজ বাণিজ্যালয়)
+# Akhiyan BD E-Commerce
 
 A full-stack e-commerce platform for natural herbal products, built with **Next.js 16** and **Laravel 13**.
 
