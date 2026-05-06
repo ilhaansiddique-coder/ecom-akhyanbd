@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { jsonResponse, cachedJsonResponse } from "@/lib/api-response";
+import { jsonResponse, cachedJsonResponse, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 
 // Order statuses that should NOT count toward "sold" rollups. Cancelled,
@@ -23,6 +23,7 @@ const EXCLUDED_FROM_SALES = ["cancelled", "returned", "trashed"];
  *              Sent by the dashboard date pill.
  */
 export const GET = withAdmin(async (request) => {
+  try {
   const { searchParams } = request.nextUrl;
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
@@ -169,4 +170,13 @@ export const GET = withAdmin(async (request) => {
       topProducts,
     },
   }, { sMaxAge: 30 });
+  } catch (err) {
+    // Diagnostic: the route was returning a generic 500 with no detail in the
+    // browser console. Log the real Prisma/runtime error to the dev terminal
+    // so the failing query is identifiable, and surface a short message back
+    // to the client so the Flutter UI can show it instead of a bare 500.
+    console.error("[dashboard] failed:", err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return errorResponse(`Dashboard query failed: ${msg}`, 500);
+  }
 });
