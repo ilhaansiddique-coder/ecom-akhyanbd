@@ -3,25 +3,19 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { flashSaleSchema } from "@/lib/validation";
 
-export async function GET(_request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (_request) => {
   const flashSales = await prisma.flashSale.findMany({
     include: { products: { include: { product: true } } },
     orderBy: { createdAt: "desc" },
   });
 
   return jsonResponse(flashSales.map(serialize));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const POST = withAdmin(async (request) => {
   try {
     const body = await request.json();
     const parsed = flashSaleSchema.safeParse(body);
@@ -54,4 +48,4 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return errorResponse("Failed to create flash sale", 500);
   }
-}
+});

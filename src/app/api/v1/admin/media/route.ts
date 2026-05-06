@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
 import { isCloudinaryConfigured, cloudinaryList, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
@@ -14,9 +14,7 @@ const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
  * GET /api/v1/admin/media — List all uploaded files.
  * Prefers R2 when configured, falls back to local uploads dir.
  */
-export async function GET(_request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (_request) => {
   try {
     if (isR2Configured()) {
       const objects = await r2List();
@@ -96,15 +94,13 @@ export async function GET(_request: NextRequest) {
   } catch {
     return errorResponse("Failed to list media", 500);
   }
-}
+});
 
 /**
  * DELETE /api/v1/admin/media — Delete an uploaded file.
  * Accepts either a bare filename (legacy local) or an R2 key.
  */
-export async function DELETE(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const DELETE = withStaff(async (request) => {
   try {
     const { filename } = await request.json();
     if (!filename || typeof filename !== "string") {
@@ -141,4 +137,4 @@ export async function DELETE(request: NextRequest) {
   } catch {
     return errorResponse("Failed to delete file", 500);
   }
-}
+});

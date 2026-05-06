@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 
 /** Parse YYYY-MM-DD (BD, UTC+6) → UTC Date at BD midnight */
@@ -23,9 +23,7 @@ const IN_TRANSIT = new Set([
 ]);
 // Everything else (null, "Pending", "At Warehouse", "In Review", etc.) → pending
 
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   try {
     const { searchParams } = request.nextUrl;
     const fromParam    = searchParams.get("from");
@@ -170,4 +168,4 @@ export async function GET(request: NextRequest) {
     console.error("Courier monitor error:", error);
     return errorResponse("Failed to fetch courier data", 500);
   }
-}
+});

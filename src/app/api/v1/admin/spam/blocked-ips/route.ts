@@ -2,18 +2,14 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
-export async function GET() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const ips = await prisma.blockedIp.findMany({ orderBy: { createdAt: "desc" } });
   return jsonResponse(ips.map(serialize));
-}
+});
 
-export async function POST(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   const body = await request.json();
   const { ip_address, reason } = body;
 
@@ -31,4 +27,4 @@ export async function POST(request: NextRequest) {
   });
 
   return jsonResponse(serialize(blocked), 201);
-}
+});

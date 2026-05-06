@@ -3,14 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { userSchema } from "@/lib/validation";
 import bcrypt from "bcryptjs";
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (request) => {
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   // 20/page → matches orders/products convention. Pagination only renders
@@ -21,11 +18,11 @@ export async function GET(request: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
-  if (role) where.role = role;
+  if (role) where.isSuperAdmin = role === "admin";
   if (search) {
     where.OR = [
-      { name: { contains: search } },
-      { email: { contains: search } },
+      { fullName: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
     ];
   }
 
@@ -33,8 +30,14 @@ export async function GET(request: NextRequest) {
     prisma.user.findMany({
       where,
       select: {
-        id: true, name: true, email: true, phone: true, address: true, role: true,
-        avatar: true, createdAt: true, updatedAt: true,
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        image: true,
+        isSuperAdmin: true,
+        createdAt: true,
+        updatedAt: true,
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
@@ -43,13 +46,23 @@ export async function GET(request: NextRequest) {
     prisma.user.count({ where }),
   ]);
 
-  return jsonResponse(paginatedResponse(users, { page, perPage, total }));
-}
+  // Transform response to match frontend expectations
+  const formattedUsers = users.map((u) => ({
+    id: u.id,
+    name: u.fullName,
+    email: u.email,
+    phone: u.phone,
+    address: "", // Address is a separate model, return empty for now
+    role: u.isSuperAdmin ? "admin" : "customer",
+    avatar: u.image,
+    created_at: u.createdAt,
+    updated_at: u.updatedAt,
+  }));
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
+  return jsonResponse(paginatedResponse(formattedUsers, { page, perPage, total }));
+});
 
+export const POST = withAdmin(async (request) => {
   try {
     const body = await request.json();
     const parsed = userSchema.safeParse(body);
@@ -66,21 +79,43 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.create({
       data: {
-        name: data.name,
+        fullName: data.name,
         email: data.email,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         phone: data.phone ?? null,
-        address: data.address ?? null,
-        role: data.role ?? "customer",
+        isSuperAdmin: data.role === "admin",
       },
     });
 
     const created = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { id: true, name: true, email: true, phone: true, address: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        image: true,
+        isSuperAdmin: true,
+        createdAt: true,
+      },
     });
-    return jsonResponse(serialize(created), 201);
+
+    // Transform response to match frontend expectations
+    const formatted = {
+      id: created!.id,
+      name: created!.fullName,
+      email: created!.email,
+      phone: created!.phone,
+      address: "",
+      role: created!.isSuperAdmin ? "admin" : "customer",
+      avatar: created!.image,
+      created_at: created!.createdAt,
+    };
+
+    return jsonResponse(serialize(formatted), 201);
   } catch (error) {
-    return errorResponse("Failed to create user", 500);
+    console.error("User create error:", error);
+    const message = error instanceof Error ? error.message : "Failed to create user";
+    return errorResponse(message, 500);
   }
-}
+});

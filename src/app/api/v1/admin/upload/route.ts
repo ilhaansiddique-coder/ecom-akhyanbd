@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2Upload } from "@/lib/r2";
 import { isCloudinaryConfigured, cloudinaryUpload } from "@/lib/cloudinary";
@@ -21,9 +21,7 @@ const MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-export async function POST(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -73,35 +71,28 @@ export async function POST(request: NextRequest) {
     const uniqueName = `${basename}-${Date.now()}${finalExt}`;
     const contentType = MIME[finalExt] || "application/octet-stream";
 
-    // Storage tier preference:
-    //   1. Cloudflare R2 (production primary)
-    //   2. Cloudinary (fallback when R2 missing — both tiers can be set on
-    //      the same env file; R2 still wins, Cloudinary takes over only if
-    //      R2 is unconfigured)
-    //   3. Local disk (dev fallback so missing creds don't break uploads)
-    //
-    // Each tier is wrapped in its own try so a misconfig (bad keys, signature
-    // failure, network blip) returns the actual upstream error in the response
-    // and to server logs, instead of the previous blanket "Failed to upload"
-    // 500 that hid every real cause.
-    if (isR2Configured()) {
+    // Storage tier order is controlled by STORAGE_PRIMARY env var:
+    //   "cloudinary" → Cloudinary first, R2 fallback. Use this when the CDN
+    //                  in front of R2 (cdn.akhiyanbd.com) doesn't send CORS
+    //                  headers, since Flutter web XHRs images and breaks.
+    //   anything else (default) → R2 first, Cloudinary fallback.
+    // Local disk is always the final fallback so dev keeps working.
+    const primary = (process.env.STORAGE_PRIMARY || "r2").toLowerCase();
+    const tiers: Array<{ name: string; ready: () => boolean; upload: () => Promise<string> }> = [];
+    const r2 = { name: "r2", ready: isR2Configured, upload: () => r2Upload(uniqueName, buffer, contentType) };
+    const cl = { name: "cloudinary", ready: isCloudinaryConfigured, upload: () => cloudinaryUpload(uniqueName, buffer, contentType) };
+    if (primary === "cloudinary") tiers.push(cl, r2);
+    else tiers.push(r2, cl);
+
+    for (const tier of tiers) {
+      if (!tier.ready()) continue;
       try {
-        const url = await r2Upload(uniqueName, buffer, contentType);
-        return jsonResponse({ url, path: url, tier: "r2" }, 201);
+        const url = await tier.upload();
+        return jsonResponse({ url, path: url, tier: tier.name }, 201);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "R2 upload failed";
-        console.error("[upload] R2 failed:", msg);
-        return errorResponse(`R2 upload failed: ${msg}`, 500);
-      }
-    }
-    if (isCloudinaryConfigured()) {
-      try {
-        const url = await cloudinaryUpload(uniqueName, buffer, contentType);
-        return jsonResponse({ url, path: url, tier: "cloudinary" }, 201);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Cloudinary upload failed";
-        console.error("[upload] Cloudinary failed:", msg);
-        return errorResponse(`Cloudinary upload failed: ${msg}`, 500);
+        const msg = e instanceof Error ? e.message : `${tier.name} upload failed`;
+        console.error(`[upload] ${tier.name} failed:`, msg);
+        // Fall through to next tier — don't 500 yet; try the backup.
       }
     }
 
@@ -116,4 +107,4 @@ export async function POST(request: NextRequest) {
     console.error("[upload] handler error:", msg);
     return errorResponse(`Failed to upload file: ${msg}`, 500);
   }
-}
+});

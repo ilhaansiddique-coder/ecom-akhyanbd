@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import {
   sendToPathao,
   sendBulkToPathao,
@@ -47,9 +47,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * GET ?action=status&consignment_id=XXX
  * GET ?action=cities | zones&city_id=XX | areas&zone_id=XX | stores
  */
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const action = request.nextUrl.searchParams.get("action");
 
   if (action === "test") {
@@ -122,7 +120,7 @@ export async function GET(request: NextRequest) {
   }
 
   return errorResponse("Invalid action. Use: test, balance, status, cities, zones, areas, stores", 400);
-}
+});
 
 // Build Pathao payload from order
 function buildPathaoPayload(order: any): PathaoOrder {
@@ -162,9 +160,7 @@ function buildPathaoPayload(order: any): PathaoOrder {
  * POST /api/v1/admin/courier/pathao
  * { order_id } | { order_ids } | { action: "bulk_send", order_ids } | { action: "check_status", order_id }
  */
-export async function POST(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   const body = await request.json();
 
   // Bust 5-min settings cache so a just-saved Pathao credential is read
@@ -465,4 +461,4 @@ export async function POST(request: NextRequest) {
   }
 
   return errorResponse("Provide order_id or order_ids", 400);
-}
+});

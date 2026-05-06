@@ -2,16 +2,10 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin, withStaff } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id: Number(id) },
@@ -44,15 +38,9 @@ export async function GET(
   };
 
   return jsonResponse(serialize(orderWithVariantImages));
-}
+});
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Order not found");
@@ -169,17 +157,11 @@ export async function PUT(
     console.error("Order update error:", error);
     return errorResponse("Failed to update order", 500);
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // Order deletion (trash + hard delete) is admin-only. Staff can update
-  // status, send to courier, etc. but never destroy customer-facing data.
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+// Order deletion (trash + hard delete) is admin-only. Staff can update
+// status, send to courier, etc. but never destroy customer-facing data.
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Order not found");
@@ -209,4 +191,4 @@ export async function DELETE(
   } catch (error) {
     return errorResponse("Failed to delete order", 500);
   }
-}
+});

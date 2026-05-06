@@ -2,14 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const device = await prisma.deviceFingerprint.findUnique({
     where: { id: Number(id) },
@@ -32,14 +27,9 @@ export async function GET(
   if (!device) return notFound("Device not found");
 
   return jsonResponse(serialize(device));
-}
+});
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const body = await request.json();
   const { status, blockReason } = body;
@@ -93,4 +83,4 @@ export async function PUT(
   } catch {
     return errorResponse("Failed to update device", 500);
   }
-}
+});

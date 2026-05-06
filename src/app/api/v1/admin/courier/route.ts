@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import {
   sendToSteadfast,
   sendBulkToSteadfast,
@@ -47,10 +47,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * GET /api/v1/admin/courier?action=status&consignment_id=XXX
  * GET /api/v1/admin/courier?action=score&phone=01XXXXXXXXX
  */
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const action = request.nextUrl.searchParams.get("action");
 
   // Test action — must run before configured check (it clears cache to re-read from DB)
@@ -120,7 +117,7 @@ export async function GET(request: NextRequest) {
   }
 
   return errorResponse("Invalid action. Use: balance, status, score, test", 400);
-}
+});
 
 // Helper: build clean Steadfast payload from order
 function buildSteadfastPayload(order: any) {
@@ -161,10 +158,7 @@ function buildSteadfastPayload(order: any) {
  * Body: { action: "bulk_send", order_ids: number[] } — Bulk send via Steadfast bulk API
  * Body: { action: "check_status", order_id: number } — Check & update status
  */
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   const body = await request.json();
 
   // Clear cache so we always read the latest keys from DB — admin may have
@@ -424,4 +418,4 @@ export async function POST(request: NextRequest) {
   }
 
   return errorResponse("Provide order_id or order_ids", 400);
-}
+});

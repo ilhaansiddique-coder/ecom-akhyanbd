@@ -1,12 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
 
 // GET — list all shortlinks (newest first). Staff + admin can manage.
-export async function GET() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const GET = withStaff(async (request) => {
   try {
     const rows = await prisma.shortlink.findMany({
       orderBy: { createdAt: "desc" },
@@ -17,11 +16,10 @@ export async function GET() {
     console.error("[Shortlinks] list error:", e);
     return errorResponse("Failed to fetch shortlinks", 500);
   }
-}
+});
 
 // POST — create. Body: { slug, target_url, is_active? }
-export async function POST(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const POST = withStaff(async (request) => {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
@@ -53,4 +51,4 @@ export async function POST(request: NextRequest) {
     console.error("[Shortlinks] create error:", e);
     return errorResponse("Failed to create shortlink", 500);
   }
-}
+});

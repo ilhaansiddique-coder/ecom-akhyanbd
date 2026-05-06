@@ -13,16 +13,10 @@
  */
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { blockCustomerFromOrder } from "@/lib/spamGuard";
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }, admin) => {
   const { id } = await params;
   const orderId = Number(id);
   if (!Number.isFinite(orderId) || orderId <= 0) return errorResponse("Invalid order id", 400);
@@ -39,4 +33,4 @@ export async function POST(
     console.error("[block-from-order]", e);
     return errorResponse("Failed to block customer", 500);
   }
-}
+});

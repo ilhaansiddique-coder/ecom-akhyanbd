@@ -4,7 +4,7 @@ import {
   getMerchantPanelToken,
   clearMerchantPanelTokenCache,
 } from "@/lib/pathaoMerchantAuth";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 
 const BASE = "https://merchant.pathao.com/api/v1";
@@ -156,9 +156,7 @@ async function fetchInvoiceStats(token: string): Promise<Record<string, unknown>
 }
 
 // ─── GET /api/v1/admin/courier/pathao-parcels ─────────────────────────────────
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   try {
     const sp        = request.nextUrl.searchParams;
     const tab       = (sp.get("tab") || "active") as PathaoTab;
@@ -648,4 +646,4 @@ export async function GET(request: NextRequest) {
     console.error("[PathaoParcelProxy] Error:", error);
     return errorResponse("Failed to fetch Pathao parcels", 500);
   }
-}
+});

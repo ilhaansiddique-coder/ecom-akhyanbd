@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 
 /**
  * Bulk operations on users.
@@ -14,10 +14,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
  * the operation runs — so a stray select-all + delete can never lock the
  * admin out of their own account.
  */
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const POST = withAdmin(async (request, _ctx, admin) => {
   let body: unknown;
   try {
     body = await request.json();
@@ -55,4 +52,4 @@ export async function POST(request: NextRequest) {
   }
 
   return validationError({ action: ["Unknown action — expected 'delete' or 'update_role'"] });
-}
+});

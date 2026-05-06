@@ -3,16 +3,10 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.review.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Review not found");
@@ -40,15 +34,9 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update review", 500);
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const existing = await prisma.review.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Review not found");
@@ -57,4 +45,4 @@ export async function DELETE(
   revalidateAll("reviews");
   bumpVersion("reviews");
   return jsonResponse({ message: "Review deleted" });
-}
+});

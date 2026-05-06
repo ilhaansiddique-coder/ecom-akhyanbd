@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
 // Click analytics for one shortlink. Range defaults to last 30 days; pass
 // ?range=7|30|90|all to override. Returns:
@@ -11,11 +11,7 @@ import { requireStaff } from "@/lib/auth-helpers";
 //   - sources / countries / browsers / oses / devices / referers / utm_*:
 //     [{ key, count }] groups, sorted desc, top 20 each.
 //   - recent: last 50 click rows for the live feed.
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   try {
     const { id } = await params;
     const idNum = Number(id);
@@ -176,4 +172,4 @@ export async function GET(
     console.error("[Shortlink analytics] error:", e);
     return errorResponse("Failed to load analytics", 500);
   }
-}
+});

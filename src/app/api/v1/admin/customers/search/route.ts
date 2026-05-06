@@ -1,17 +1,14 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
 /**
  * GET /api/v1/admin/customers/search?q=01700
  * Search customers by name, phone, or email.
  * Returns from both users table AND unique customers from orders.
  */
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const q = request.nextUrl.searchParams.get("q") || "";
   if (q.length < 2) return jsonResponse([]);
 
@@ -19,12 +16,12 @@ export async function GET(request: NextRequest) {
   const users = await prisma.user.findMany({
     where: {
       OR: [
-        { name: { contains: q } },
+        { fullName: { contains: q } },
         { email: { contains: q } },
         { phone: { contains: q } },
       ],
     },
-    select: { id: true, name: true, email: true, phone: true },
+    select: { id: true, fullName: true, email: true, phone: true },
     take: 5,
   });
 
@@ -47,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   // Merge — users first, then unique order customers
   const results: {
-    id?: number;
+    id?: string;
     name: string;
     phone: string;
     email?: string;
@@ -60,7 +57,7 @@ export async function GET(request: NextRequest) {
   for (const u of users) {
     results.push({
       id: u.id,
-      name: u.name,
+      name: u.fullName || "User",
       phone: u.phone || "",
       email: u.email,
       source: "registered",
@@ -84,4 +81,4 @@ export async function GET(request: NextRequest) {
   }
 
   return jsonResponse(results.slice(0, 8));
-}
+});

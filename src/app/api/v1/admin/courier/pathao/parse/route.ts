@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { getMerchantPanelToken, clearMerchantPanelTokenCache } from "@/lib/pathaoMerchantAuth";
 import { listPathaoAreas } from "@/lib/pathao";
 import { rescoreArea } from "@/lib/pathaoAreaRescore";
@@ -17,9 +17,7 @@ import { rescoreArea } from "@/lib/pathaoAreaRescore";
  * On 401: bust cached token, force a fresh login, retry once. If still
  * 401 the credentials themselves are likely wrong.
  */
-export async function POST(req: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (req) => {
   const body = await req.json().catch(() => ({}));
   const address = String(body.address || "").trim();
   const phone = String(body.phone || "").trim();
@@ -91,4 +89,4 @@ export async function POST(req: NextRequest) {
     console.error("[pathao/parse] error:", err);
     return errorResponse(err instanceof Error ? err.message : "Parse failed", 500);
   }
-}
+});

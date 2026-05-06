@@ -13,7 +13,7 @@
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 
 export type SteadfastTab = "active" | "delivered" | "partial" | "returned_reversed" | "paid_zero";
@@ -54,9 +54,7 @@ function bdMidnightUtc(dateStr: string): Date {
 }
 
 // ─── GET handler ─────────────────────────────────────────────────────────────
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   try {
     const sp        = request.nextUrl.searchParams;
     const tab       = (sp.get("tab") || "active") as SteadfastTab;
@@ -274,4 +272,4 @@ export async function GET(request: NextRequest) {
     console.error("[SteadfastParcels] Error:", error);
     return errorResponse("Failed to fetch Steadfast parcels", 500);
   }
-}
+});

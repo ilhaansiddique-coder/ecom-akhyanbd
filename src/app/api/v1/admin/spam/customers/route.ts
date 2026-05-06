@@ -29,14 +29,12 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
 const PER_PAGE = 25;
 const SCAN_CAP = 2000; // last 2000 orders → derive phones
 
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const sp = request.nextUrl.searchParams;
   const q = (sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "risk") as "risk" | "cancelled" | "orders" | "recent";
@@ -173,4 +171,4 @@ export async function GET(request: NextRequest) {
   const pageItems = items.slice(start, start + PER_PAGE);
 
   return jsonResponse({ items: pageItems, total, page, perPage: PER_PAGE });
-}
+});

@@ -3,14 +3,11 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { clearSmtpCache, clearEmailBrandCache } from "@/lib/email";
 import { clearEmailTemplatesCache } from "@/lib/email-templates";
 
-export async function GET(_request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (_request) => {
   const settings = await prisma.siteSetting.findMany();
 
   // Sensitive keys — mask in API response (write-only)
@@ -37,12 +34,9 @@ export async function GET(_request: NextRequest) {
   }
 
   return jsonResponse(result);
-}
+});
 
-export async function PUT(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const PUT = withAdmin(async (request) => {
   try {
     const body = await request.json();
 
@@ -87,4 +81,4 @@ export async function PUT(request: NextRequest) {
     console.error("Settings PUT error:", error);
     return errorResponse("Failed to update settings", 500);
   }
-}
+});

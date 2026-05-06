@@ -2,12 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (request) => {
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const perPage = 15;
@@ -30,4 +27,4 @@ export async function GET(request: NextRequest) {
   ]);
 
   return jsonResponse(paginatedResponse(reviews, { page, perPage, total }));
-}
+});

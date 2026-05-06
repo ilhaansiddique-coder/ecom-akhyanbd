@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
 /** Parse YYYY-MM-DD (BD, UTC+6) → UTC Date at BD midnight */
 function bdMidnightUtc(dateStr: string): Date {
@@ -11,10 +11,7 @@ function bdMidnightUtc(dateStr: string): Date {
   return new Date(Date.UTC(y, m - 1, d) - 6 * 60 * 60 * 1000);
 }
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   try {
     const { searchParams } = request.nextUrl;
     const fromParam = searchParams.get("from"); // YYYY-MM-DD BD
@@ -89,7 +86,7 @@ export async function GET(request: NextRequest) {
         _sum: { total: true, shippingCost: true },
         where: { status: "cancelled", ...createdAtFilter },
       }),
-      prisma.user.count({ where: { role: "customer" } }),
+      prisma.user.count({ where: { isSuperAdmin: false } }),
       prisma.product.count(),
       // activeProducts removed — not consumed by the frontend Stats interface
       prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),
@@ -285,4 +282,4 @@ export async function GET(request: NextRequest) {
     console.error("Dashboard error:", error);
     return errorResponse("Failed to fetch dashboard data", 500);
   }
-}
+});

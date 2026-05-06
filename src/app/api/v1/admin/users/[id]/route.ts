@@ -2,19 +2,13 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { userSchema } from "@/lib/validation";
 import bcrypt from "bcryptjs";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
-  const existing = await prisma.user.findUnique({ where: { id: Number(id) } });
+  const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return notFound("User not found");
 
   try {
@@ -28,40 +22,41 @@ export async function PUT(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {
-      name: data.name,
+      fullName: data.name,
       email: data.email,
       phone: data.phone ?? null,
-      address: data.address ?? null,
-      role: data.role ?? "customer",
+      isSuperAdmin: data.role === "admin",
     };
 
     if (data.password) {
-      updateData.password = await bcrypt.hash(data.password, 10);
+      updateData.passwordHash = await bcrypt.hash(data.password, 10);
     }
 
     const user = await prisma.user.update({
-      where: { id: Number(id) },
+      where: { id },
       data: updateData,
     });
 
-    const { password, ...userWithoutPassword } = user;
+    const { passwordHash, ...userWithoutPassword } = user;
     return jsonResponse(serialize(userWithoutPassword));
   } catch (error) {
-    return errorResponse("Failed to update user", 500);
+    console.error("User update error:", error);
+    const message = error instanceof Error ? error.message : "Failed to update user";
+    return errorResponse(message, 500);
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
-  const existing = await prisma.user.findUnique({ where: { id: Number(id) } });
+  const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return notFound("User not found");
 
-  await prisma.user.delete({ where: { id: Number(id) } });
-  return jsonResponse({ message: "User deleted" });
-}
+  try {
+    await prisma.user.delete({ where: { id } });
+    return jsonResponse({ message: "User deleted" });
+  } catch (error) {
+    console.error("User delete error:", error);
+    const message = error instanceof Error ? error.message : "Failed to delete user";
+    return errorResponse(message, 500);
+  }
+});

@@ -3,19 +3,13 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
+import { requireAdmin, withStaff } from "@/lib/auth-helpers";
 import { orderStatusSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
 import { sendToFacebookCAPI } from "@/lib/fbcapi";
 import { getSettings } from "@/lib/settingsCache";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.order.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Order not found");
@@ -144,4 +138,4 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update order status", 500);
   }
-}
+});

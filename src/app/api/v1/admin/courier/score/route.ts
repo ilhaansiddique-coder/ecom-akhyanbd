@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { isSteadfastConfigured, checkCourierScore as steadfastScore, formatPhone, clearKeyCache } from "@/lib/steadfast";
 import { hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
 import { getMerchantPanelToken, clearMerchantPanelTokenCache } from "@/lib/pathaoMerchantAuth";
@@ -106,9 +106,7 @@ async function scorePathao(phone: string): Promise<ProviderResult> {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (req) => {
   const body = await req.json().catch(() => ({}));
   let phone: string | undefined = body.phone;
   let order: { id: number; customerPhone: string } | null = null;
@@ -164,5 +162,5 @@ export async function POST(req: NextRequest) {
     success_ratio: ratio,
     providers,
   });
-}
+});
 

@@ -4,15 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { productSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const { searchParams } = request.nextUrl;
   const page    = Math.max(1, Number(searchParams.get("page")) || 1);
   // Cap raised to 1000 so the dashboard's full-list refetch (per_page=500)
@@ -75,12 +72,9 @@ export async function GET(request: NextRequest) {
   }));
 
   return jsonResponse(paginatedResponse(withSold, { page, perPage, total }));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   try {
     const body = await request.json();
     const parsed = productSchema.safeParse(body);
@@ -164,4 +158,4 @@ export async function POST(request: NextRequest) {
     const msg = error instanceof Error ? error.message : "Failed to create product";
     return errorResponse(msg, 500);
   }
-}
+});

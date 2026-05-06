@@ -3,16 +3,10 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { shippingZoneSchema } from "@/lib/validation";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.shippingZone.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Shipping zone not found");
@@ -42,15 +36,9 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update shipping zone", 500);
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const existing = await prisma.shippingZone.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Shipping zone not found");
@@ -58,4 +46,4 @@ export async function DELETE(
   await prisma.shippingZone.delete({ where: { id: Number(id) } });
   revalidateAll("shipping");
   return jsonResponse({ message: "Shipping zone deleted" });
-}
+});

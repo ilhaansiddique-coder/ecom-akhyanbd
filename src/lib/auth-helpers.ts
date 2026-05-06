@@ -39,3 +39,48 @@ export async function requireStaff(): Promise<SessionUser> {
 export function isStaffOrAdmin(role: string | null | undefined): boolean {
   return role === "admin" || role === "staff";
 }
+
+// ---------------------------------------------------------------------------
+// Route-handler wrappers
+// ---------------------------------------------------------------------------
+// These remove the `let user; try { user = await requireX(); } catch (e) {
+// return e as Response; }` boilerplate that was duplicated across ~40 files.
+// Use them on Next.js App Router route handlers:
+//
+//   export const POST = withAdmin(async (req, ctx, user) => {
+//     // user: SessionUser, guaranteed admin
+//     ...
+//   });
+//
+// For routes without dynamic params, ctx is just `unknown` — ignore it.
+// For routes with params: `withStaff<{ params: Promise<{ id: string }> }>(...)`.
+
+type RouteHandler<TCtx> = (
+  req: import("next/server").NextRequest,
+  ctx: TCtx,
+  user: SessionUser,
+) => Promise<Response> | Response;
+
+export function withAuth<TCtx = unknown>(handler: RouteHandler<TCtx>) {
+  return async (req: import("next/server").NextRequest, ctx: TCtx) => {
+    let user: SessionUser;
+    try { user = await requireAuth(); } catch (e) { return e as Response; }
+    return handler(req, ctx, user);
+  };
+}
+
+export function withAdmin<TCtx = unknown>(handler: RouteHandler<TCtx>) {
+  return async (req: import("next/server").NextRequest, ctx: TCtx) => {
+    let user: SessionUser;
+    try { user = await requireAdmin(); } catch (e) { return e as Response; }
+    return handler(req, ctx, user);
+  };
+}
+
+export function withStaff<TCtx = unknown>(handler: RouteHandler<TCtx>) {
+  return async (req: import("next/server").NextRequest, ctx: TCtx) => {
+    let user: SessionUser;
+    try { user = await requireStaff(); } catch (e) { return e as Response; }
+    return handler(req, ctx, user);
+  };
+}

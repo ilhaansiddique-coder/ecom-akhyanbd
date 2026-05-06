@@ -18,13 +18,11 @@
  *        (fine for local dev, broken on serverless like Vercel).
  */
 import { jsonResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { isR2Configured } from "@/lib/r2";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
 
-export async function GET() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const r2 = {
     configured: isR2Configured(),
     R2_ACCOUNT_ID: !!process.env.R2_ACCOUNT_ID,
@@ -52,4 +50,4 @@ export async function GET() {
       ? "Local disk fallback. On Vercel/serverless, this won't persist between requests. Set R2 or Cloudinary env vars."
       : `Uploads will use ${activeTier}. If they fail, check the upload POST response body for the upstream error.`,
   });
-}
+});

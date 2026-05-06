@@ -1,12 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  // Admin-only: staff lost real captures by accidentally clicking the trash
-  // icon. Locking deletion to admin keeps the abandonment data intact.
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+// Admin-only: staff lost real captures by accidentally clicking the trash
+// icon. Locking deletion to admin keeps the abandonment data intact.
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   try {
     const { id } = await params;
     const idNum = Number(id);
@@ -17,4 +16,4 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     console.error("[IncompleteOrder] delete error:", e);
     return errorResponse("Failed", 500);
   }
-}
+});

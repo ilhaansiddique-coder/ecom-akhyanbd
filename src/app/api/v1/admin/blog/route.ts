@@ -4,14 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { blogPostSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (request) => {
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const perPage = 15;
@@ -27,12 +24,9 @@ export async function GET(request: NextRequest) {
   ]);
 
   return jsonResponse(paginatedResponse(posts, { page, perPage, total }));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const POST = withAdmin(async (request, _ctx, admin) => {
   try {
     const body = await request.json();
     const parsed = blogPostSchema.safeParse(body);
@@ -70,4 +64,4 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return errorResponse("Failed to create blog post", 500);
   }
-}
+});

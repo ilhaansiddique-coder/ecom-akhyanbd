@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { getMerchantPanelToken, clearMerchantPanelTokenCache } from "@/lib/pathaoMerchantAuth";
 
 /**
@@ -20,9 +20,7 @@ import { getMerchantPanelToken, clearMerchantPanelTokenCache } from "@/lib/patha
  *       customer: { total_delivery, successful_delivery }
  *   } }
  */
-export async function POST(req: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (req) => {
   const body = await req.json().catch(() => ({}));
   const phone = String(body.phone || "").trim();
   if (!phone) return errorResponse("phone required", 400);
@@ -72,4 +70,4 @@ export async function POST(req: NextRequest) {
     console.error("[pathao/customer-history] error:", err);
     return errorResponse(err instanceof Error ? err.message : "History failed", 500);
   }
-}
+});

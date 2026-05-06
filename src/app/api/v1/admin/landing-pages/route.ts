@@ -3,26 +3,20 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { landingPageSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 
-export async function GET(_request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (_request) => {
   const pages = await prisma.landingPage.findMany({
     orderBy: { createdAt: "desc" },
   });
 
   return jsonResponse(pages.map(serialize));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   try {
     const body = await request.json();
     const parsed = landingPageSchema.safeParse(body);
@@ -86,4 +80,4 @@ export async function POST(request: NextRequest) {
     console.error("Landing page create error:", error);
     return errorResponse("Failed to create landing page", 500);
   }
-}
+});

@@ -1,13 +1,10 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { testSmtpConnection, clearSmtpCache } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const POST = withAdmin(async (request) => {
   try {
     const { host, port, user, pass, from } = await request.json();
 
@@ -44,4 +41,4 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : "Test failed";
     return errorResponse(message, 500);
   }
-}
+});

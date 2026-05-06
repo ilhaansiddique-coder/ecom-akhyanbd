@@ -3,24 +3,18 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { bannerSchema } from "@/lib/validation";
 
-export async function GET(_request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin(async (_request) => {
   const banners = await prisma.banner.findMany({
     orderBy: { sortOrder: "asc" },
   });
 
   return jsonResponse(banners.map(serialize));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const POST = withAdmin(async (request) => {
   try {
     const body = await request.json();
     const parsed = bannerSchema.safeParse(body);
@@ -51,4 +45,4 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return errorResponse("Failed to create banner", 500);
   }
-}
+});

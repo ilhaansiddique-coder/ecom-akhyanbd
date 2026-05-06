@@ -1,15 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff, requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin, withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
 
 // PUT — update. Body can change slug, target_url, is_active.
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   try {
     const { id } = await params;
     const idNum = Number(id);
@@ -55,15 +51,11 @@ export async function PUT(
     console.error("[Shortlinks] update error:", e);
     return errorResponse("Failed to update shortlink", 500);
   }
-}
+});
 
 // DELETE — admin-only. Same rationale as orders: don't let staff wipe
 // shareable URLs that may be live in social posts / ads.
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try { await requireAdmin(); } catch (e) { return e as Response; }
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   try {
     const { id } = await params;
     const idNum = Number(id);
@@ -74,4 +66,4 @@ export async function DELETE(
     console.error("[Shortlinks] delete error:", e);
     return errorResponse("Failed to delete shortlink", 500);
   }
-}
+});

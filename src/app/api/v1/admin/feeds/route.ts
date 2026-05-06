@@ -1,15 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { loadFeedDefaults, loadFeedItems } from "@/lib/feedSource";
 
 // Lightweight stats for the /dashboard/feeds page. Counts how many products
 // + variant rows the feeds expose, plus the active flash-sale tally so admin
 // can confirm sales are flowing through to ads. Defaults are returned too
 // so the settings panel can hydrate without a second request.
-export async function GET() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   try {
     const [items, defaults, totalProducts, activeProducts, activeFlashSales] = await Promise.all([
       loadFeedItems(),
@@ -39,11 +37,10 @@ export async function GET() {
     console.error("[Feeds] stats error:", e);
     return errorResponse("Failed to load feed stats", 500);
   }
-}
+});
 
 // Update shared defaults (brand, condition, google_product_category).
-export async function PUT(request: Request) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const PUT = withStaff(async (request) => {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") return errorResponse("Invalid body", 400);
@@ -74,4 +71,4 @@ export async function PUT(request: Request) {
     console.error("[Feeds] settings save error:", e);
     return errorResponse("Failed to save settings", 500);
   }
-}
+});

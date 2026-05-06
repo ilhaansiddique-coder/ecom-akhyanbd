@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { jsonResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { isSteadfastEnabled } from "@/lib/steadfast";
 import { isPathaoEnabled } from "@/lib/pathao";
 
@@ -9,9 +9,7 @@ import { isPathaoEnabled } from "@/lib/pathao";
  * Return list of couriers that are both enabled (admin toggle) AND configured (creds present).
  * Drives the dynamic courier picker on the orders page.
  */
-export async function GET(_req: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (_req) => {
   const [steadfast, pathao] = await Promise.all([
     isSteadfastEnabled(),
     isPathaoEnabled(),
@@ -22,4 +20,4 @@ export async function GET(_req: NextRequest) {
   if (pathao) couriers.push({ id: "pathao", label: "Pathao" });
 
   return jsonResponse({ couriers });
-}
+});

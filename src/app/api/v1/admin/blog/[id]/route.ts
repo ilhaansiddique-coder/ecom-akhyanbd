@@ -3,17 +3,11 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { withAdmin } from "@/lib/auth-helpers";
 import { blogPostSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const GET = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const post = await prisma.blogPost.findUnique({
     where: { id: Number(id) },
@@ -22,15 +16,9 @@ export async function GET(
 
   if (!post) return notFound("Blog post not found");
   return jsonResponse(serialize(post));
-}
+});
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.blogPost.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Blog post not found");
@@ -72,15 +60,9 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update blog post", 500);
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireAdmin(); } catch (e) { return e as Response; }
-
+export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const existing = await prisma.blogPost.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Blog post not found");
@@ -88,4 +70,4 @@ export async function DELETE(
   await prisma.blogPost.delete({ where: { id: Number(id) } });
   revalidateAll("blog");
   return jsonResponse({ message: "Blog post deleted" });
-}
+});

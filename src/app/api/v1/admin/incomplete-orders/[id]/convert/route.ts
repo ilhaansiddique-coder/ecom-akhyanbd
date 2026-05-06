@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, notFound } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { sendOrderConfirmation, sendAdminOrderNotification } from "@/lib/email";
 import { bumpVersion } from "@/lib/sync";
 import { revalidateTag } from "next/cache";
@@ -26,11 +26,7 @@ import { getSettings } from "@/lib/settingsCache";
 //               normal checkout-deferred behavior.
 //   defer OFF → fire CAPI immediately. No browser pixel because this is
 //               an admin action — there is no end-user browser involved.
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const POST = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   try {
     const { id } = await params;
     const idNum = Number(id);
@@ -354,4 +350,4 @@ export async function POST(
     console.error("[IncompleteOrder] convert error:", e);
     return errorResponse("Failed to convert", 500);
   }
-}
+});

@@ -3,18 +3,12 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { productSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const product = await prisma.product.findUnique({
     where: { id: Number(id) },
@@ -23,15 +17,9 @@ export async function GET(
 
   if (!product) return notFound("Product not found");
   return jsonResponse(serialize(product));
-}
+});
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Product not found");
@@ -115,15 +103,9 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update product", 500);
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const DELETE = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Product not found");
@@ -162,16 +144,10 @@ export async function DELETE(
   revalidateAll("products");
   bumpVersion("products");
   return jsonResponse({ message: "Product moved to trash" });
-}
+});
 
 // Restore from trash
-export async function PATCH(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const PATCH = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const existing = await prisma.product.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Product not found");
@@ -183,4 +159,4 @@ export async function PATCH(
   revalidateAll("products");
   bumpVersion("products");
   return jsonResponse({ message: "Product restored" });
-}
+});

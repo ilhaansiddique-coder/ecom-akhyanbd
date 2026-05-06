@@ -3,18 +3,12 @@ import { revalidateAll } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { brandSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
 import { bumpVersion } from "@/lib/sync";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
   const existing = await prisma.brand.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Brand not found");
@@ -45,15 +39,9 @@ export async function PUT(
   } catch (error) {
     return errorResponse("Failed to update brand", 500);
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const DELETE = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
   const existing = await prisma.brand.findUnique({ where: { id: Number(id) } });
   if (!existing) return notFound("Brand not found");
@@ -62,4 +50,4 @@ export async function DELETE(
   revalidateAll("brands");
   bumpVersion("brands");
   return jsonResponse({ message: "Brand deleted" });
-}
+});

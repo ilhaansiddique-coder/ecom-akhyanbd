@@ -2,19 +2,15 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { normalizePhone, isValidBDPhone } from "@/lib/spamDetection";
 
-export async function GET() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
+export const GET = withStaff(async (request) => {
   const rows = await prisma.blockedPhone.findMany({ orderBy: { createdAt: "desc" } });
   return jsonResponse(rows.map(serialize));
-}
+});
 
-export async function POST(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request, _ctx, admin) => {
   const body = await request.json();
   const rawPhone: string = body.phone || body.phone_number || "";
   if (!rawPhone.trim()) return validationError({ phone: ["Phone is required"] });
@@ -31,4 +27,4 @@ export async function POST(request: NextRequest) {
   });
 
   return jsonResponse(serialize(blocked), 201);
-}
+});

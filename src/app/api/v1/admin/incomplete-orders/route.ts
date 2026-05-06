@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { paginatedResponse } from "@/lib/paginate";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
 // Lazy auto-purge: drop unconverted rows older than 10 days on every list call.
 // Cheap because phone is unique + indexed; this stays bounded.
@@ -18,9 +18,7 @@ async function purgeOld() {
   }
 }
 
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   await purgeOld();
 
   const { searchParams } = request.nextUrl;
@@ -72,4 +70,4 @@ export async function GET(request: NextRequest) {
     console.error("[IncompleteOrder] list error:", e);
     return errorResponse("Failed to fetch incomplete orders", 500);
   }
-}
+});

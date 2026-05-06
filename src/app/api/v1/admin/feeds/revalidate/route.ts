@@ -13,11 +13,9 @@
  */
 import { revalidateTag, revalidatePath } from "next/cache";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
-export async function POST() {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const POST = withStaff(async (request) => {
   try {
     revalidateTag("feeds", "max");
     // Also bust each route's static cache so the next request rebuilds
@@ -32,4 +30,4 @@ export async function POST() {
     console.error("[Feeds] revalidate error:", e);
     return errorResponse("Failed to revalidate feeds", 500);
   }
-}
+});

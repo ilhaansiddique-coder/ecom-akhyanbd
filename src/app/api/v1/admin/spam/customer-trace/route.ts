@@ -14,12 +14,10 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 import { normalizePhone } from "@/lib/spamDetection";
 
-export async function GET(request: NextRequest) {
-  try { await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const phoneRaw = request.nextUrl.searchParams.get("phone") || "";
   const phone = normalizePhone(phoneRaw);
   if (!phone) return errorResponse("phone required", 400);
@@ -196,4 +194,4 @@ export async function GET(request: NextRequest) {
       blocked_reason: blockedDevSet.get(x.fpHash) || null,
     })),
   });
-}
+});

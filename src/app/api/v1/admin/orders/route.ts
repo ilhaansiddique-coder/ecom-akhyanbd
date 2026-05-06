@@ -2,12 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paginatedResponse } from "@/lib/paginate";
 import { jsonResponse } from "@/lib/api-response";
-import { requireStaff } from "@/lib/auth-helpers";
+import { withStaff } from "@/lib/auth-helpers";
 
-export async function GET(request: NextRequest) {
-  let admin;
-  try { admin = await requireStaff(); } catch (e) { return e as Response; }
-
+export const GET = withStaff(async (request) => {
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   // 100 per page — large enough that most merchants see their full daily
@@ -91,4 +88,4 @@ export async function GET(request: NextRequest) {
   }));
 
   return jsonResponse(paginatedResponse(ordersWithVariantImages, { page, perPage, total }));
-}
+});
