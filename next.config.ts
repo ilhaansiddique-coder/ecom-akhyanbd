@@ -15,7 +15,11 @@ let R2_HOSTNAME = "";
 try { R2_HOSTNAME = R2_PUBLIC_URL ? new URL(R2_PUBLIC_URL).hostname : ""; } catch { R2_HOSTNAME = ""; }
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // `standalone` is for self-hosted targets (Hostinger, Docker, VPS) where we
+  // ship a self-contained server bundle. Vercel does its own dep tracing and
+  // the standalone path conflicts with it (Next 16 + Turbopack fails to emit
+  // middleware.js.nft.json under standalone on Vercel). Skip it there.
+  ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
   allowedDevOrigins: ["172.16.0.2"],
   // Skip TypeScript check on production build (already checked locally)
   typescript: { ignoreBuildErrors: true },
