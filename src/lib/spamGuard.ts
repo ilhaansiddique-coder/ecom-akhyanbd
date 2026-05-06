@@ -92,18 +92,14 @@ export async function blockCustomerFromOrder(
     fp: { blocked: false, value: null },
   };
 
-  // 1. Phone — blockedBy elided until schema migration lands (String? vs
-  // current generated client's Int?). The arg is kept on the function
-  // signature for forward-compat; reinstate the write once `npx prisma
-  // generate` reflects the String? change.
-  void blockedBy;
+  // 1. Phone
   if (order.customerPhone) {
     const canonical = normalizePhone(order.customerPhone);
     if (canonical) {
       await prisma.blockedPhone.upsert({
         where: { phone: canonical },
-        update: { reason, orderId },
-        create: { phone: canonical, reason, orderId },
+        update: { reason, blockedBy: blockedBy ?? null, orderId },
+        create: { phone: canonical, reason, blockedBy: blockedBy ?? null, orderId },
       });
       result.phone = { blocked: true, value: canonical };
     }

@@ -19,13 +19,10 @@ export async function POST(request: NextRequest) {
 
   const { product_id, customer_name, rating, review: reviewText } = parsed.data;
 
-  // Review.userId is orphan in the schema (no @relation) and currently
-  // mismatched (Int? vs User.id String). Skip writing it until the schema
-  // migration to String? lands; reviews still associate to the customer
-  // via customerName + the session check above.
   const newReview = await prisma.review.create({
     data: {
       productId: product_id,
+      userId: user.id,
       customerName: customer_name,
       rating,
       review: reviewText,
