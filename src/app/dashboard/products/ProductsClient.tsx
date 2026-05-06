@@ -754,8 +754,8 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                   {p.image ? (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image)); }}
-                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image), x: r.left + r.width / 2, y: r.top }); }}
+                      onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image || "")); }}
+                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image || ""), x: r.left + r.width / 2, y: r.top }); }}
                       onMouseLeave={() => setHoverPreview(null)}
                       className="shrink-0 cursor-zoom-in"
                       aria-label="Preview image"
@@ -866,8 +866,8 @@ export default function ProductsClient({ initialData }: { initialData?: InitialD
                           {p.image ? (
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image)); }}
-                              onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image), x: r.left + r.width / 2, y: r.top }); }}
+                              onClick={(e) => { e.stopPropagation(); setPreviewImage(resolveImg(p.image || "")); }}
+                              onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPreview({ image: resolveImg(p.image || ""), x: r.left + r.width / 2, y: r.top }); }}
                               onMouseLeave={() => setHoverPreview(null)}
                               className="cursor-zoom-in"
                               aria-label="Preview image"

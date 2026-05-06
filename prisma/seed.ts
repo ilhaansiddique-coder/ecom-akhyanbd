@@ -12,10 +12,11 @@ async function main() {
     where: { email: "admin@mavesoj.com" },
     update: {},
     create: {
-      name: "Admin",
+      fullName: "Admin",
       email: "admin@mavesoj.com",
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       role: "admin",
+      isSuperAdmin: true,
       phone: "01700000000",
     },
   });

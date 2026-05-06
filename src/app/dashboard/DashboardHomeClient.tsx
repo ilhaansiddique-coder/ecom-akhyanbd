@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
@@ -27,7 +27,7 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import DateRangePicker from "@/components/DateRangePicker";
 import { useLang } from "@/lib/LanguageContext";
-// Normal imports (not dynamic ssr:false) — file is already "use client" so
+// Normal imports (not dynamic ssr:false) â€” file is already "use client" so
 // recharts only ships on client anyway, and the dynamic wrapper caused a
 // mount race where ResponsiveContainer measured its parent before layout,
 // producing "width(-1) and height(-1)" console warnings.
@@ -42,7 +42,7 @@ import {
   Cell,
 } from "recharts";
 
-// ─── Status labels ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Status labels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
   processing: "bg-indigo-100 text-indigo-800",
@@ -54,9 +54,9 @@ const statusColors: Record<string, string> = {
   trashed: "bg-gray-100 text-gray-500",
 };
 const statusLabelsBn: Record<string, string> = {
-  pending: "অপেক্ষমাণ", processing: "প্রসেসিং", on_hold: "অন হোল্ড",
-  confirmed: "নিশ্চিত", shipped: "কুরিয়ার পাঠানো হয়েছে", delivered: "ডেলিভারি সম্পন্ন",
-  cancelled: "বাতিল", trashed: "ট্র্যাশ",
+  pending: "à¦…à¦ªà§‡à¦•à§à¦·à¦®à¦¾à¦£", processing: "à¦ªà§à¦°à¦¸à§‡à¦¸à¦¿à¦‚", on_hold: "à¦…à¦¨ à¦¹à§‹à¦²à§à¦¡",
+  confirmed: "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤", shipped: "à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦° à¦ªà¦¾à¦ à¦¾à¦¨à§‹ à¦¹à¦¯à¦¼à§‡à¦›à§‡", delivered: "à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¸à¦®à§à¦ªà¦¨à§à¦¨",
+  cancelled: "à¦¬à¦¾à¦¤à¦¿à¦²", trashed: "à¦Ÿà§à¦°à§à¦¯à¦¾à¦¶",
 };
 const statusLabelsEn: Record<string, string> = {
   pending: "Pending", processing: "Processing", on_hold: "On Hold",
@@ -68,7 +68,7 @@ const getStatusLabel = (status: string, lang: string) => ({
   color: statusColors[status] || "bg-gray-100 text-gray-800",
 });
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface OrderItem {
   id: number;
   product_name: string;
@@ -87,7 +87,7 @@ interface Order {
   items: OrderItem[];
 }
 
-// ─── Admin Dashboard ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Admin Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface Stats {
   total_orders: number;
   today_orders: number;
@@ -118,7 +118,7 @@ interface LowStockItem {
   stock: number;
   image?: string;
   // Present only for variable products. Each entry is an active variant whose
-  // stock ≤ 10 (the threshold used by the SSR + API queries). Renderer shows
+  // stock â‰¤ 10 (the threshold used by the SSR + API queries). Renderer shows
   // these as chips instead of a misleading sum.
   variants?: { label: string; stock: number }[];
 }
@@ -189,7 +189,7 @@ function CombinedStatCard({
           <RIcon className="w-5 h-5 text-white" />
         </div>
         <div className="min-w-0">
-          <div className="text-base md:text-lg font-bold text-gray-800 truncate">৳{toBn(revenue)}</div>
+          <div className="text-base md:text-lg font-bold text-gray-800 truncate">à§³{toBn(revenue)}</div>
           <div className="text-xs text-gray-500 mt-0.5 truncate">{revenueLabel}</div>
         </div>
       </div>
@@ -213,11 +213,11 @@ const PIE_COLORS = ["#eab308", "#3b82f6", "#6366f1", "#8b5cf6", "var(--primary)"
 
 /**
  * Measures its container with ResizeObserver and exposes the width via a
- * render prop. Use this instead of Recharts <ResponsiveContainer> — the
+ * render prop. Use this instead of Recharts <ResponsiveContainer> â€” the
  * latter logs "width(-1) and height(-1)" during its very first render
  * because its internal dimension state defaults to -1 before mount effects
  * resolve. Passing numeric width/height directly to BarChart/PieChart
- * avoids ResponsiveContainer entirely → no warning, ever.
+ * avoids ResponsiveContainer entirely â†’ no warning, ever.
  */
 function MeasuredChart({
   height = 256,
@@ -278,7 +278,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(initialData?.lowStockItems ?? []);
   const [loading, setLoading] = useState(!initialData);
 
-  // ── Date filter — default to today ──
+  // â”€â”€ Date filter â€” default to today â”€â”€
   const [fromDate, setFromDate] = useState(initialData?.initialFrom ?? bdToday());
   const [toDate, setToDate] = useState(initialData?.initialTo ?? bdToday());
   const [filtering, setFiltering] = useState(false);
@@ -298,7 +298,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     setLowStockItems(res.low_stock || []);
   }, []);
 
-  // Initial load — always default to today
+  // Initial load â€” always default to today
   useEffect(() => {
     if (initialData) return; // SSR already provides today-scoped data
     const today = bdToday();
@@ -329,8 +329,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
   const combinedCards = [
     {
       countIcon: FiShoppingBag, revenueIcon: FiDollarSign,
-      countLabel: lang === "en" ? "Total Orders"     : "মোট অর্ডার",
-      revenueLabel: lang === "en" ? "Total Revenue"  : "মোট আয়",
+      countLabel: lang === "en" ? "Total Orders"     : "à¦®à§‹à¦Ÿ à¦…à¦°à§à¦¡à¦¾à¦°",
+      revenueLabel: lang === "en" ? "Total Revenue"  : "à¦®à§‹à¦Ÿ à¦†à¦¯à¦¼",
       count: stats?.total_orders ?? 0,
       revenue: stats?.total_revenue ?? 0,
       color: "bg-[var(--primary)]",
@@ -338,8 +338,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     },
     {
       countIcon: FiClock, revenueIcon: FiDollarSign,
-      countLabel: lang === "en" ? "Pending Orders"    : "মুলতুবি অর্ডার",
-      revenueLabel: lang === "en" ? "Pending Revenue" : "মুলতুবি আয়",
+      countLabel: lang === "en" ? "Pending Orders"    : "à¦®à§à¦²à¦¤à§à¦¬à¦¿ à¦…à¦°à§à¦¡à¦¾à¦°",
+      revenueLabel: lang === "en" ? "Pending Revenue" : "à¦®à§à¦²à¦¤à§à¦¬à¦¿ à¦†à¦¯à¦¼",
       count: orderCounts.pending,
       revenue: revByStatus.pending,
       color: "bg-yellow-500",
@@ -347,8 +347,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     },
     {
       countIcon: FiCheckCircle, revenueIcon: FiDollarSign,
-      countLabel: lang === "en" ? "Confirmed Orders"    : "নিশ্চিত অর্ডার",
-      revenueLabel: lang === "en" ? "Confirmed Revenue" : "নিশ্চিত আয়",
+      countLabel: lang === "en" ? "Confirmed Orders"    : "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤ à¦…à¦°à§à¦¡à¦¾à¦°",
+      revenueLabel: lang === "en" ? "Confirmed Revenue" : "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤ à¦†à¦¯à¦¼",
       count: orderCounts.confirmed,
       revenue: revByStatus.confirmed,
       color: "bg-blue-500",
@@ -356,8 +356,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
     },
     {
       countIcon: FiXCircle, revenueIcon: FiDollarSign,
-      countLabel: lang === "en" ? "Cancelled Orders"  : "বাতিল অর্ডার",
-      revenueLabel: lang === "en" ? "Cancelled Amount (excl. shipping)" : "বাতিল পরিমাণ (ডেলিভারি বাদে)",
+      countLabel: lang === "en" ? "Cancelled Orders"  : "à¦¬à¦¾à¦¤à¦¿à¦² à¦…à¦°à§à¦¡à¦¾à¦°",
+      revenueLabel: lang === "en" ? "Cancelled Amount (excl. shipping)" : "à¦¬à¦¾à¦¤à¦¿à¦² à¦ªà¦°à¦¿à¦®à¦¾à¦£ (à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¬à¦¾à¦¦à§‡)",
       count: orderCounts.cancelled,
       revenue: cancelledRev,
       color: "bg-red-500",
@@ -366,31 +366,31 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
   ];
 
   const row2 = [
-    { icon: FiCalendar, label: lang === "en" ? "Today's Orders"  : "আজকের অর্ডার",  value: stats?.today_orders ?? 0, color: "bg-indigo-500", href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
-    { icon: FiTrendingUp, label: lang === "en" ? "Today's Revenue" : "আজকের আয়",    value: `৳${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true },
+    { icon: FiCalendar, label: lang === "en" ? "Today's Orders"  : "à¦†à¦œà¦•à§‡à¦° à¦…à¦°à§à¦¡à¦¾à¦°",  value: stats?.today_orders ?? 0, color: "bg-indigo-500", href: `/dashboard/orders?from=${todayStr}&to=${todayStr}` },
+    { icon: FiTrendingUp, label: lang === "en" ? "Today's Revenue" : "à¦†à¦œà¦•à§‡à¦° à¦†à¦¯à¦¼",    value: `à§³${toBn(stats?.today_revenue ?? 0)}`, color: "bg-emerald-600", raw: true },
     { icon: FiUsers, label: t("dash.customers"), value: stats?.total_customers ?? 0, color: "bg-violet-500", href: "/dashboard/users" },
     { icon: FiAlertCircle, label: t("dash.lowStock"), value: stats?.low_stock_count ?? stats?.low_stock ?? 0, color: "bg-orange-500", href: "/dashboard/products?filter=low_stock" },
   ];
 
   const pieData = [
-    { name: lang === "en" ? "Pending"    : "অপেক্ষমাণ",              value: orderCounts.pending },
-    { name: lang === "en" ? "Confirmed"  : "নিশ্চিত",               value: orderCounts.confirmed },
-    { name: lang === "en" ? "Processing" : "প্রসেসিং",              value: orderCounts.processing },
-    { name: lang === "en" ? "Courier Sent" : "কুরিয়ার পাঠানো হয়েছে", value: orderCounts.shipped },
-    { name: lang === "en" ? "Delivered"  : "ডেলিভারি",              value: orderCounts.delivered },
-    { name: lang === "en" ? "Cancelled"  : "বাতিল",                 value: orderCounts.cancelled },
+    { name: lang === "en" ? "Pending"    : "à¦…à¦ªà§‡à¦•à§à¦·à¦®à¦¾à¦£",              value: orderCounts.pending },
+    { name: lang === "en" ? "Confirmed"  : "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤",               value: orderCounts.confirmed },
+    { name: lang === "en" ? "Processing" : "à¦ªà§à¦°à¦¸à§‡à¦¸à¦¿à¦‚",              value: orderCounts.processing },
+    { name: lang === "en" ? "Courier Sent" : "à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦° à¦ªà¦¾à¦ à¦¾à¦¨à§‹ à¦¹à¦¯à¦¼à§‡à¦›à§‡", value: orderCounts.shipped },
+    { name: lang === "en" ? "Delivered"  : "à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿",              value: orderCounts.delivered },
+    { name: lang === "en" ? "Cancelled"  : "à¦¬à¦¾à¦¤à¦¿à¦²",                 value: orderCounts.cancelled },
   ].filter(d => d.value > 0);
 
   return (
     <div className="space-y-6">
 
-      {/* ── Date Filter Bar ── */}
+      {/* â”€â”€ Date Filter Bar â”€â”€ */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-gray-700 shrink-0">
             <FiCalendar className="w-4 h-4 text-[var(--primary)]" />
-            <span className="text-sm font-bold">{lang === "en" ? "Filter by Date" : "তারিখ ফিল্টার"}</span>
+            <span className="text-sm font-bold">{lang === "en" ? "Filter by Date" : "à¦¤à¦¾à¦°à¦¿à¦– à¦«à¦¿à¦²à§à¦Ÿà¦¾à¦°"}</span>
           </div>
           <DateRangePicker
             from={fromDate}
@@ -407,7 +407,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
         </div>
       </motion.div>
 
-      {/* ── Combined stat cards (count + revenue per status) ── */}
+      {/* â”€â”€ Combined stat cards (count + revenue per status) â”€â”€ */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
         {combinedCards.map((c, i) => (
           <CombinedStatCard
@@ -425,12 +425,12 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
         ))}
       </div>
 
-      {/* ── Actual Sales (courier-sent) combined cards ── */}
+      {/* â”€â”€ Actual Sales (courier-sent) combined cards â”€â”€ */}
       <div className={`transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
         <div className="flex items-center gap-2 mb-3 px-1">
           <div className="w-2 h-2 rounded-full bg-teal-500" />
           <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-            {lang === "en" ? "Actual Sales — Courier Sent" : "প্রকৃত বিক্রয় — কুরিয়ার পাঠানো"}
+            {lang === "en" ? "Actual Sales â€” Courier Sent" : "à¦ªà§à¦°à¦•à§ƒà¦¤ à¦¬à¦¿à¦•à§à¦°à¦¯à¦¼ â€” à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦° à¦ªà¦¾à¦ à¦¾à¦¨à§‹"}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -438,8 +438,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           <CombinedStatCard
             countIcon={FiPackage}
             revenueIcon={FiDollarSign}
-            countLabel={lang === "en" ? "Courier Sent Orders" : "কুরিয়ার পাঠানো অর্ডার"}
-            revenueLabel={lang === "en" ? "Sales Revenue (excl. shipping)" : "বিক্রয় আয় (ডেলিভারি বাদে)"}
+            countLabel={lang === "en" ? "Courier Sent Orders" : "à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦° à¦ªà¦¾à¦ à¦¾à¦¨à§‹ à¦…à¦°à§à¦¡à¦¾à¦°"}
+            revenueLabel={lang === "en" ? "Sales Revenue (excl. shipping)" : "à¦¬à¦¿à¦•à§à¦°à¦¯à¦¼ à¦†à¦¯à¦¼ (à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¬à¦¾à¦¦à§‡)"}
             count={stats?.shipped_orders ?? 0}
             revenue={stats?.shipped_revenue ?? 0}
             color="bg-teal-500"
@@ -450,8 +450,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           <CombinedStatCard
             countIcon={FiCalendar}
             revenueIcon={FiDollarSign}
-            countLabel={lang === "en" ? "Today's Courier" : "আজকের কুরিয়ার"}
-            revenueLabel={lang === "en" ? "Today's Sales" : "আজকের বিক্রয়"}
+            countLabel={lang === "en" ? "Today's Courier" : "à¦†à¦œà¦•à§‡à¦° à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦°"}
+            revenueLabel={lang === "en" ? "Today's Sales" : "à¦†à¦œà¦•à§‡à¦° à¦¬à¦¿à¦•à§à¦°à¦¯à¦¼"}
             count={stats?.today_shipped ?? 0}
             revenue={stats?.today_shipped_revenue ?? 0}
             color="bg-indigo-500"
@@ -462,8 +462,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           <CombinedStatCard
             countIcon={FiUsers}
             revenueIcon={FiTrendingUp}
-            countLabel={lang === "en" ? "Customers (Shipped)" : "গ্রাহক (কুরিয়ার)"}
-            revenueLabel={lang === "en" ? "Avg Order Value" : "গড় অর্ডার মূল্য"}
+            countLabel={lang === "en" ? "Customers (Shipped)" : "à¦—à§à¦°à¦¾à¦¹à¦• (à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦°)"}
+            revenueLabel={lang === "en" ? "Avg Order Value" : "à¦—à¦¡à¦¼ à¦…à¦°à§à¦¡à¦¾à¦° à¦®à§‚à¦²à§à¦¯"}
             count={stats?.shipped_customers ?? 0}
             revenue={(stats?.shipped_orders ?? 0) > 0
               ? Math.round((stats?.shipped_revenue ?? 0) / (stats?.shipped_orders ?? 1))
@@ -475,8 +475,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           <CombinedStatCard
             countIcon={FiPackage}
             revenueIcon={FiDollarSign}
-            countLabel={lang === "en" ? "Delivered Orders" : "ডেলিভারি সম্পন্ন"}
-            revenueLabel={lang === "en" ? "Delivered Revenue" : "ডেলিভারি আয়"}
+            countLabel={lang === "en" ? "Delivered Orders" : "à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦¸à¦®à§à¦ªà¦¨à§à¦¨"}
+            revenueLabel={lang === "en" ? "Delivered Revenue" : "à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ à¦†à¦¯à¦¼"}
             count={orderCounts.delivered}
             revenue={revByStatus.delivered}
             color="bg-emerald-500"
@@ -489,7 +489,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
 
       {/* Charts */}
       <div className={`grid lg:grid-cols-2 gap-6 transition-opacity ${filtering ? "opacity-50 pointer-events-none" : ""}`}>
-        {/* Bar Chart — Last 7 Days */}
+        {/* Bar Chart â€” Last 7 Days */}
         {/* min-w-0 on grid item: lets it shrink below its content's intrinsic
             width so ResponsiveContainer can measure a real width instead of -1. */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
@@ -507,7 +507,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
           </MeasuredChart>
         </motion.div>
 
-        {/* Pie Chart — Status Breakdown */}
+        {/* Pie Chart â€” Status Breakdown */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
           className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm min-w-0">
           <h2 className="text-base font-bold text-gray-800 mb-4">{t("dash.statusBreakdown")}</h2>
@@ -557,7 +557,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
                       <tr key={o.id}>
                         <td className="py-2.5 text-gray-500">#{toBn(o.id)}</td>
                         <td className="py-2.5 font-medium text-gray-700 max-w-30 truncate">{o.customer_name}</td>
-                        <td className="py-2.5 text-[var(--primary)] font-semibold">৳{toBn(o.total)}</td>
+                        <td className="py-2.5 text-[var(--primary)] font-semibold">à§³{toBn(o.total)}</td>
                         <td className="py-2.5">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>{st.label}</span>
                         </td>
@@ -591,7 +591,7 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
                     <tr key={p.id}>
                       <td className="py-2.5 font-medium text-gray-700 max-w-37.5 truncate">{p.name}</td>
                       <td className="py-2.5 text-gray-600">{toBn(p.sold)}</td>
-                      <td className="py-2.5 text-[var(--primary)] font-semibold">৳{toBn(p.revenue)}</td>
+                      <td className="py-2.5 text-[var(--primary)] font-semibold">à§³{toBn(p.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -641,8 +641,8 @@ function AdminDashboard({ initialData }: { initialData?: DashboardInitialData })
   );
 }
 
-// ─── Customer Dashboard ───────────────────────────────────────────────────────
-function CustomerDashboard({ user }: { user: { id: number; name: string; email: string; phone?: string; role: string } }) {
+// â”€â”€â”€ Customer Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function CustomerDashboard({ user }: { user: { id: string; name: string; email: string; phone?: string; role: string } }) {
   const { t, lang } = useLang();
   const [tab, setTab] = useState<"profile" | "orders" | "password">("profile");
   const [orders, setOrders] = useState<Order[]>([]);
@@ -792,7 +792,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                                   {order.payment_status === "paid" ? t("cust.paymentDone") : t("cust.paymentPending")}
                                 </span>
                               </div>
-                              <span className="text-lg font-bold text-primary">৳{toBn(order.total)}</span>
+                              <span className="text-lg font-bold text-primary">à§³{toBn(order.total)}</span>
                             </div>
 
                             {/* Order Tracking Timeline */}
@@ -800,7 +800,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                               {(["pending", "processing", "confirmed", "shipped", "delivered"] as const).map((step, i) => {
                                 const stepLabels: Record<string, string> = lang === "en"
                                   ? { pending: "Pending", processing: "Processing", confirmed: "Confirmed", shipped: "Courier Sent", delivered: "Delivered" }
-                                  : { pending: "অপেক্ষমাণ", processing: "প্রসেসিং", confirmed: "নিশ্চিত", shipped: "কুরিয়ার পাঠানো হয়েছে", delivered: "ডেলিভারি" };
+                                  : { pending: "à¦…à¦ªà§‡à¦•à§à¦·à¦®à¦¾à¦£", processing: "à¦ªà§à¦°à¦¸à§‡à¦¸à¦¿à¦‚", confirmed: "à¦¨à¦¿à¦¶à§à¦šà¦¿à¦¤", shipped: "à¦•à§à¦°à¦¿à¦¯à¦¼à¦¾à¦° à¦ªà¦¾à¦ à¦¾à¦¨à§‹ à¦¹à¦¯à¦¼à§‡à¦›à§‡", delivered: "à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿" };
                                 const stepOrder = ["pending", "processing", "confirmed", "shipped", "delivered"];
                                 const currentIdx = stepOrder.indexOf(order.status);
                                 const isCancelled = order.status === "cancelled";
@@ -811,7 +811,7 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                                     {i > 0 && <div className={`w-6 h-0.5 ${isActive ? "bg-primary" : "bg-gray-200"}`} />}
                                     <div className="flex flex-col items-center">
                                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent ? "bg-primary text-white ring-2 ring-primary/30" : isActive ? "bg-primary text-white" : "bg-gray-200 text-gray-400"}`}>
-                                        {isActive ? "✓" : toBn(i + 1)}
+                                        {isActive ? "âœ“" : toBn(i + 1)}
                                       </div>
                                       <span className={`text-[10px] mt-1 whitespace-nowrap ${isCurrent ? "text-primary font-bold" : isActive ? "text-text-body" : "text-text-light"}`}>{stepLabels[step]}</span>
                                     </div>
@@ -820,8 +820,8 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                               })}
                               {order.status === "cancelled" && (
                                 <div className="flex items-center gap-1 ml-2">
-                                  <div className="w-6 h-6 rounded-full bg-sale-red text-white flex items-center justify-center text-xs font-bold">✕</div>
-                                  <span className="text-[10px] text-sale-red font-bold">বাতিল</span>
+                                  <div className="w-6 h-6 rounded-full bg-sale-red text-white flex items-center justify-center text-xs font-bold">âœ•</div>
+                                  <span className="text-[10px] text-sale-red font-bold">à¦¬à¦¾à¦¤à¦¿à¦²</span>
                                 </div>
                               )}
                             </div>
@@ -830,8 +830,8 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
                               <div className="text-sm text-text-body space-y-1">
                                 {order.items.map((item) => (
                                   <div key={item.id} className="flex justify-between">
-                                    <span>{item.product_name} × {toBn(item.quantity)}</span>
-                                    <span className="text-text-muted">৳{toBn(item.price * item.quantity)}</span>
+                                    <span>{item.product_name} Ã— {toBn(item.quantity)}</span>
+                                    <span className="text-text-muted">à§³{toBn(item.price * item.quantity)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -882,12 +882,12 @@ function CustomerDashboard({ user }: { user: { id: number; name: string; email: 
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function DashboardPage({ initialData }: { initialData?: DashboardInitialData }) {
   const { user, loading } = useAuth();
   const { t } = useLang();
 
-  // Server already verified admin and passed initialData — render immediately, no skeleton
+  // Server already verified admin and passed initialData â€” render immediately, no skeleton
   if (initialData) {
     return (
       <DashboardLayout title={t("dash.dashboard")}>
@@ -918,3 +918,4 @@ export default function DashboardPage({ initialData }: { initialData?: Dashboard
 
   return <CustomerDashboard user={user} />;
 }
+

@@ -20,13 +20,13 @@ export async function PUT(request: NextRequest) {
   const { current_password, password } = parsed.data;
 
   const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
-  if (!dbUser || !(await bcrypt.compare(current_password, dbUser.password))) {
+  if (!dbUser || !dbUser.passwordHash || !(await bcrypt.compare(current_password, dbUser.passwordHash))) {
     return validationError({ current_password: ["বর্তমান পাসওয়ার্ড সঠিক নয়।"] });
   }
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { password: await bcrypt.hash(password, 12) },
+    data: { passwordHash: await bcrypt.hash(password, 12) },
   });
 
   return jsonResponse({ message: "পাসওয়ার্ড পরিবর্তন হয়েছে।" });

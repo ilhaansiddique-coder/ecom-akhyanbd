@@ -9,32 +9,26 @@ datasource db {
 }
 
 model User {
-  id              Int       @id @default(autoincrement())
-  name            String
-  // Optional + unique: nullable lets guests place orders without an email.
-  // Postgres allows multiple NULLs under a UNIQUE constraint, so phone-only
-  // guest users never collide. Email-based login still works for users who
-  // do supply one; phone-only users can register later.
-  email           String?   @unique
-  emailVerifiedAt DateTime? @map("email_verified_at")
-  password        String
-  phone           String?
-  address         String?
-  role            String    @default("customer")
-  avatar          String?
-  provider        String?
-  providerId      String?   @map("provider_id")
-  rememberToken   String?   @map("remember_token")
-  createdAt       DateTime? @default(now()) @map("created_at")
-  updatedAt       DateTime? @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  fullName            String?   @map("full_name")
+  passwordHash        String?   @map("password_hash")
+  phone               String?
+  address             String?
+  role                String    @default("customer")
+  image               String?
+  emailVerified       Boolean   @default(false) @map("email_verified")
+  isSuperAdmin        Boolean   @default(false) @map("is_super_admin")
+  mustResetPassword   Boolean   @default(false) @map("must_reset_password")
+  lastSignInAt        DateTime? @map("last_sign_in_at")
+  createdAt           DateTime? @default(now()) @map("created_at")
+  updatedAt           DateTime? @updatedAt @map("updated_at")
 
   orders    Order[]
   wishlists Wishlist[]
   addresses Address[]
-  reviews   Review[]
   blogPosts BlogPost[]
 
-  @@index([role])
   @@map("users")
 }
 
@@ -157,7 +151,7 @@ model FlashSaleProduct {
 
 model Order {
   id              Int       @id @default(autoincrement())
-  userId          Int?      @map("user_id")
+  userId          String?   @map("user_id")
   customerName    String    @map("customer_name")
   customerPhone   String    @map("customer_phone")
   customerEmail   String?   @map("customer_email")
@@ -199,6 +193,7 @@ model Order {
   user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   items       OrderItem[]
   fingerprint OrderFingerprint?
+  returns     OrderReturn[]
 
   @@index([userId])
   @@index([status])
@@ -288,7 +283,7 @@ model BlockedPhone {
   id        Int       @id @default(autoincrement())
   phone     String    @unique
   reason    String?
-  blockedBy Int?      @map("blocked_by")     // admin user id, optional audit trail
+  blockedBy String?   @map("blocked_by")     // admin user id (uuid), optional audit trail
   orderId   Int?      @map("order_id")        // order that triggered the block
   createdAt DateTime? @default(now()) @map("created_at")
 
@@ -317,7 +312,7 @@ model OrderItem {
 model Review {
   id           Int       @id @default(autoincrement())
   productId    Int       @map("product_id")
-  userId       Int?      @map("user_id")
+  userId       String?   @map("user_id")
   customerName String    @map("customer_name")
   rating       Int
   review       String
@@ -327,7 +322,6 @@ model Review {
   updatedAt    DateTime? @updatedAt @map("updated_at")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([productId, isApproved])
   @@index([createdAt])
@@ -336,7 +330,7 @@ model Review {
 
 model Wishlist {
   id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
+  userId    String   @map("user_id")
   productId Int       @map("product_id")
   createdAt DateTime? @default(now()) @map("created_at")
   updatedAt DateTime? @updatedAt @map("updated_at")
@@ -380,7 +374,7 @@ model ShippingZone {
 
 model Address {
   id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
+  userId    String   @map("user_id")
   label     String
   name      String
   phone     String
@@ -518,7 +512,7 @@ model BlogPost {
   metaDescription String?   @map("meta_description") @db.Text
   metaKeywords    String?   @map("meta_keywords") @db.Text
   ogImage         String?   @map("og_image")
-  authorId        Int?      @map("author_id")
+  authorId        String?   @map("author_id")
   isPublished     Boolean   @default(false) @map("is_published")
   publishedAt     DateTime? @map("published_at")
   createdAt       DateTime? @default(now()) @map("created_at")
@@ -573,7 +567,7 @@ model IncompleteOrder {
   subtotal     Float     @default(0)
   shippingCost Float     @default(0) @map("shipping_cost")
   total        Float     @default(0)
-  userId       Int?      @map("user_id")
+  userId          String?   @map("user_id")
   source       String?   // "checkout" | "lp:slug" — which form captured it
   convertedAt  DateTime? @map("converted_at") // set when matching order placed
   createdAt    DateTime? @default(now()) @map("created_at")
@@ -650,4 +644,24 @@ model ShortlinkClick {
   @@index([shortlinkId])
   @@index([createdAt])
   @@map("shortlink_clicks")
+}
+
+model OrderReturn {
+  id           Int       @id @default(autoincrement())
+  orderId      Int       @map("order_id")
+  reason       String    // "defective", "wrong_item", "not_as_described", "other"
+  description  String?
+  images       String?   // JSON array of image URLs
+  status       String    @default("pending") @map("status") // pending, approved, rejected, refunded, cancelled
+  refundAmount Float?    @map("refund_amount")
+  notes        String?   // Admin notes
+  createdAt    DateTime? @default(now()) @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("order_returns")
 }

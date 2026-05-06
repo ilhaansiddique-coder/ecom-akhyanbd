@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import UsersClient from "./UsersClient";
@@ -20,7 +20,7 @@ export default async function UsersPage() {
 
     const items = data.map((u) => ({
       id: u.id,
-      name: u.name,
+      name: u.fullName ?? "",
       email: u.email,
       phone: u.phone ?? undefined,
       address: u.address ?? undefined,
@@ -33,3 +33,5 @@ export default async function UsersPage() {
     return <UsersClient initialData={{ items: [], total: 0 }} />;
   }
 }
+
+

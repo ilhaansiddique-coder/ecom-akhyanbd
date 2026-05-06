@@ -11,7 +11,7 @@ export async function GET(
 
   const post = await prisma.blogPost.findFirst({
     where: { slug, isPublished: true },
-    include: { author: { select: { id: true, name: true } } },
+    include: { author: { select: { id: true, fullName: true } } },
   });
 
   if (!post) return notFound("Blog post not found");

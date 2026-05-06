@@ -142,9 +142,9 @@ export const api = {
     // Users
     getUsers: (params?: string) => fetchAPI(`/admin/users${params ? `?${params}` : ""}`),
     createUser: (data: Record<string, unknown>) => fetchAPI("/admin/users", { method: "POST", body: JSON.stringify(data) }),
-    updateUser: (id: number, data: Record<string, unknown>) => fetchAPI(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    deleteUser: (id: number) => fetchAPI(`/admin/users/${id}`, { method: "DELETE" }),
-    bulkUsers: (action: "delete" | "update_role", ids: number[], role?: "customer" | "staff" | "admin") =>
+    updateUser: (id: string, data: Record<string, unknown>) => fetchAPI(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    deleteUser: (id: string) => fetchAPI(`/admin/users/${id}`, { method: "DELETE" }),
+    bulkUsers: (action: "delete" | "update_role", ids: string[], role?: "customer" | "staff" | "admin") =>
       fetchAPI(`/admin/users/bulk`, {
         method: "POST",
         body: JSON.stringify(role ? { action, ids, role } : { action, ids }),

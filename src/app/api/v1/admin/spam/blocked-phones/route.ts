@@ -26,10 +26,13 @@ export const POST = withStaff(async (request, _ctx, admin) => {
   const reason: string = data.reason?.trim() || "manual_block";
   const orderId = data.order_id ? Number(data.order_id) : null;
 
+  // BlockedPhone.blockedBy was Int? — currently mid-migration to String? to
+  // match User.id (UUID). Skip the field until the schema migration lands;
+  // the audit trail still has createdAt + reason.
   const blocked = await prisma.blockedPhone.upsert({
     where: { phone },
-    update: { reason, blockedBy: admin.id, orderId },
-    create: { phone, reason, blockedBy: admin.id, orderId },
+    update: { reason, orderId },
+    create: { phone, reason, orderId },
   });
 
   return jsonResponse(serialize(blocked), 201);

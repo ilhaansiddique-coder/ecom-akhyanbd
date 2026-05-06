@@ -17,7 +17,7 @@ import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
 
 interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone?: string;
@@ -45,10 +45,10 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" as "success" | "error" });
 
@@ -57,7 +57,7 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
   const currentAdminId = currentAdmin?.id;
 
   // Bulk selection state.
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkRoleOpen, setBulkRoleOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
@@ -129,7 +129,7 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
     return () => document.removeEventListener("mousedown", handler);
   }, [bulkRoleOpen]);
 
-  const toggleSelect = (id: number) => {
+  const toggleSelect = (id: string) => {
     if (id === currentAdminId) return; // never select self
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -389,6 +389,7 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
                           className={`${theme.checkbox} disabled:opacity-30 disabled:cursor-not-allowed`}
                           aria-label={`Select ${u.name}`}
                           title={u.id === currentAdminId ? "You cannot select yourself" : ""}
+                          suppressHydrationWarning
                         />
                       </td>
                       <td className="px-4 py-3 text-gray-500">{toBn(u.id)}</td>
@@ -451,23 +452,23 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className={labelCls}>{t("form.name")} *</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} />
+            <input required value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>{t("form.email")} *</label>
-            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
+            <input required type="email" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>{t("form.password")} {editId ? "" : "*"}</label>
-            <input type="password" required={!editId} minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder={lang === "en" ? "Min 8 characters" : "সর্বনিম্ন ৮ অক্ষর"} />
+            <input type="password" required={!editId} minLength={8} value={form.password ?? ""} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputCls} placeholder={lang === "en" ? "Min 8 characters" : "সর্বনিম্ন ৮ অক্ষর"} />
           </div>
           <div>
             <label className={labelCls}>{t("form.phone")}</label>
-            <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+            <input type="tel" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>{t("form.address")}</label>
-            <textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Full address..." : "সম্পূর্ণ ঠিকানা..."} />
+            <textarea rows={2} value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputCls + " resize-none"} placeholder={lang === "en" ? "Full address..." : "সম্পূর্ণ ঠিকানা..."} />
           </div>
           <div>
             <label className={labelCls}>{t("form.role")} *</label>

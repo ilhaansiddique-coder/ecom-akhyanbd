@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import BlogClient from "./BlogClient";
@@ -11,7 +11,7 @@ export default async function BlogPage() {
 
   try {
     const data = await prisma.blogPost.findMany({
-      include: { author: { select: { id: true, name: true } } },
+      include: { author: { select: { id: true, fullName: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -31,3 +31,5 @@ export default async function BlogPage() {
     return <BlogClient initialData={{ items: [] }} />;
   }
 }
+
+
