@@ -150,12 +150,12 @@ export async function* eventStream(opts: { signal?: AbortSignal } = {}): AsyncGe
   }
 }
 
-/** Polling interval for the Redis stream reader. 1.5s is a reasonable
- * balance: ≤1.5s perceived latency for a new order to appear in the
- * Flutter app, and ~57.6K commands/day per connected admin client, well
- * within Upstash paid tiers (~$0.12/admin/day at $0.20/100K). Increase to
- * 2-3s if cost is a concern; drop to 750ms for snappier UX. */
-const POLL_INTERVAL_MS = 1500;
+/** Polling interval for the Redis stream reader. 5s is tuned for Upstash
+ * free tier: ~5.8K commands/day per connected admin, well under the 10K
+ * daily cap. Drop to 1500ms for sub-second latency once on a paid plan
+ * (~$0.10/admin/day at Upstash $0.20/100K). Latency at 5s is fine for an
+ * admin app — the bell badge ticks within 5 seconds of an order. */
+const POLL_INTERVAL_MS = 5000;
 
 /** Redis Streams reader: XREAD without BLOCK + sleep loop.
  *
