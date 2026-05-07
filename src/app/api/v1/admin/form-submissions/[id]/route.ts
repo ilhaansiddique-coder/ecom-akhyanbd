@@ -4,6 +4,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse, notFound, validationError } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { formSubmissionUpdateSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -22,6 +23,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
         notes: data.notes !== undefined ? data.notes : undefined,
       },
     });
+    bumpVersion("form-submissions", { kind: "form.updated", title: "Form submission updated", body: `id ${submission.id}`, severity: "info" });
     return jsonResponse(serialize(submission));
   } catch {
     return notFound("Submission not found");
@@ -33,6 +35,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   try {
     await prisma.formSubmission.delete({ where: { id: Number(id) } });
+    bumpVersion("form-submissions");
     return jsonResponse({ message: "Deleted" });
   } catch {
     return notFound("Submission not found");

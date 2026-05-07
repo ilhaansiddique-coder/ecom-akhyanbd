@@ -4,6 +4,7 @@ import { jsonResponse, errorResponse, validationError } from "@/lib/api-response
 import { withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
 import { shortlinkSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 // GET — list all shortlinks (newest first). Staff + admin can manage.
 export const GET = withStaff(async (request) => {
@@ -52,6 +53,7 @@ export const POST = withStaff(async (request) => {
     const created = await prisma.shortlink.create({
       data: { slug, targetUrl, isActive },
     });
+    bumpVersion("shortlinks", { kind: "shortlink.created", title: "Shortlink created", body: `/${created.slug}`, severity: "info" });
     return jsonResponse({ data: created }, 201);
   } catch (e) {
     console.error("[Shortlinks] create error:", e);

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, validationError } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { usersBulkSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 /**
  * Bulk operations on users.
@@ -39,6 +40,11 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
 
   if (action === "delete") {
     const result = await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    // Bulk could touch both staff and customer rows — bump both channels
+    // once each rather than per-row. The clients refetch and figure out
+    // what actually disappeared.
+    bumpVersion("staff", { kind: "staff.bulk_deleted", title: "Users deleted", body: `${result.count} users removed`, severity: "warn" });
+    bumpVersion("customers");
     return jsonResponse({ deleted: result.count });
   }
 
@@ -50,6 +56,8 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
       where: { id: { in: ids } },
       data: { role },
     });
+    bumpVersion("staff", { kind: "staff.bulk_role_changed", title: "Roles updated", body: `${result.count} → ${role}`, severity: "info" });
+    bumpVersion("customers");
     return jsonResponse({ updated: result.count, role });
   }
 

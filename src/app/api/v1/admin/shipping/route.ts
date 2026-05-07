@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { shippingZoneSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (_request) => {
   const zones = await prisma.shippingZone.findMany({
@@ -35,6 +36,7 @@ export const POST = withAdmin(async (request) => {
     });
 
     revalidateAll("shipping");
+    bumpVersion("shipping", { kind: "shipping.zone_created", title: "Shipping zone added", body: zone.name, severity: "info" });
     return jsonResponse(serialize(zone), 201);
   } catch (error) {
     return errorResponse("Failed to create shipping zone", 500);

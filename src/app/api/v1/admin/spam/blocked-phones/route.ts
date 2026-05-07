@@ -5,6 +5,7 @@ import { jsonResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { normalizePhone, isValidBDPhone } from "@/lib/spamDetection";
 import { blockedPhoneSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withStaff(async (request) => {
   const rows = await prisma.blockedPhone.findMany({ orderBy: { createdAt: "desc" } });
@@ -32,5 +33,6 @@ export const POST = withStaff(async (request, _ctx, admin) => {
     create: { phone, reason, blockedBy: admin.id, orderId },
   });
 
+  bumpVersion("fraud", { kind: "fraud.phone_blocked", title: "Phone blocked", body: blocked.phone, severity: "alert" });
   return jsonResponse(serialize(blocked), 201);
 });

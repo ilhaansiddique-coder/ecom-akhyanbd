@@ -7,6 +7,7 @@ import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2Upload } from "@/lib/r2";
 import { isCloudinaryConfigured, cloudinaryUpload } from "@/lib/cloudinary";
 import sharp from "sharp";
+import { bumpVersion } from "@/lib/sync";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tiff"]);
 const ALLOWED_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".tiff", ".gif", ".mp4", ".webm", ".mov", ".pdf"]);
@@ -88,6 +89,7 @@ export const POST = withStaff(async (request) => {
       if (!tier.ready()) continue;
       try {
         const url = await tier.upload();
+        bumpVersion("media");
         return jsonResponse({ url, path: url, tier: tier.name }, 201);
       } catch (e) {
         const msg = e instanceof Error ? e.message : `${tier.name} upload failed`;
@@ -101,6 +103,7 @@ export const POST = withStaff(async (request) => {
     const filePath = path.join(uploadDir, uniqueName);
     await writeFile(filePath, buffer);
     const url = `/uploads/${uniqueName}`;
+    bumpVersion("media");
     return jsonResponse({ url, path: url, tier: "local" }, 201);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

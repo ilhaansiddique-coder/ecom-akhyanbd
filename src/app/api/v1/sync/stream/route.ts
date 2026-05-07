@@ -13,33 +13,26 @@
  * auto-reconnect on close, so a dropped link self-heals.
  *
  * Backed by `eventStream()` in `lib/sync.ts`, which is Redis-backed when
- * `UPSTASH_REDIS_REST_*` env vars are present (production on Vercel) and
- * EventEmitter-backed otherwise (local dev / single-process self-hosted).
+ * `UPSTASH_REDIS_REST_*` env vars are present and EventEmitter-backed
+ * otherwise. Same code, three deploy targets:
+ *   - Coolify / Hostinger / VPS: long-lived Node process — connection lives
+ *     for hours, EventEmitter fans out instantly when Redis is absent.
+ *   - Vercel Pro / Edge platforms: serverless caps the function lifetime,
+ *     but the client's watchdog auto-reconnects so users notice nothing.
  *
- * Runtime:
- *   - `nodejs`: needed for the Redis client and the long-running iterator.
- *   - `force-dynamic`: prevents static optimization of an inherently live route.
- *   - `maxDuration`: extend Vercel's per-request limit. The client's
- *     watchdog reconnects on disconnect, so even if a function hits the
- *     limit, the user notices nothing.
+ * Runtime is `nodejs` (works on every host). No `maxDuration` is set here
+ * — that's a Vercel-only directive; on Coolify/Hostinger the connection
+ * runs as long as the client holds it open.
  */
 import { NextRequest } from "next/server";
-import { eventStream, getVersion } from "@/lib/sync";
+import { eventStream, getVersion, TRACKED_CHANNELS } from "@/lib/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Vercel plan caps: Hobby 300s, Pro 800s. Set to 300 so Hobby builds pass;
-// bump to 800 if the project moves to Pro. Below 300 means the function
-// terminates sooner; the Flutter client's watchdog reconnects on disconnect
-// so the user notices nothing — it just means slightly more reconnects.
-// 299 not 300 — Vercel's "between 1 and 300" rejected 300 in practice on
-// Hobby; one second under the boundary is the safe value. Still 5 minutes.
-export const maxDuration = 299;
 
-const SEEDED_CHANNELS = [
-  "orders", "products", "categories", "brands", "reviews",
-  "theme", "settings", "banners", "menus", "flash-sales",
-];
+// Use the same channel list as the polling reader so we never seed a
+// channel the reader won't watch (or vice versa).
+const SEEDED_CHANNELS = TRACKED_CHANNELS;
 
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
@@ -96,8 +89,13 @@ export async function GET(request: NextRequest) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
+      // no-store covers proxies that ignore no-cache; no-transform stops
+      // Cloudflare Brotli/gzip from buffering the stream into chunks.
+      "Cache-Control": "no-store, no-cache, no-transform",
       "Connection": "keep-alive",
+      // Disable buffering on Nginx, LiteSpeed, and Cloudflare layers that
+      // honour the hint — without it, a proxy may hold events for seconds
+      // before flushing to the client.
       "X-Accel-Buffering": "no",
     },
   });

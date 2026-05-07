@@ -5,6 +5,7 @@ import { jsonResponse, errorResponse, notFound, validationError } from "@/lib/ap
 import { withAdmin, withStaff } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
 import { shortlinkUpdateSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 // PUT — update. Body can change slug, target_url, is_active.
 export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
@@ -52,6 +53,7 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
     if (Object.keys(data).length === 0) return errorResponse("Nothing to update", 400);
 
     const updated = await prisma.shortlink.update({ where: { id: idNum }, data });
+    bumpVersion("shortlinks", { kind: "shortlink.updated", title: "Shortlink updated", body: `/${updated.slug}`, severity: "info" });
     return jsonResponse({ data: updated });
   } catch (e) {
     console.error("[Shortlinks] update error:", e);
@@ -67,6 +69,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
     const idNum = Number(id);
     if (!idNum) return notFound("Invalid id");
     await prisma.shortlink.delete({ where: { id: idNum } }).catch(() => null);
+    bumpVersion("shortlinks", { kind: "shortlink.deleted", title: "Shortlink deleted", body: `id ${idNum}`, severity: "warn" });
     return jsonResponse({ ok: true });
   } catch (e) {
     console.error("[Shortlinks] delete error:", e);

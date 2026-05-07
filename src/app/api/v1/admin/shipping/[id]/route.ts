@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { shippingZoneSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -32,6 +33,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     revalidateAll("shipping");
+    bumpVersion("shipping", { kind: "shipping.zone_updated", title: "Shipping zone updated", body: zone.name, severity: "info" });
     return jsonResponse(serialize(zone));
   } catch (error) {
     return errorResponse("Failed to update shipping zone", 500);
@@ -45,5 +47,6 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   await prisma.shippingZone.delete({ where: { id: Number(id) } });
   revalidateAll("shipping");
+  bumpVersion("shipping", { kind: "shipping.zone_deleted", title: "Shipping zone deleted", body: existing.name, severity: "warn" });
   return jsonResponse({ message: "Shipping zone deleted" });
 });

@@ -32,10 +32,14 @@ const VERSION_KEY = (channel: string) => `sync:v:${channel}`;
 const LAST_EVENT_KEY = (channel: string) => `sync:last:${channel}`;
 
 /** Channels the SSE handler watches. Adding a new channel? List it here
- * AND wire bumpVersion("<name>") in the relevant write route. */
-const TRACKED_CHANNELS = [
+ * AND wire bumpVersion("<name>") in the relevant write route. Keep in
+ * sync with SEEDED_CHANNELS in app/api/v1/sync/stream/route.ts. */
+export const TRACKED_CHANNELS = [
   "orders", "products", "categories", "brands", "reviews",
   "theme", "settings", "banners", "menus", "flash-sales",
+  // Admin / operational channels — added with the host-agnostic audit.
+  "staff", "customers", "coupons", "shortlinks", "blog",
+  "shipping", "fraud", "media", "form-submissions",
 ];
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;

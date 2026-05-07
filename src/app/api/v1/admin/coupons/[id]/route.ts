@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { couponSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -35,6 +36,12 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     revalidateAll("coupons");
+    bumpVersion("coupons", {
+      kind: "coupon.updated",
+      title: "Coupon updated",
+      body: `Code ${coupon.code}`,
+      severity: "info",
+    });
     return jsonResponse(serialize(coupon));
   } catch (error) {
     return errorResponse("Failed to update coupon", 500);
@@ -48,5 +55,11 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   await prisma.coupon.delete({ where: { id: Number(id) } });
   revalidateAll("coupons");
+  bumpVersion("coupons", {
+    kind: "coupon.deleted",
+    title: "Coupon deleted",
+    body: `Code ${existing.code}`,
+    severity: "warn",
+  });
   return jsonResponse({ message: "Coupon deleted" });
 });

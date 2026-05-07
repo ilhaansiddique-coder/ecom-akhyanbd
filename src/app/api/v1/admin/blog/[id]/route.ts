@@ -6,6 +6,7 @@ import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/ap
 import { withAdmin } from "@/lib/auth-helpers";
 import { blogPostSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
@@ -56,6 +57,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     revalidateAll("blog");
+    bumpVersion("blog", { kind: "blog.updated", title: "Blog post updated", body: post.title, severity: "info" });
     return jsonResponse(serialize(post));
   } catch (error) {
     return errorResponse("Failed to update blog post", 500);
@@ -69,5 +71,6 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   await prisma.blogPost.delete({ where: { id: Number(id) } });
   revalidateAll("blog");
+  bumpVersion("blog", { kind: "blog.deleted", title: "Blog post deleted", body: existing.title, severity: "warn" });
   return jsonResponse({ message: "Blog post deleted" });
 });

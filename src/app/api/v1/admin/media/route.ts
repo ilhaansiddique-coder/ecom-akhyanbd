@@ -7,6 +7,7 @@ import { getUploadDir } from "@/lib/uploads";
 import { isR2Configured, r2List, r2Delete, r2PublicUrl } from "@/lib/r2";
 import { isCloudinaryConfigured, cloudinaryList, cloudinaryDelete, cloudinaryPublicIdFromUrl } from "@/lib/cloudinary";
 import { mediaDeleteSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
 const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".avi", ".mkv"];
@@ -115,6 +116,7 @@ export const DELETE = withStaff(async (request) => {
       const key = filename.replace(/^\/+/, "").replace(/^uploads\//, "");
       const ok = await r2Delete(key);
       if (!ok) return errorResponse("Failed to delete file", 500);
+      bumpVersion("media");
       return jsonResponse({ message: "File deleted" });
     }
     // Cloudinary fallback. The "filename" passed in is typically a delivery

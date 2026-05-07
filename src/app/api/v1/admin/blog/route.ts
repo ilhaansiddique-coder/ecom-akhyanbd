@@ -7,6 +7,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { withAdmin } from "@/lib/auth-helpers";
 import { blogPostSchema } from "@/lib/validation";
 import { uniqueSlug } from "@/lib/unique-slug";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (request) => {
   const { searchParams } = request.nextUrl;
@@ -60,6 +61,7 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
     });
 
     revalidateAll("blog");
+    bumpVersion("blog", { kind: "blog.created", title: "Blog post created", body: post.title, severity: "info" });
     return jsonResponse(serialize(post), 201);
   } catch (error) {
     return errorResponse("Failed to create blog post", 500);

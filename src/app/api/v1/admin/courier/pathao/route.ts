@@ -21,6 +21,7 @@ import {
 } from "@/lib/pathao";
 import { formatPhone, isValidBDPhone, checkDeliveryStatus, isSteadfastConfigured, clearKeyCache } from "@/lib/steadfast";
 import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
+import { bumpVersion } from "@/lib/sync";
 
 // Same auto-sync helper as the Steadfast route — see comment there. Kept
 // inline (not in the shared lib) because both routes already import the
@@ -195,6 +196,7 @@ export const POST = withStaff(async (request) => {
             where: { id: order.id },
             data: buildStatusUpdate(order.status, r.delivery_status, order.courierSentAt),
           });
+          bumpVersion("orders");
           return jsonResponse({ delivery_status: r.delivery_status, consignment: r.consignment });
         }
         console.error("[courier status] Steadfast (delegated) returned:", r);
@@ -218,6 +220,7 @@ export const POST = withStaff(async (request) => {
           where: { id: order.id },
           data: buildStatusUpdate(order.status, result.data.order_status, order.courierSentAt),
         });
+        bumpVersion("orders");
         return jsonResponse({ delivery_status: result.data.order_status, consignment: result.data });
       }
       console.error("[courier status] Pathao returned:", result);
@@ -375,6 +378,7 @@ export const POST = withStaff(async (request) => {
 
     const auto_matched = matchInfo.filter(m => m.matched).length;
     const fallback = matchInfo.length - auto_matched;
+    if (results.some(r => r.status === "success")) bumpVersion("orders", { kind: "orders.bulk_dispatched", title: "Pathao bulk dispatch", body: `${results.filter(r => r.status === "success").length}/${validOrders.length} sent`, severity: "info" });
     return jsonResponse({
       results,
       total: validOrders.length,
@@ -416,6 +420,7 @@ export const POST = withStaff(async (request) => {
         }
       } catch { results.push({ order_id: orderId, status: "error", error: "Request failed" }); }
     }
+    if (results.some(r => r.status === "success")) bumpVersion("orders");
     return jsonResponse({ results });
   }
 
@@ -446,6 +451,7 @@ export const POST = withStaff(async (request) => {
           },
           include: { items: true },
         });
+        bumpVersion("orders", { kind: "order.dispatched", title: `Order #${order.id} dispatched`, body: `Pathao — ${r.data.consignment_id}`, href: `/orders/${order.id}`, severity: "info" });
         return jsonResponse({
           message: "Order sent to Pathao courier",
           consignment_id: r.data.consignment_id,

@@ -6,6 +6,7 @@ import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/ap
 import { withAdmin } from "@/lib/auth-helpers";
 import { userSchema } from "@/lib/validation";
 import bcrypt from "bcryptjs";
+import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
   const { id } = await params;
@@ -38,6 +39,13 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     const { passwordHash, ...userWithoutPassword } = user;
+    const isStaff = !!user.isSuperAdmin;
+    bumpVersion(isStaff ? "staff" : "customers", {
+      kind: isStaff ? "staff.updated" : "customer.updated",
+      title: isStaff ? "Staff updated" : "Customer updated",
+      body: user.fullName || user.email,
+      severity: "info",
+    });
     return jsonResponse(serialize(userWithoutPassword));
   } catch (error) {
     console.error("User update error:", error);
@@ -53,6 +61,13 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
 
   try {
     await prisma.user.delete({ where: { id } });
+    const wasStaff = !!existing.isSuperAdmin;
+    bumpVersion(wasStaff ? "staff" : "customers", {
+      kind: wasStaff ? "staff.deleted" : "customer.deleted",
+      title: wasStaff ? "Staff removed" : "Customer removed",
+      body: existing.fullName || existing.email,
+      severity: "warn",
+    });
     return jsonResponse({ message: "User deleted" });
   } catch (error) {
     console.error("User delete error:", error);

@@ -7,6 +7,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { withAdmin } from "@/lib/auth-helpers";
 import { userSchema } from "@/lib/validation";
 import bcrypt from "bcryptjs";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (request) => {
   const { searchParams } = request.nextUrl;
@@ -111,6 +112,15 @@ export const POST = withAdmin(async (request) => {
       avatar: created!.image,
       created_at: created!.createdAt,
     };
+
+    // Admin/staff users land on the staff channel; customers on customers.
+    const isStaff = !!created!.isSuperAdmin;
+    bumpVersion(isStaff ? "staff" : "customers", {
+      kind: isStaff ? "staff.created" : "customer.created",
+      title: isStaff ? "Staff added" : "Customer added",
+      body: created!.fullName || created!.email,
+      severity: "info",
+    });
 
     return jsonResponse(serialize(formatted), 201);
   } catch (error) {

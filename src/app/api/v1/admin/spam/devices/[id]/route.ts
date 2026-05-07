@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, notFound, errorResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { deviceStatusSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withStaff<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
   const { id } = await params;
@@ -84,6 +85,12 @@ export const PUT = withStaff<{ params: Promise<{ id: string }> }>(async (request
       data: updateData,
     });
 
+    bumpVersion("fraud", {
+      kind: status === "blocked" ? "fraud.device_blocked" : "fraud.device_status_changed",
+      title: status === "blocked" ? "Device blocked" : `Device set to ${status}`,
+      body: `fp ${existing.fpHash.slice(0, 8)}`,
+      severity: status === "blocked" ? "alert" : "info",
+    });
     return jsonResponse(serialize(updated));
   } catch {
     return errorResponse("Failed to update device", 500);

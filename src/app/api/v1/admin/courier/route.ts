@@ -17,6 +17,7 @@ import {
 } from "@/lib/steadfast";
 import { checkPathaoStatus, hasPathaoAuth, clearPathaoCache } from "@/lib/pathao";
 import { mapCourierStatusToOrderStatus } from "@/lib/courierStatusMap";
+import { bumpVersion } from "@/lib/sync";
 
 // Build the data payload for `prisma.order.update` when a courier-status
 // poll returns a new value. Always sets `courierStatus`; conditionally sets
@@ -197,6 +198,7 @@ export const POST = withStaff(async (request) => {
             where: { id: order.id },
             data: buildStatusUpdate(order.status, r.data.order_status, order.courierSentAt),
           });
+          bumpVersion("orders");
           return jsonResponse({ delivery_status: r.data.order_status, consignment: r.data });
         }
         console.error("[courier status] Pathao (delegated) returned:", r);
@@ -219,6 +221,7 @@ export const POST = withStaff(async (request) => {
           where: { id: order.id },
           data: buildStatusUpdate(order.status, result.delivery_status, order.courierSentAt),
         });
+        bumpVersion("orders");
         return jsonResponse({
           delivery_status: result.delivery_status,
           consignment: result.consignment,
@@ -303,6 +306,7 @@ export const POST = withStaff(async (request) => {
       }
     }
 
+    if (results.some(r => r.status === "success")) bumpVersion("orders", { kind: "orders.bulk_dispatched", title: "Bulk dispatch", body: `${results.filter(r => r.status === "success").length}/${validOrders.length} sent`, severity: "info" });
     return jsonResponse({ results, total: validOrders.length, sent: results.filter(r => r.status === "success").length });
   }
 
@@ -360,6 +364,7 @@ export const POST = withStaff(async (request) => {
       }
     }
 
+    if (results.some(r => r.status === "success")) bumpVersion("orders");
     return jsonResponse({ results });
   }
 
@@ -400,6 +405,7 @@ export const POST = withStaff(async (request) => {
           include: { items: true },
         });
 
+        bumpVersion("orders", { kind: "order.dispatched", title: `Order #${order.id} dispatched`, body: `Steadfast — ${res.consignment.consignment_id}`, href: `/orders/${order.id}`, severity: "info" });
         return jsonResponse({
           message: "Order sent to Steadfast courier",
           consignment_id: res.consignment.consignment_id,

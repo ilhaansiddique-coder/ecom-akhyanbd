@@ -5,6 +5,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError, errorResponse } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { couponSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withAdmin(async (_request) => {
   const coupons = await prisma.coupon.findMany({
@@ -38,6 +39,12 @@ export const POST = withAdmin(async (request) => {
     });
 
     revalidateAll("coupons");
+    bumpVersion("coupons", {
+      kind: "coupon.created",
+      title: "Coupon created",
+      body: `Code ${coupon.code}`,
+      severity: "info",
+    });
     return jsonResponse(serialize(coupon), 201);
   } catch (error) {
     return errorResponse("Failed to create coupon", 500);

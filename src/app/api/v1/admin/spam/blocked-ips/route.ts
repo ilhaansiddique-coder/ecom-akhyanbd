@@ -4,6 +4,7 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, validationError } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { blockedIpSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const GET = withStaff(async (request) => {
   const ips = await prisma.blockedIp.findMany({ orderBy: { createdAt: "desc" } });
@@ -31,5 +32,6 @@ export const POST = withStaff(async (request) => {
     data: { ipAddress: ip_address.trim(), reason: reason || "manual_block" },
   });
 
+  bumpVersion("fraud", { kind: "fraud.ip_blocked", title: "IP blocked", body: blocked.ipAddress, severity: "alert" });
   return jsonResponse(serialize(blocked), 201);
 });

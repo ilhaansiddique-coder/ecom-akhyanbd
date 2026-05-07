@@ -16,6 +16,7 @@ import { jsonResponse, errorResponse, notFound, validationError } from "@/lib/ap
 import { withStaff } from "@/lib/auth-helpers";
 import { blockCustomerFromOrder } from "@/lib/spamGuard";
 import { blockFromOrderSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 export const POST = withStaff<{ params: Promise<{ id: string }> }>(async (request, { params }, admin) => {
   const { id } = await params;
@@ -32,6 +33,10 @@ export const POST = withStaff<{ params: Promise<{ id: string }> }>(async (reques
 
   try {
     const result = await blockCustomerFromOrder(orderId, reason, admin.id);
+    // Three signals from one click: a fraud-list change AND the order is
+    // now linked to a blocked entity, so the orders list refetches too.
+    bumpVersion("fraud", { kind: "fraud.block_added", title: "Customer blocked", body: `Order #${orderId} — ${reason}`, severity: "alert" });
+    bumpVersion("orders");
     return jsonResponse(result);
   } catch (e) {
     if (e instanceof Error && e.message === "Order not found") return notFound("Order not found");
