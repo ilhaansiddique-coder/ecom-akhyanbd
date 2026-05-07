@@ -142,7 +142,16 @@ export const POST = withStaff(async (request) => {
 
   const parsed = createOrderSchema.safeParse(body);
   if (!parsed.success) {
-    return validationError(parsed.error.flatten().fieldErrors as Record<string, string[]>);
+    // Build a per-issue map keyed by dotted path (e.g. "items.0.productId")
+    // with the real zod message instead of the generic "Invalid input".
+    // The user/dev triaging the snackbar can immediately see which field
+    // and which row failed.
+    const errors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "_root";
+      (errors[path] ||= []).push(issue.message);
+    }
+    return validationError(errors);
   }
   const data = parsed.data;
 
