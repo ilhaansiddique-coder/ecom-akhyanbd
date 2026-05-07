@@ -64,10 +64,20 @@ export async function GET(request: NextRequest) {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        clearTimeout(maxLifetime);
         ac.abort();
         try { controller.close(); } catch {}
       };
       request.signal.addEventListener("abort", onAbort);
+
+      // Self-close before the upstream proxy times us out. Coolify's
+      // bundled Traefik defaults to ~60s `idleTimeout`/`responseHeaderTimeout`
+      // depending on the version; LiteSpeed & most managed proxies sit
+      // around 100-120s. Closing at 50s and letting the client reconnect
+      // turns a "504 Gateway Timeout" into an invisible 50s reconnect
+      // cycle. The client (sync_client.dart) backs off 1/2/4/8 seconds
+      // and resumes from the snapshot, so users see no interruption.
+      const maxLifetime = setTimeout(onAbort, 50_000);
 
       // Drain the event iterator. This loop runs for the lifetime of the
       // connection. `eventStream()` blocks on Redis XREAD (25s) or the
@@ -97,6 +107,29 @@ export async function GET(request: NextRequest) {
       // honour the hint — without it, a proxy may hold events for seconds
       // before flushing to the client.
       "X-Accel-Buffering": "no",
+      // CORS — set explicitly on this response because middleware-added
+      // headers don't merge into a route-returned `new Response()`. The
+      // Flutter web client running on flutter-tools localhost:NNNNN needs
+      // these or the browser blocks the EventSource. `*` is fine because
+      // SSE is GET-only and we authenticate via cookie / Authorization.
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
+
+// Browsers preflight EventSource requests with OPTIONS when custom
+// headers are involved. Respond 200 with the same CORS headers so the
+// real GET goes through.
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
     },
   });
 }
