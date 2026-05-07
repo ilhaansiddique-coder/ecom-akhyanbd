@@ -105,13 +105,17 @@ export const GET = withStaff(async (request) => {
  * Stock and product existence ARE validated. Bumping fires after the
  * transaction commits.
  */
+// Flutter sends product/variant IDs as strings (the Dart Product model
+// types them as `String` for forward-compat with UUID-style IDs even
+// though the backend table is currently integer-keyed). Use coerce so
+// either "42" or 42 parses cleanly.
 const itemSchema = z.object({
-  productId: z.number().int().positive(),
+  productId: z.coerce.number().int().positive(),
   productName: z.string().optional(),
-  variantId: z.number().int().positive().optional().nullable(),
+  variantId: z.coerce.number().int().positive().optional().nullable(),
   variantLabel: z.string().optional().nullable(),
-  quantity: z.number().int().positive(),
-  price: z.number().nonnegative(),
+  quantity: z.coerce.number().int().positive(),
+  price: z.coerce.number().nonnegative(),
 });
 
 const createOrderSchema = z.object({
@@ -122,8 +126,11 @@ const createOrderSchema = z.object({
   city: z.string().trim().optional().nullable(),
   zipCode: z.string().trim().optional().nullable(),
   items: z.array(itemSchema).min(1, "At least one item is required"),
-  shippingCost: z.number().nonnegative().default(0),
-  discount: z.number().nonnegative().default(0),
+  // Coerce numerics for the same reason as items above — Flutter's
+  // form fields are TextEditingControllers; values may arrive as
+  // numbers OR numeric strings depending on the screen.
+  shippingCost: z.coerce.number().nonnegative().default(0),
+  discount: z.coerce.number().nonnegative().default(0),
   paymentMethod: z.string().default("cod"),
   notes: z.string().optional().nullable(),
 });
