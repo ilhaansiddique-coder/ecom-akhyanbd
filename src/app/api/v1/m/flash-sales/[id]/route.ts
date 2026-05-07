@@ -4,6 +4,7 @@ import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/ap
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileFlashSaleUpdateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 type FlashSaleState = "live" | "scheduled" | "ended" | "inactive";
 
@@ -133,6 +134,7 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
     });
     if (!updated) return notFound("Flash sale not found");
 
+    revalidateAll("flash-sales");
     bumpVersion("flash-sales");
     return jsonResponse({ data: toDetailDto(updated, new Date()) });
   } catch (error) {
@@ -150,6 +152,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
   if (!existing) return notFound("Flash sale not found");
 
   await prisma.flashSale.delete({ where: { id: idNum } });
+  revalidateAll("flash-sales");
   bumpVersion("flash-sales");
   return jsonResponse({ data: { id: idNum, deleted: true } });
 });

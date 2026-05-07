@@ -4,6 +4,7 @@ import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/ap
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileShortlinkUpdateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 const DAY_MS = 86400000;
 
@@ -103,6 +104,7 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
 
     const updated = await prisma.shortlink.update({ where: { id: idNum }, data });
 
+    revalidateAll("shortlinks");
     bumpVersion("shortlinks");
     return jsonResponse({
       data: {
@@ -130,6 +132,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
   if (!existing) return notFound("Shortlink not found");
 
   await prisma.shortlink.delete({ where: { id: idNum } });
+  revalidateAll("shortlinks");
   bumpVersion("shortlinks");
   return jsonResponse({ data: { id: idNum, deleted: true } });
 });

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, validationError, notFound } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 type BlockedIpRow = {
   id: number;
@@ -42,7 +43,8 @@ export const POST = withAdmin(async (request) => {
       create: { ipAddress: ip, reason },
     });
 
-    bumpVersion("spam");
+    revalidateAll("fraud");
+    bumpVersion("fraud");
     return jsonResponse({ data: toBlockedIp(blocked) }, 201);
   } catch {
     return errorResponse("Failed to block IP", 500);
@@ -57,6 +59,7 @@ export const DELETE = withAdmin(async (request) => {
   if (!existing) return notFound("Blocked IP not found");
 
   await prisma.blockedIp.delete({ where: { ipAddress: ip } });
-  bumpVersion("spam");
+  revalidateAll("fraud");
+  bumpVersion("fraud");
   return jsonResponse({ data: { ipAddress: ip, deleted: true } });
 });

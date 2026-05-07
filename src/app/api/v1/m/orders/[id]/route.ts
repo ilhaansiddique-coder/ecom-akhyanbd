@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
 import { withStaff, requireAdmin } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 // Shape a Prisma order (with items) into the camelCase Order envelope the
 // Flutter client expects. Kept inline so each m/ route is self-contained.
@@ -112,6 +113,7 @@ export const PATCH = withStaff<{ params: Promise<{ id: string }> }>(async (reque
     }
 
     await prisma.order.update({ where: { id: orderId }, data: updateData });
+    revalidateAll("orders");
     bumpVersion("orders");
     const data = await shapeOrder(orderId);
     return jsonResponse({ data });

@@ -5,6 +5,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileStaffCreateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 type StaffRow = {
   id: string;
@@ -92,6 +93,7 @@ export const POST = withAdmin(async (request) => {
       },
     });
 
+    revalidateAll("staff");
     bumpVersion("staff");
     return jsonResponse({ data: toStaffDto(created) }, 201);
   } catch (error) {

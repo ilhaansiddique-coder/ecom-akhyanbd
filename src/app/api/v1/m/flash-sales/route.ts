@@ -4,6 +4,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileFlashSaleCreateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 type FlashSaleState = "live" | "scheduled" | "ended" | "inactive";
 
@@ -104,6 +105,7 @@ export const POST = withAdmin(async (request) => {
       },
     });
 
+    revalidateAll("flash-sales");
     bumpVersion("flash-sales");
     return jsonResponse({ data: toListDto(created, new Date()) }, 201);
   } catch (error) {

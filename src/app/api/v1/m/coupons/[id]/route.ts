@@ -4,6 +4,7 @@ import { jsonResponse, validationError, notFound, errorResponse } from "@/lib/ap
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileCouponUpdateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 function toCouponDto(c: {
   id: number;
@@ -74,6 +75,7 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
 
     const coupon = await prisma.coupon.update({ where: { id: idNum }, data });
 
+    revalidateAll("coupons");
     bumpVersion("coupons");
     return jsonResponse({ data: toCouponDto(coupon) });
   } catch (error) {
@@ -91,6 +93,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
   if (!existing) return notFound("Coupon not found");
 
   await prisma.coupon.delete({ where: { id: idNum } });
+  revalidateAll("coupons");
   bumpVersion("coupons");
   return jsonResponse({ data: { id: idNum, deleted: true } });
 });

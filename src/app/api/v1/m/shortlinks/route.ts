@@ -4,6 +4,7 @@ import { withAdmin } from "@/lib/auth-helpers";
 import { isValidShortlinkSlug } from "@/lib/reservedSlugs";
 import { mobileShortlinkCreateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 const DAY_MS = 86400000;
 
@@ -95,6 +96,7 @@ export const POST = withAdmin(async (request) => {
       data: { slug, targetUrl, isActive },
     });
 
+    revalidateAll("shortlinks");
     bumpVersion("shortlinks");
     return jsonResponse({
       data: {

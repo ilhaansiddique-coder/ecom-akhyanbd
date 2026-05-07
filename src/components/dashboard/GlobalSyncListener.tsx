@@ -2,61 +2,92 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useChannel } from "@/lib/useChannel";
 
 /**
- * Mount once in the dashboard layout. Subscribes to every backend channel
- * and calls `router.refresh()` when a bump arrives — Next.js then re-runs
- * the active page's server components and swaps the rendered output in
- * place, no flash, no full reload.
+ * Mount once in the dashboard layout. Holds a single EventSource open to
+ * /api/v1/sync/stream and calls `router.refresh()` whenever a bump arrives,
+ * so the active server-rendered page re-fetches its data without the user
+ * touching anything.
  *
- * Why this lives at the layout level instead of each page using
- * `<LiveRefresh>`: one mount = one SSE connection per tab. Per-page
- * wrappers would each open one and the dashboard would need 10 wrappers
- * to cover every section. The hook itself singletons the EventSource
- * already, but consolidating subscriptions here keeps page code clean.
+ * Why direct EventSource instead of `useChannel` (the existing hook):
+ * - useChannel is per-channel; subscribing to all 19 channels via a hook
+ *   loop violates React's rules-of-hooks even with stable lengths and made
+ *   the listener flaky in practice.
+ * - With one EventSource we get one connection, one onmessage handler, and
+ *   trivially clear behaviour: every event triggers the same debounced
+ *   refresh.
  *
- * Coalescing: many bumps in quick succession (bulk imports, courier
- * batches) trigger many `router.refresh()` calls. Next.js de-dupes
- * these internally, but we add a 250ms trailing debounce here as a
- * cheap extra layer — keeps the dashboard from re-rendering 50 times
- * during a 50-row bulk action.
+ * The first event for each channel is the snapshot fired on connect — we
+ * skip those by remembering the seeded versions, then only refresh on a
+ * version change. Without this, the dashboard would refresh once per
+ * channel on every page load (19 router.refresh calls) for nothing.
  */
-const TRACKED_CHANNELS = [
-  "orders", "products", "categories", "brands", "reviews",
-  "theme", "settings", "banners", "menus", "flash-sales",
-  "staff", "customers", "coupons", "shortlinks", "blog",
-  "shipping", "fraud", "media", "form-submissions",
-];
-
 export default function GlobalSyncListener() {
   const router = useRouter();
   const pathname = usePathname();
-  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Don't refresh while on the customizer route — it has its own complex
-  // local state and a router.refresh() while editing would clobber the
-  // in-progress changes. Customizer saves call revalidate explicitly.
   const isCustomizerRoute = pathname?.startsWith("/dashboard/customizer");
+  const customizerRouteRef = useRef(isCustomizerRoute);
+  customizerRouteRef.current = isCustomizerRoute;
 
   useEffect(() => {
-    return () => {
-      if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+
+    const seenVersions: Record<string, number> = {};
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+    let es: EventSource | null = null;
+
+    const scheduleRefresh = () => {
+      if (customizerRouteRef.current) return;
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        if (!closed) router.refresh();
+      }, 250);
     };
+
+    const open = () => {
+      if (closed) return;
+      try {
+        es = new EventSource("/api/v1/sync/stream", { withCredentials: true });
+      } catch (err) {
+        console.error("[sync] EventSource construct failed:", err);
+        return;
+      }
+      es.onmessage = (e) => {
+        try {
+          const evt = JSON.parse(e.data) as { channel?: string; version?: number };
+          if (typeof evt.channel !== "string" || typeof evt.version !== "number") return;
+          const prev = seenVersions[evt.channel];
+          seenVersions[evt.channel] = evt.version;
+          // Skip the connect-time snapshot (no prior version known) — only
+          // emit refreshes when a version actually advances. This is the
+          // single most important guard; without it the dashboard refreshes
+          // 19 times every page load.
+          if (prev === undefined) return;
+          if (evt.version <= prev) return;
+          scheduleRefresh();
+        } catch {
+          // Bad JSON — ignore individual frame, keep the connection alive.
+        }
+      };
+      es.onerror = () => {
+        // Browser auto-reconnects on its own; nothing to do here.
+      };
+    };
+
+    open();
+
+    return () => {
+      closed = true;
+      if (pending) clearTimeout(pending);
+      try { es?.close(); } catch {}
+      es = null;
+    };
+    // router is referentially stable from next/navigation; pathname is read
+    // through a ref so changing routes doesn't tear down the connection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const scheduleRefresh = () => {
-    if (isCustomizerRoute) return;
-    if (pendingTimer.current) clearTimeout(pendingTimer.current);
-    pendingTimer.current = setTimeout(() => router.refresh(), 250);
-  };
-
-  // Subscribe to every channel. The hook singletons the EventSource so
-  // calling it 19 times costs one connection.
-  for (const ch of TRACKED_CHANNELS) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useChannel(ch, "bump", scheduleRefresh);
-  }
 
   return null;
 }

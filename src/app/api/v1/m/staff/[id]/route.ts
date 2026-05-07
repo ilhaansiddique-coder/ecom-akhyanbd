@@ -4,6 +4,7 @@ import { jsonResponse, validationError, notFound, errorResponse, forbidden } fro
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileStaffUpdateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 type StaffRow = {
   id: string;
@@ -77,6 +78,7 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
       select: staffSelect,
     });
 
+    revalidateAll("staff");
     bumpVersion("staff");
     return jsonResponse({ data: toStaffDto(updated) });
   } catch (error) {
@@ -96,6 +98,7 @@ export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_req
   if (!existing) return notFound("Staff member not found");
 
   await prisma.user.delete({ where: { id } });
+  revalidateAll("staff");
   bumpVersion("staff");
   return jsonResponse({ data: { id, deleted: true } });
 });

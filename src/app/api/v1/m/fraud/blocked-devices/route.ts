@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, errorResponse, validationError, notFound } from "@/lib/api-response";
 import { withAdmin } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 // BlockedDevice projection for mobile.
 // seenCount = number of OrderFingerprint rows tied to this fpHash.
@@ -83,7 +84,8 @@ export const POST = withAdmin(async (request) => {
       },
     });
 
-    bumpVersion("spam");
+    revalidateAll("fraud");
+    bumpVersion("fraud");
     return jsonResponse({ data: await buildBlockedDevice(device) }, 201);
   } catch {
     return errorResponse("Failed to block device", 500);
@@ -103,6 +105,7 @@ export const DELETE = withAdmin(async (request) => {
     data: { status: "active", blockReason: null, blockedAt: null },
   });
 
-  bumpVersion("spam");
+  revalidateAll("fraud");
+  bumpVersion("fraud");
   return jsonResponse({ data: { fpHash, deleted: true } });
 });

@@ -4,6 +4,7 @@ import { jsonResponse, validationError, errorResponse } from "@/lib/api-response
 import { withAdmin } from "@/lib/auth-helpers";
 import { mobileCouponCreateSchema } from "@/lib/validation";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 // Coupon JSON shape returned to the Flutter admin client.
 function toCouponDto(c: {
@@ -74,6 +75,7 @@ export const POST = withAdmin(async (request) => {
       },
     });
 
+    revalidateAll("coupons");
     bumpVersion("coupons");
     return jsonResponse({ data: toCouponDto(coupon) }, 201);
   } catch (error) {

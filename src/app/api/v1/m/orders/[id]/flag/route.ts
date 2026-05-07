@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonResponse, notFound, errorResponse } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 import { bumpVersion } from "@/lib/sync";
+import { revalidateAll } from "@/lib/revalidate";
 
 async function shapeOrder(orderId: number) {
   const order = await prisma.order.findUnique({
@@ -77,6 +78,7 @@ export const POST = withStaff<{ params: Promise<{ id: string }> }>(async (reques
     }
 
     await prisma.order.update({ where: { id: orderId }, data: updateData });
+    revalidateAll("orders");
     bumpVersion("orders");
     const data = await shapeOrder(orderId);
     return jsonResponse({ data });
@@ -95,6 +97,7 @@ export const DELETE = withStaff<{ params: Promise<{ id: string }> }>(async (_req
 
   try {
     await prisma.order.update({ where: { id: orderId }, data: { riskScore: 0 } });
+    revalidateAll("orders");
     bumpVersion("orders");
     const data = await shapeOrder(orderId);
     return jsonResponse({ data });
