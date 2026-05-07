@@ -28,9 +28,15 @@
 import { EventEmitter } from "events";
 import { Redis } from "@upstash/redis";
 
-const STREAM_KEY = "sync:events";
-const STREAM_MAXLEN = 1000; // cap the stream so it never grows unbounded
 const VERSION_KEY = (channel: string) => `sync:v:${channel}`;
+const LAST_EVENT_KEY = (channel: string) => `sync:last:${channel}`;
+
+/** Channels the SSE handler watches. Adding a new channel? List it here
+ * AND wire bumpVersion("<name>") in the relevant write route. */
+const TRACKED_CHANNELS = [
+  "orders", "products", "categories", "brands", "reviews",
+  "theme", "settings", "banners", "menus", "flash-sales",
+];
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -122,9 +128,14 @@ async function publishRedis(channel: string, notify?: SyncNotify): Promise<void>
     ts: Date.now(),
     ...(notify ? { notify } : {}),
   };
-  // XADD with MAXLEN ~ trims the stream lazily so memory stays bounded.
-  // Field name "d" stores the JSON-encoded event; readers parse it back out.
-  await r.xadd(STREAM_KEY, "*", { d: JSON.stringify(evt) }, { trim: { type: "MAXLEN", threshold: STREAM_MAXLEN, comparison: "~" } });
+  // Store the FULL event under a per-channel "last" key. Subscribers poll
+  // these keys with MGET, compare versions, and emit events when they see
+  // a newer one. We previously used Redis Streams (XADD/XREAD) but the
+  // @upstash/redis response shape for XREAD turned out to be fragile to
+  // parse and was silently dropping events. SET + MGET is bulletproof.
+  // 1-hour TTL is plenty — readers reconnect at least every 5 minutes
+  // (Vercel function lifetime) and re-snapshot version state on connect.
+  await r.set(LAST_EVENT_KEY(channel), JSON.stringify(evt), { ex: 3600 });
 }
 
 export async function getVersion(channel: string): Promise<number> {
@@ -157,55 +168,55 @@ export async function* eventStream(opts: { signal?: AbortSignal } = {}): AsyncGe
  * admin app — the bell badge ticks within 5 seconds of an order. */
 const POLL_INTERVAL_MS = 5000;
 
-/** Redis Streams reader: XREAD without BLOCK + sleep loop.
+/** MGET-based polling reader.
  *
- * Why not BLOCK: Upstash REST does not support `XREAD BLOCK` (their docs
- * flag it as "not yet supported"). A standard Redis TCP client would, but
- * TCP connections from Vercel serverless instances burn the connection
- * pool fast and don't reuse across invocations. REST polling is the
- * pragmatic shape for Vercel + Upstash. */
+ * On each tick, fetch all `sync:last:<channel>` keys with one MGET call,
+ * compare the embedded version to what we last emitted for that channel,
+ * and yield any with a newer version. This is one Redis command per poll
+ * regardless of how many channels we watch — much cheaper than per-channel
+ * polling, and the response shape (an array of nullable strings) is
+ * trivial to parse, unlike Upstash's quirky XREAD shape. */
 async function* redisEventStream(signal?: AbortSignal): AsyncGenerator<SyncEvent> {
   const r = redis();
-  // Start by reading the latest entry's ID so we don't replay old events
-  // on connect. Empty stream → start from "0" (no entries match anyway).
-  let lastId: string;
+
+  // Seed lastSeen with the current state so we don't replay every event
+  // on reconnect. The SSE handler also sends a snapshot of versions on
+  // connect, so the client already knows where it stands.
+  const lastSeen: Record<string, number> = {};
   try {
-    const tail = (await r.xrevrange(STREAM_KEY, "+", "-", 1)) as Record<string, Record<string, string>> | unknown;
-    // xrevrange returns an object keyed by entry id when there's data, {} when empty.
-    const ids = tail && typeof tail === "object" ? Object.keys(tail as Record<string, unknown>) : [];
-    lastId = ids[0] || "0";
+    const keys = TRACKED_CHANNELS.map(VERSION_KEY);
+    const versions = (await r.mget(...keys)) as Array<string | number | null>;
+    TRACKED_CHANNELS.forEach((c, i) => {
+      const v = versions[i];
+      lastSeen[c] = typeof v === "string" ? parseInt(v, 10) || 0 : (v as number) || 0;
+    });
   } catch {
-    lastId = "0";
+    TRACKED_CHANNELS.forEach((c) => { lastSeen[c] = 0; });
   }
 
   while (!signal?.aborted) {
     try {
-      // Read everything after lastId. Returns `null` if nothing new.
-      const res = await r.xread(STREAM_KEY, lastId);
-      if (res && Array.isArray(res)) {
-        // Upstash returns: [[streamName, [[id, [field, value, ...]], ...]], ...]
-        for (const stream of res as Array<[string, Array<[string, string[]]>]>) {
-          const entries = stream[1] || [];
-          for (const [id, fields] of entries) {
-            lastId = id;
-            // Flatten ["d", "<json>"] → { d: "<json>" }
-            const obj: Record<string, string> = {};
-            for (let i = 0; i < fields.length; i += 2) obj[fields[i]] = fields[i + 1];
-            const raw = obj.d;
-            if (!raw) continue;
-            try {
-              yield JSON.parse(raw) as SyncEvent;
-            } catch {
-              // Malformed entry — skip rather than tear down the stream.
-            }
-          }
+      const keys = TRACKED_CHANNELS.map(LAST_EVENT_KEY);
+      const payloads = (await r.mget(...keys)) as Array<string | Record<string, unknown> | null>;
+      for (let i = 0; i < TRACKED_CHANNELS.length; i++) {
+        const channel = TRACKED_CHANNELS[i];
+        const raw = payloads[i];
+        if (raw == null) continue;
+        // @upstash/redis auto-parses JSON when it can. Handle both shapes.
+        let evt: SyncEvent;
+        try {
+          evt = (typeof raw === "string" ? JSON.parse(raw) : raw) as SyncEvent;
+        } catch {
+          continue;
         }
+        if (typeof evt?.version !== "number") continue;
+        if (evt.version <= (lastSeen[channel] || 0)) continue;
+        lastSeen[channel] = evt.version;
+        yield evt;
       }
     } catch (e) {
-      console.error("[sync] xread error:", e);
+      console.error("[sync] mget poll error:", e);
     }
-    // Wait before next poll. Use an abortable sleep so client disconnects
-    // exit immediately instead of waiting up to POLL_INTERVAL_MS.
     await abortableSleep(POLL_INTERVAL_MS, signal);
   }
 }
