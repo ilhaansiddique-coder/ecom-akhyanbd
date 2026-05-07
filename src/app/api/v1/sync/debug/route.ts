@@ -11,7 +11,7 @@
  * are returned, just feature flags and counters.
  */
 import { NextResponse } from "next/server";
-import { getVersion } from "@/lib/sync";
+import { getVersion, TRACKED_CHANNELS } from "@/lib/sync";
 import { Redis } from "@upstash/redis";
 
 export const runtime = "nodejs";
@@ -40,9 +40,12 @@ export async function GET() {
     }
   }
 
-  const channels = ["orders", "products", "categories", "brands", "reviews", "theme", "settings", "banners", "menus", "flash-sales"];
+  // Use TRACKED_CHANNELS (the canonical list in lib/sync.ts) so any new
+  // channel added there shows up here automatically. The presence of
+  // channels like "staff" or "coupons" in the response also doubles as
+  // proof that the latest build is deployed.
   const versions: Record<string, number> = {};
-  for (const c of channels) versions[c] = await getVersion(c);
+  for (const c of TRACKED_CHANNELS) versions[c] = await getVersion(c);
 
   return NextResponse.json({
     backend,
