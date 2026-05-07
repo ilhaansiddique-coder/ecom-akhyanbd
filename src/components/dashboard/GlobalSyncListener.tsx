@@ -37,13 +37,23 @@ export default function GlobalSyncListener() {
     let closed = false;
     let es: EventSource | null = null;
 
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (channel: string, version: number) => {
       if (customizerRouteRef.current) return;
+      // 1) Re-run server components — picks up unstable_cache invalidations
+      //    fired by the matching write route's revalidateAll() call.
       if (pending) clearTimeout(pending);
       pending = setTimeout(() => {
         pending = null;
         if (!closed) router.refresh();
       }, 250);
+      // 2) Notify any client component that fetches its own data so it can
+      //    refetch. Server-component-only pages don't need this and ignore
+      //    the event; client-state pages (UsersClient, OrdersClient, etc.)
+      //    listen and call their own refresh function. Single source of
+      //    truth: subscribe to "sync:bump" and inspect `event.detail`.
+      try {
+        window.dispatchEvent(new CustomEvent("sync:bump", { detail: { channel, version } }));
+      } catch {}
     };
 
     const open = () => {
@@ -66,7 +76,7 @@ export default function GlobalSyncListener() {
           // 19 times every page load.
           if (prev === undefined) return;
           if (evt.version <= prev) return;
-          scheduleRefresh();
+          scheduleRefresh(evt.channel, evt.version);
         } catch {
           // Bad JSON — ignore individual frame, keep the connection alive.
         }

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { toBn } from "@/utils/toBn";
 import { useLang } from "@/lib/LanguageContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 import DashboardLayout from "@/components/DashboardLayout";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Toast from "@/components/Toast";
@@ -72,6 +73,9 @@ export default function BannersClient({ initialData }: { initialData?: InitialDa
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
+
+  // Live refresh — refetch when backend bumps these channels.
+  useSyncRefresh(["banners"], () => fetchAll(true));
 
   const openCreate = () => {
     setEditId(null);

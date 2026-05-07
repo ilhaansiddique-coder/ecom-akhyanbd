@@ -15,6 +15,7 @@ import InlineSelect from "@/components/InlineSelect";
 import StatusFilter from "@/components/StatusFilter";
 import { useLang } from "@/lib/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 
 interface User {
   id: string;
@@ -114,6 +115,11 @@ export default function UsersClient({ initialData }: { initialData?: InitialData
 
   // Reset page on filter change.
   useEffect(() => { setPage(1); }, [roleFilter, search]);
+
+  // Live refresh when staff/customers bumps arrive (e.g., a new user is
+  // created in Flutter or another admin tab). Background refetch — no
+  // loading skeleton flash.
+  useSyncRefresh(["staff", "customers"], () => fetchAll(true));
 
   // Clear selection whenever the visible list changes (filter / page / fetch).
   useEffect(() => { setSelectedIds([]); }, [roleFilter, search, page, users]);

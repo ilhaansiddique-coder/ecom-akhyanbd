@@ -35,6 +35,7 @@ import DateRangePicker from "@/components/DateRangePicker";
 import StatusFilter from "@/components/StatusFilter";
 import InlineSelect from "@/components/InlineSelect";
 import { useLang } from "@/lib/LanguageContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 import { theme } from "@/lib/theme";
 import { SafeNextImage } from "@/components/SafeImage";
 
@@ -376,6 +377,9 @@ export default function OrdersClient({ initialData }: { initialData?: InitialDat
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, [statusFilter, search, page, dateFrom, dateTo]);
+
+  // Live refresh — refetch when backend bumps these channels.
+  useSyncRefresh(["orders"], () => fetchAll(true));
 
   // Re-fetch whenever filter / search / page changes. SSR seeded the initial
   // list with page 1 unfiltered; skip the very first run when initialData is

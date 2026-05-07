@@ -14,6 +14,7 @@ import InlineSelect from "@/components/InlineSelect";
 import StatusFilter from "@/components/StatusFilter";
 import { SafeImg } from "@/components/SafeImage";
 import { useLang } from "@/lib/LanguageContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 import { theme } from "@/lib/theme";
 
 interface Review {
@@ -97,6 +98,9 @@ export default function ReviewsClient({ initialData }: { initialData?: InitialDa
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, [filter]);
+
+  // Live refresh — refetch when backend bumps these channels.
+  useSyncRefresh(["reviews"], () => fetchAll(true));
 
   const openEdit = (r: Review) => {
     setEditReview(r);

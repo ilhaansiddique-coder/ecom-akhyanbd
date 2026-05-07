@@ -13,6 +13,7 @@ import { TableSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
 import InlineSelect from "@/components/InlineSelect";
 import { useLang } from "@/lib/LanguageContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 
 interface Coupon {
   id: number;
@@ -76,6 +77,9 @@ export default function CouponsClient({ initialData }: { initialData?: InitialDa
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
+
+  // Live refresh — refetch when backend bumps these channels.
+  useSyncRefresh(["coupons"], () => fetchAll(true));
 
   const openCreate = () => {
     setEditId(null);

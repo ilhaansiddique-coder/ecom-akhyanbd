@@ -12,6 +12,7 @@ import Modal from "@/components/Modal";
 import { TableSkeleton } from "@/components/DashboardSkeleton";
 import { theme } from "@/lib/theme";
 import { useLang } from "@/lib/LanguageContext";
+import { useSyncRefresh } from "@/lib/useSyncRefresh";
 
 interface FlashSale {
   id: number;
@@ -67,6 +68,9 @@ export default function FlashSalesClient({ initialData }: { initialData?: Initia
       .catch(() => { if (!background) showToast(t("toast.loadError"), "error"); })
       .finally(() => setLoading(false));
   }, []);
+
+  // Live refresh — refetch when backend bumps these channels.
+  useSyncRefresh(["flash-sales"], () => fetchAll(true));
 
   const openCreate = () => {
     setEditId(null);
