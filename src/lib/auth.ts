@@ -82,6 +82,23 @@ export async function createToken(user: SessionUser): Promise<string> {
 }
 
 /**
+ * Detect whether the inbound request is over HTTPS. Production cookies
+ * with `Secure` set are silently dropped by browsers on plain-HTTP origins
+ * (which broke auth on the Coolify deploy that exposes only HTTP via
+ * sslip.io). We read `x-forwarded-proto` from the reverse proxy — Coolify,
+ * Vercel, and most other platforms set it. Falls back to NODE_ENV when no
+ * proxy header is present (covers `next start` on plain HTTP locally).
+ */
+async function isSecureRequest(): Promise<boolean> {
+  try {
+    const h = await headers();
+    const proto = h.get("x-forwarded-proto") || "";
+    if (proto) return proto.split(",")[0].trim().toLowerCase() === "https";
+  } catch { /* no request scope (e.g. background job) — fall through */ }
+  return process.env.NODE_ENV === "production";
+}
+
+/**
  * Set the session cookie with JWT token.
  */
 export async function setSessionCookie(user: SessionUser): Promise<void> {
@@ -89,7 +106,7 @@ export async function setSessionCookie(user: SessionUser): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await isSecureRequest(),
     sameSite: "lax",
     maxAge: MAX_AGE,
     path: "/",
@@ -103,7 +120,7 @@ export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await isSecureRequest(),
     sameSite: "lax",
     maxAge: 0,
     path: "/",
