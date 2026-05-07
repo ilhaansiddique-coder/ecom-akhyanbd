@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DashboardLayoutShell } from "@/components/DashboardLayout";
 import PwaRegister from "@/components/dashboard/PwaRegister";
+import GlobalSyncListener from "@/components/dashboard/GlobalSyncListener";
 import { getSessionUser } from "@/lib/auth";
 import { isStaffOrAdmin } from "@/lib/auth-helpers";
 
@@ -47,6 +48,11 @@ export default function DashboardRootLayout({ children }: { children: React.Reac
       {/* Registers /sw-dashboard.js + injects /api/dashboard/manifest link.
           Does nothing for non-staff users; auto-unregisters on logout. */}
       <PwaRegister />
+      {/* Single SSE consumer for the whole dashboard — refreshes the active
+          page on any backend bumpVersion. Without this, the web admin only
+          updates on full page navigation, even though the Flutter app and
+          other clients see changes in real time. */}
+      <GlobalSyncListener />
       {children}
     </DashboardLayoutShell>
   );
