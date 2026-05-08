@@ -40,6 +40,8 @@ export const TRACKED_CHANNELS = [
   // Admin / operational channels — added with the host-agnostic audit.
   "staff", "customers", "coupons", "shortlinks", "blog",
   "shipping", "fraud", "media", "form-submissions",
+  // Mobile editor surfaces.
+  "landing-pages", "feeds",
 ];
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;

@@ -3,6 +3,7 @@ import { jsonResponse, errorResponse, validationError } from "@/lib/api-response
 import { withStaff } from "@/lib/auth-helpers";
 import { loadFeedDefaults, loadFeedItems } from "@/lib/feedSource";
 import { feedDefaultsSchema } from "@/lib/validation";
+import { bumpVersion } from "@/lib/sync";
 
 // Lightweight stats for the /dashboard/feeds page. Counts how many products
 // + variant rows the feeds expose, plus the active flash-sale tally so admin
@@ -72,6 +73,10 @@ export const PUT = withStaff(async (request) => {
       })
     ));
 
+    // Mobile feed editor watches the `feeds` channel; tell connected
+    // clients to refetch defaults + stats so two admins editing in
+    // parallel see each other's saves.
+    bumpVersion("feeds");
     return jsonResponse({ message: "Saved" });
   } catch (e) {
     console.error("[Feeds] settings save error:", e);
