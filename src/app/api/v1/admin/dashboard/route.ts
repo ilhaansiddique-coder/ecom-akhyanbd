@@ -4,9 +4,25 @@ import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { withStaff } from "@/lib/auth-helpers";
 
-/** Parse YYYY-MM-DD (BD, UTC+6) → UTC Date at BD midnight */
+/**
+ * Parse a BD calendar date → UTC Date at BD midnight.
+ *
+ * Accepts either:
+ *   • Plain YYYY-MM-DD (e.g. "2026-05-09") — what the web admin sends.
+ *   • ISO 8601 datetime (e.g. "2026-05-09T17:59:59.999Z") — what the
+ *     Flutter app sends from the date-range picker. We slice off
+ *     everything past the date portion so both formats produce the
+ *     same BD-midnight anchor.
+ *
+ * Throws on garbage input so the route's try/catch returns a clean 400
+ * rather than passing NaN dates to Prisma (which 500s).
+ */
 function bdMidnightUtc(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
+  const datePart = dateStr.slice(0, 10); // "2026-05-09"
+  const [y, m, d] = datePart.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    throw new Error(`Invalid date param: "${dateStr}"`);
+  }
   // BD midnight = UTC midnight - 6 h
   return new Date(Date.UTC(y, m - 1, d) - 6 * 60 * 60 * 1000);
 }
@@ -29,8 +45,12 @@ export const GET = withStaff(async (request) => {
       dateFilter = {};
       if (fromParam) dateFilter.gte = bdMidnightUtc(fromParam);
       if (toParam) {
-        // Inclusive end — use start of NEXT BD day
-        const [y, m, d] = toParam.split("-").map(Number);
+        // Inclusive end — use start of NEXT BD day. Same forgiving slice
+        // as `bdMidnightUtc` so ISO 8601 strings from Flutter still parse.
+        const [y, m, d] = toParam.slice(0, 10).split("-").map(Number);
+        if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+          throw new Error(`Invalid 'to' param: "${toParam}"`);
+        }
         dateFilter.lt = new Date(Date.UTC(y, m - 1, d + 1) - BD_OFFSET_MS);
       }
     }
