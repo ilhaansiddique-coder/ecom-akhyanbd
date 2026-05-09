@@ -31,6 +31,22 @@ export const productListSelect = {
   updatedAt: true,
   category: { select: { id: true, name: true, slug: true } },
   brand: { select: { id: true, name: true, slug: true } },
+  // Slim variants for the Flutter product list card (chip grid showing
+  // `label : stock` per variant). We only include the four fields the
+  // card renders; price/sku/image/createdAt stay on the detail endpoint.
+  // Capped at 24 per product so a pathological "1 SKU per color" product
+  // can't blow up payload size.
+  variants: {
+    where: { isActive: true },
+    orderBy: { sortOrder: "asc" },
+    take: 24,
+    select: {
+      id: true,
+      label: true,
+      stock: true,
+      unlimitedStock: true,
+    },
+  },
 } satisfies Prisma.ProductSelect;
 
 // DETAIL view keeps full description + images JSON + variants array. The
@@ -88,8 +104,16 @@ export function shapeListProduct(p: ProductListRow) {
     updatedAt: p.updatedAt?.toISOString() ?? null,
     category: p.category,
     brand: p.brand,
-    // description/images/variants intentionally omitted from list — fetched
-    // by /m/products/[id] when the user opens the detail screen.
+    // Slim variants — list cards render `label : stock` chips. Detail
+    // endpoint still ships the full variant rows (price, sku, image, etc.).
+    variants: p.variants.map((v) => ({
+      id: v.id,
+      label: v.label,
+      stock: v.stock,
+      unlimitedStock: v.unlimitedStock,
+    })),
+    // description/images intentionally omitted from list — fetched by
+    // /m/products/[id] when the user opens the detail screen.
   };
 }
 
