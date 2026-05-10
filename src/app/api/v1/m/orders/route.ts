@@ -73,7 +73,11 @@ export const GET = withStaff(async (request) => {
             variantLabel: true,
             quantity: true,
             price: true,
-            product: { select: { image: true } },
+            // Join product so we can fall back to its current name/image
+            // when the OrderItem row has an empty `productName` (legacy
+            // rows from before the field was populated, or orders
+            // imported from external sources).
+            product: { select: { name: true, image: true } },
           },
         },
         _count: { select: { items: true } },
@@ -104,9 +108,16 @@ export const GET = withStaff(async (request) => {
     // Reshape items so the Flutter `AdminOrderItem.fromJson` parser
     // (lib/api/akhiyan_api.dart#~2037) gets the keys it expects:
     // `name`, `variantLabel`, `price`, `quantity`, `image`.
+    //
+    // `name` falls back to the joined product's current name when the
+    // OrderItem snapshot is empty. Same for `image`. Last resort is the
+    // product ID stringified so the card never shows a totally blank
+    // line.
     items: o.items.map((it) => ({
       productId: it.productId,
-      name: it.productName,
+      name: (it.productName && it.productName.trim().length > 0)
+        ? it.productName
+        : (it.product?.name ?? `Product #${it.productId}`),
       variantId: it.variantId,
       variantLabel: it.variantLabel,
       price: it.price,
