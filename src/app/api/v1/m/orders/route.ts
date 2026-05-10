@@ -45,6 +45,12 @@ export const GET = withStaff(async (request) => {
         id: true,
         customerName: true,
         customerPhone: true,
+        customerAddress: true,
+        city: true,
+        zipCode: true,
+        subtotal: true,
+        shippingCost: true,
+        discount: true,
         total: true,
         status: true,
         paymentMethod: true,
@@ -52,6 +58,24 @@ export const GET = withStaff(async (request) => {
         riskScore: true,
         courierSent: true,
         createdAt: true,
+        // Slim line items for the Flutter order card. We render at most
+        // two items per card (with `productName — variantLabel`, price ×
+        // qty, and a thumbnail joined from Product), so we cap at 4 to
+        // keep payloads small while still showing the second product in
+        // multi-line orders. The product image is the primary product
+        // image — variant-specific images aren't surfaced on the card.
+        items: {
+          take: 4,
+          select: {
+            productId: true,
+            productName: true,
+            variantId: true,
+            variantLabel: true,
+            quantity: true,
+            price: true,
+            product: { select: { image: true } },
+          },
+        },
         _count: { select: { items: true } },
       },
     }),
@@ -62,6 +86,12 @@ export const GET = withStaff(async (request) => {
     id: o.id,
     customerName: o.customerName,
     customerPhone: o.customerPhone,
+    customerAddress: o.customerAddress,
+    city: o.city,
+    zipCode: o.zipCode,
+    subtotal: o.subtotal,
+    shippingCost: o.shippingCost,
+    discount: o.discount,
     total: o.total,
     status: o.status,
     paymentMethod: o.paymentMethod,
@@ -71,6 +101,18 @@ export const GET = withStaff(async (request) => {
     itemCount: o._count.items,
     flagged: (o.riskScore ?? 0) >= 70,
     createdAt: o.createdAt?.toISOString() ?? null,
+    // Reshape items so the Flutter `AdminOrderItem.fromJson` parser
+    // (lib/api/akhiyan_api.dart#~2037) gets the keys it expects:
+    // `name`, `variantLabel`, `price`, `quantity`, `image`.
+    items: o.items.map((it) => ({
+      productId: it.productId,
+      name: it.productName,
+      variantId: it.variantId,
+      variantLabel: it.variantLabel,
+      price: it.price,
+      quantity: it.quantity,
+      image: it.product?.image ?? null,
+    })),
   }));
 
   return cachedJsonResponse({
