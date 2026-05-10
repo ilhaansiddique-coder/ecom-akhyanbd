@@ -55,7 +55,6 @@ export const NAV_TREE: NavGroup[] = [
       { i18nKey: "dash.products", label: "Products", icon: "box", webRoute: "/dashboard/products", mobileRoute: "/products" },
       { i18nKey: "dash.categories", label: "Categories", icon: "tag", webRoute: "/dashboard/categories", mobileRoute: "/categories" },
       { i18nKey: "dash.brands", label: "Brands", icon: "award", webRoute: "/dashboard/brands", mobileRoute: "/brands" },
-      { i18nKey: "dash.inventory", label: "Inventory", icon: "package", webRoute: "/dashboard/products", mobileRoute: "/inventory" },
     ],
   },
   {

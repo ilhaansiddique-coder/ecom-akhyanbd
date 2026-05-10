@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
@@ -27,12 +28,23 @@ function bdMidnightUtc(dateStr: string): Date {
   return new Date(Date.UTC(y, m - 1, d) - 6 * 60 * 60 * 1000);
 }
 
-export const GET = withStaff(async (request) => {
-  try {
-    const { searchParams } = request.nextUrl;
-    const fromParam = searchParams.get("from"); // YYYY-MM-DD BD
-    const toParam   = searchParams.get("to");   // YYYY-MM-DD BD
-
+/**
+ * Heavy aggregation kept out of the request handler so it can be wrapped in
+ * `unstable_cache`. ~18 parallel Prisma queries — running them on every
+ * dashboard hit hammered the 0.25-CU Neon compute and made first-paint feel
+ * like "multiple loads".
+ *
+ * Cached for 30 s and tagged so order/product writes auto-bust the entry
+ * via the existing `revalidateTag("orders" | "products")` calls in
+ * `lib/revalidate.ts`. The 'today' / last-7-days windows depend on wall
+ * clock time, but the 30 s TTL caps drift to at most that — fine for a
+ * dashboard that's manually refreshable anyway.
+ *
+ * Auth still happens in the wrapper (`withStaff`); this function only sees
+ * the date params, so caching doesn't leak per-user data.
+ */
+const loadDashboardPayload = unstable_cache(
+  async (fromParam: string | null, toParam: string | null) => {
     // BD timezone offset (UTC+6, no DST)
     const BD_OFFSET_MS = 6 * 60 * 60 * 1000;
     const nowMs = Date.now();
@@ -234,7 +246,7 @@ export const GET = withStaff(async (request) => {
     const shippedRevenue = Number(shippedRevAgg._sum.total || 0) - Number(shippedRevAgg._sum.shippingCost || 0);
     const todayShippedRevenue = Number(todayShippedRevAgg._sum.total || 0) - Number(todayShippedRevAgg._sum.shippingCost || 0);
 
-    return jsonResponse({
+    return {
       stats: serialize({
         // snake_case to match Stats interface in DashboardHomeClient
         total_orders: totalOrders,
@@ -297,7 +309,19 @@ export const GET = withStaff(async (request) => {
         }
         return { id: p.id, name: p.name, stock: p.stock, image: p.image ?? null };
       }),
-    });
+    };
+  },
+  ["dashboard-payload"],
+  { tags: ["dashboard", "orders", "products"], revalidate: 30 },
+);
+
+export const GET = withStaff(async (request) => {
+  try {
+    const { searchParams } = request.nextUrl;
+    const fromParam = searchParams.get("from");
+    const toParam = searchParams.get("to");
+    const payload = await loadDashboardPayload(fromParam, toParam);
+    return jsonResponse(payload);
   } catch (error) {
     console.error("Dashboard error:", error);
     return errorResponse("Failed to fetch dashboard data", 500);

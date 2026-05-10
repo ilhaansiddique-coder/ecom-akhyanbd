@@ -140,10 +140,18 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
       {
+        // /uploads/* must allow cross-origin reads so the Flutter app
+        // (CanvasKit renderer fetches images via XHR which enforces CORS)
+        // and any other off-origin client can render product/brand images.
+        // The middleware matcher skips paths with extensions, so CORS for
+        // these static files has to live here in next.config headers.
         source: "/uploads/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
         ],
       },
       {
