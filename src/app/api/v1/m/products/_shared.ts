@@ -31,6 +31,12 @@ export const productListSelect = {
   updatedAt: true,
   category: { select: { id: true, name: true, slug: true } },
   brand: { select: { id: true, name: true, slug: true } },
+  // Multi-category names for Flutter product list card subtitle.
+  // Capped at 8 so a product in every tag doesn't blow up payload size.
+  categories: {
+    take: 8,
+    select: { id: true, name: true, slug: true },
+  },
   // Slim variants for the Flutter product list card (chip grid showing
   // `label : stock` per variant). We only include the four fields the
   // card renders; price/sku/image/createdAt stay on the detail endpoint.
@@ -43,6 +49,8 @@ export const productListSelect = {
     select: {
       id: true,
       label: true,
+      price: true,
+      originalPrice: true,
       stock: true,
       unlimitedStock: true,
     },
@@ -109,9 +117,12 @@ export function shapeListProduct(p: ProductListRow) {
     brand: p.brand,
     // Slim variants — list cards render `label : stock` chips. Detail
     // endpoint still ships the full variant rows (price, sku, image, etc.).
+    categories: p.categories,
     variants: p.variants.map((v) => ({
       id: v.id,
       label: v.label,
+      price: v.price,
+      originalPrice: v.originalPrice,
       stock: v.stock,
       unlimitedStock: v.unlimitedStock,
     })),

@@ -14,7 +14,7 @@ class ApiError extends Error {
 async function fetchAPI(endpoint: string, options?: RequestInit) {
   const url = `${API_URL}${endpoint}`;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(new Error("Request timeout after 30s")), 30000);
 
   try {
     const res = await fetch(url, {

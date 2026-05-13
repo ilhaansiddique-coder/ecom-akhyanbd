@@ -262,17 +262,19 @@ export const POST = withStaff(async (request) => {
 
       // Decrement stock for tracked products. Skips unlimitedStock SKUs
       // and lines whose product wasn't in the verified set.
-      for (const i of verifiedItems) {
-        const p = productMap.get(i.productId);
-        if (!p || p.unlimitedStock) continue;
-        await tx.product.update({
-          where: { id: i.productId },
-          data: { stock: { decrement: i.quantity }, soldCount: { increment: i.quantity } },
-        });
-      }
+      await Promise.all(
+        verifiedItems.map((i) => {
+          const p = productMap.get(i.productId);
+          if (!p || p.unlimitedStock) return Promise.resolve();
+          return tx.product.update({
+            where: { id: i.productId },
+            data: { stock: { decrement: i.quantity }, soldCount: { increment: i.quantity } },
+          });
+        }),
+      );
 
       return order.id;
-    });
+    }, { timeout: 30000 });
   } catch (e) {
     console.error("[m/orders] create failed:", e);
     const msg = e instanceof Error ? e.message : "Failed to create order";

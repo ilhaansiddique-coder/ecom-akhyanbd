@@ -86,6 +86,7 @@ const loadDashboardPayload = unstable_cache(
       cancelledRevResult,
       totalCustomers,
       totalProducts,
+      flaggedOrdersCount,
       pendingOrders,
       lowStockCount,
       recentOrders,
@@ -120,6 +121,8 @@ const loadDashboardPayload = unstable_cache(
       }),
       prisma.user.count({ where: { role: "customer" } }),
       prisma.product.count(),
+      // Flagged/suspect orders (riskScore >= 70)
+      prisma.order.count({ where: { riskScore: { gte: 70 }, ...createdAtFilter } }),
       // activeProducts removed — not consumed by the frontend Stats interface
       prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),
       // Low-stock count — threshold ≤10, split simple vs variable.
@@ -265,6 +268,7 @@ const loadDashboardPayload = unstable_cache(
         today_shipped: todayShippedCount,
         today_shipped_revenue: todayShippedRevenue,
         shipped_customers: shippedCustomerGroups.length,
+        flagged_orders_count: flaggedOrdersCount,
       }),
       order_counts: {
         pending:   orderCounts.pending   || 0,
