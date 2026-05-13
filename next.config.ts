@@ -27,6 +27,16 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
+        hostname: "akhiyanbd.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.akhiyanbd.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
         hostname: "mavesoj.com",
         pathname: "/**",
       },
