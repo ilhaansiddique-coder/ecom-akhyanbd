@@ -29,7 +29,8 @@ export default async function UsersPage() {
     }));
 
     return <UsersClient initialData={{ items, total }} />;
-  } catch {
+  } catch (err) {
+    console.error("[users SSR] failed to load user list:", err);
     return <UsersClient initialData={{ items: [], total: 0 }} />;
   }
 }

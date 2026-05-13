@@ -167,12 +167,18 @@ export async function* eventStream(opts: { signal?: AbortSignal } = {}): AsyncGe
   }
 }
 
-/** Polling interval for the Redis stream reader. 5s is tuned for Upstash
- * free tier: ~5.8K commands/day per connected admin, well under the 10K
- * daily cap. Drop to 1500ms for sub-second latency once on a paid plan
- * (~$0.10/admin/day at Upstash $0.20/100K). Latency at 5s is fine for an
- * admin app — the bell badge ticks within 5 seconds of an order. */
-const POLL_INTERVAL_MS = 5000;
+/** Polling interval for the Redis stream reader. Set to 500ms for
+ * sub-second cross-admin latency — what an admin app needs to feel
+ * "live" rather than "polled". Cost trade-off: at 500ms a connected
+ * admin uses ~172.8K Redis commands/day (~$0.35/admin/day on Upstash
+ * pay-as-you-go at $0.20/100K commands). Upstash free tier (10K/day)
+ * is not viable at this rate — must be on a paid plan, or raise the
+ * interval back to 1500ms / 5000ms.
+ *
+ * In dev mode without Redis configured (`useRedis === false`), this
+ * value is unused — events fan out instantly via the in-process
+ * EventEmitter, so local dev already feels real-time. */
+const POLL_INTERVAL_MS = 500;
 
 /** MGET-based polling reader.
  *

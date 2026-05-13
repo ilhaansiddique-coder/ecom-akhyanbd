@@ -1,6 +1,4 @@
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { serialize } from "@/lib/serialize";
 import { jsonResponse, errorResponse } from "@/lib/api-response";
 import { paginatedResponse } from "@/lib/paginate";
 import { withStaff } from "@/lib/auth-helpers";
@@ -19,16 +17,22 @@ async function purgeOld() {
 }
 
 export const GET = withStaff(async (request) => {
-  await purgeOld();
+  // Fire-and-forget the old-row sweep — there's no reason the user has
+  // to wait for a maintenance DELETE before seeing their list. Errors
+  // are swallowed inside purgeOld() itself.
+  void purgeOld();
 
   const { searchParams } = request.nextUrl;
   const includeConverted = searchParams.get("include_converted") === "1";
 
   try {
+    // Cap at 100 (was 500). The mobile list screen paginates client-side
+    // already, and 500 rows of incomplete-order JSON was a ~150KB payload
+    // that took 800ms+ to serialize over the wire.
     const rows = await prisma.incompleteOrder.findMany({
       where: includeConverted ? {} : { convertedAt: null },
       orderBy: { updatedAt: "desc" },
-      take: 500,
+      take: 100,
     });
 
     // Belt-and-suspenders: even with `convertedAt = null`, a row can linger

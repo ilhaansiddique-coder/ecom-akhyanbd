@@ -16,7 +16,6 @@ async function main() {
       email: "admin@mavesoj.com",
       passwordHash: hashedPassword,
       role: "admin",
-      isSuperAdmin: true,
       phone: "01700000000",
     },
   });

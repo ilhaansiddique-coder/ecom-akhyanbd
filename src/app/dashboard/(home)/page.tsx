@@ -59,7 +59,7 @@ export default async function DashboardServerPage() {
         where: { status: "cancelled", createdAt: { gte: today } },
       }),
       prisma.product.count(),
-      prisma.user.count({ where: { isSuperAdmin: false } }),
+      prisma.user.count({ where: { role: { not: "admin" } } }),
       // Only select columns the dashboard actually renders â€” avoids pulling
       // address, notes, createdBy, etc. over the wire.
       prisma.order.findMany({
@@ -254,7 +254,8 @@ export default async function DashboardServerPage() {
         }}
       />
     );
-  } catch {
+  } catch (err) {
+    console.error("[dashboard SSR] failed to load admin stats:", err);
     return <DashboardPage />;
   }
 }

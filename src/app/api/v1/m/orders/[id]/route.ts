@@ -114,7 +114,23 @@ export const PATCH = withStaff<{ params: Promise<{ id: string }> }>(async (reque
 
     await prisma.order.update({ where: { id: orderId }, data: updateData });
     revalidateAll("orders");
-    bumpVersion("orders");
+    // Attach a notify payload when the status changed so other admins
+    // (web + Flutter) see a bell-badged notification, not just a silent
+    // cache invalidation. Skipped when only paymentStatus/notes changed
+    // to avoid noise.
+    if (updateData.status !== undefined &&
+        updateData.status !== existing.status) {
+      bumpVersion("orders", {
+        kind: "order.status_changed",
+        title: `Order #${orderId} → ${String(updateData.status)}`,
+        body: `Status was ${existing.status}`,
+        href: `/orders/${orderId}`,
+        icon: "shopping_bag",
+        severity: updateData.status === "cancelled" ? "warn" : "info",
+      });
+    } else {
+      bumpVersion("orders");
+    }
     const data = await shapeOrder(orderId);
     return jsonResponse({ data });
   } catch (error) {
