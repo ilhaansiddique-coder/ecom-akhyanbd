@@ -157,13 +157,24 @@ function MiniCalendar({
           const inRange = lo && hi && cell.date >= lo && cell.date <= hi;
           const isEndpoint = isStart || isEnd;
 
+          // Stagger: in-range cells fade their bg in sequentially from `lo` → `hi`
+          // (and from `hi` → `lo` when the user is dragging backwards). Distance
+          // measured in days; 18ms per step keeps the sweep snappy but readable.
+          let staggerDelayMs = 0;
+          if (inRange && !isEndpoint && lo) {
+            const cellMs = new Date(cell.date).getTime();
+            const anchorMs = new Date(lo).getTime();
+            const days = Math.round((cellMs - anchorMs) / 86400000);
+            staggerDelayMs = Math.max(0, days) * 18;
+          }
+
           return (
             <div
               key={cell.date}
               onClick={() => onDateClick(cell.date)}
               onMouseEnter={() => onDateHover(cell.date)}
               className={`
-                relative h-8 flex items-center justify-center text-xs cursor-pointer transition-all
+                relative h-8 flex items-center justify-center text-xs cursor-pointer transition-all duration-200 ease-out
                 ${inRange && !isEndpoint ? "bg-[var(--primary)]/10" : ""}
                 ${isEndpoint ? "bg-[var(--primary)] text-white rounded-lg font-semibold shadow-sm" : ""}
                 ${!isEndpoint && !inRange ? "hover:bg-gray-100 rounded-lg" : ""}
@@ -172,8 +183,19 @@ function MiniCalendar({
                 ${inRange && isEnd && !isStart ? "rounded-r-lg rounded-l-none" : ""}
                 ${inRange && isStart && isEnd ? "rounded-lg" : ""}
               `}
+              style={staggerDelayMs ? { transitionDelay: `${staggerDelayMs}ms` } : undefined}
             >
-              <span className="relative z-10">{toBn(cell.day)}</span>
+              {/* Inner span gets a one-shot pop when the cell becomes an
+                  endpoint. Keyed on isEndpoint so React remounts on transition,
+                  which retriggers the CSS keyframe; non-endpoint state is keyed
+                  separately so the pop doesn't fire on every render. */}
+              <span
+                key={isEndpoint ? `${cell.date}-ep` : `${cell.date}-cell`}
+                className="relative z-10"
+                style={isEndpoint ? { animation: "endpointPop 320ms cubic-bezier(0.34, 1.56, 0.64, 1)" } : undefined}
+              >
+                {toBn(cell.day)}
+              </span>
               {isToday && !isEndpoint && (
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--primary)]" />
               )}
@@ -201,6 +223,11 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
   const [tempStart, setTempStart] = useState(from);
   const [tempEnd, setTempEnd] = useState(to);
   const [hoverDate, setHoverDate] = useState("");
+
+  // Month-flip direction: "next" → grid slides in from the right;
+  // "prev" → grid slides in from the left. Reset to "" once the
+  // animation settles so the initial mount doesn't slide.
+  const [slideDir, setSlideDir] = useState<"" | "next" | "prev">("");
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -231,10 +258,12 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
   };
 
   const prevMonth = () => {
+    setSlideDir("prev");
     if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
     else setViewMonth(viewMonth - 1);
   };
   const nextMonth = () => {
+    setSlideDir("next");
     if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
     else setViewMonth(viewMonth + 1);
   };
@@ -351,9 +380,25 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
                 </button>
               </div>
 
-              {/* Calendar grids — single on mobile, double on desktop */}
-              <div className="flex gap-4">
-                <div className="w-full md:w-56">
+              {/* Calendar grids — single on mobile, double on desktop.
+                  Each grid is keyed by `viewMonth-viewYear` so React remounts
+                  it when the user pages, retriggering the slide-in keyframe.
+                  Direction (`slideDir`) flips the animation between
+                  `slideInRight` and `slideInLeft`. */}
+              <div className="flex gap-4 overflow-hidden">
+                <div
+                  key={`m1-${viewYear}-${viewMonth}`}
+                  className="w-full md:w-56"
+                  style={
+                    slideDir
+                      ? {
+                          animation: `${
+                            slideDir === "next" ? "slideInRight" : "slideInLeft"
+                          } 220ms ease-out`,
+                        }
+                      : undefined
+                  }
+                >
                   <MiniCalendar
                     month={viewMonth}
                     year={viewYear}
@@ -366,7 +411,19 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
                   />
                 </div>
                 <div className="w-px bg-gray-100 hidden md:block" />
-                <div className="w-56 hidden md:block">
+                <div
+                  key={`m2-${year2}-${month2}`}
+                  className="w-56 hidden md:block"
+                  style={
+                    slideDir
+                      ? {
+                          animation: `${
+                            slideDir === "next" ? "slideInRight" : "slideInLeft"
+                          } 220ms ease-out 40ms both`,
+                        }
+                      : undefined
+                  }
+                >
                   <MiniCalendar
                     month={month2}
                     year={year2}
@@ -415,6 +472,23 @@ export default function DateRangePicker({ from, to, onChange }: DateRangePickerP
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(-4px) scale(0.98); }
           to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        /* Endpoint cells (start + end of range) pop with a spring overshoot
+           when first selected. The cubic-bezier on the wrapping span class
+           does the spring; this keyframe just supplies the scale ramp. */
+        @keyframes endpointPop {
+          0%   { transform: scale(0.65); }
+          55%  { transform: scale(1.18); }
+          100% { transform: scale(1); }
+        }
+        /* Month flip — grid slides in from the side the user paged toward. */
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(14px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInLeft {
+          from { opacity: 0; transform: translateX(-14px); }
+          to   { opacity: 1; transform: translateX(0); }
         }
       `}</style>
     </div>
