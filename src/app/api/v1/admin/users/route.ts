@@ -19,7 +19,7 @@ export const GET = withAdmin(async (request) => {
   const search = searchParams.get("search");
 
   const where: Prisma.UserWhereInput = {};
-  if (role) where.isSuperAdmin = role === "admin";
+  if (role) where.role = role;
   if (search) {
     where.OR = [
       { fullName: { contains: search, mode: "insensitive" } },
@@ -36,7 +36,7 @@ export const GET = withAdmin(async (request) => {
         email: true,
         phone: true,
         image: true,
-        isSuperAdmin: true,
+        role: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -54,7 +54,7 @@ export const GET = withAdmin(async (request) => {
     email: u.email,
     phone: u.phone,
     address: "", // Address is a separate model, return empty for now
-    role: u.isSuperAdmin ? "admin" : "customer",
+    role: u.role,
     avatar: u.image,
     created_at: u.createdAt,
     updated_at: u.updatedAt,
@@ -84,7 +84,7 @@ export const POST = withAdmin(async (request) => {
         email: data.email,
         passwordHash: hashedPassword,
         phone: data.phone ?? null,
-        isSuperAdmin: data.role === "admin",
+        role: data.role || "customer",
       },
     });
 
@@ -96,7 +96,7 @@ export const POST = withAdmin(async (request) => {
         email: true,
         phone: true,
         image: true,
-        isSuperAdmin: true,
+        role: true,
         createdAt: true,
       },
     });
@@ -108,13 +108,13 @@ export const POST = withAdmin(async (request) => {
       email: created!.email,
       phone: created!.phone,
       address: "",
-      role: created!.isSuperAdmin ? "admin" : "customer",
+      role: created!.role,
       avatar: created!.image,
       created_at: created!.createdAt,
     };
 
     // Admin/staff users land on the staff channel; customers on customers.
-    const isStaff = !!created!.isSuperAdmin;
+    const isStaff = created!.role === "admin";
     bumpVersion(isStaff ? "staff" : "customers", {
       kind: isStaff ? "staff.created" : "customer.created",
       title: isStaff ? "Staff added" : "Customer added",

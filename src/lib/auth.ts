@@ -9,20 +9,14 @@ const COOKIE_NAME = "akhiyan_session";
 const MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
 export interface SessionUser {
-  id: string;
+  id: number;
   name: string;
   email: string;
   phone?: string | null;
   role: string;
 }
 
-/**
- * Single source of truth for deriving the JWT `role` claim from a User row.
- * Respects the `role` column (so DB-set "staff" reaches `requireStaff()`)
- * and promotes `isSuperAdmin` users to "admin" regardless of their stored role.
- */
-export function deriveRole(user: { role?: string | null; isSuperAdmin?: boolean | null }): string {
-  if (user.isSuperAdmin) return "admin";
+export function deriveRole(user: { role?: string | null }): string {
   const r = (user.role || "customer").toLowerCase();
   if (r === "admin" || r === "staff") return r;
   return "customer";
@@ -34,7 +28,7 @@ export function deriveRole(user: { role?: string | null; isSuperAdmin?: boolean 
  * the three endpoints stay in sync.
  */
 export interface PublicUser {
-  id: string;
+  id: number;
   name: string | null;
   email: string;
   phone: string | null;
@@ -44,12 +38,11 @@ export interface PublicUser {
 }
 
 export function serializePublicUser(user: {
-  id: string;
+  id: number;
   fullName: string | null;
   email: string;
   phone: string | null;
   role?: string | null;
-  isSuperAdmin?: boolean | null;
   image: string | null;
   createdAt: Date | null;
 }): PublicUser {
@@ -146,7 +139,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
     const { payload } = await jwtVerify(token, SECRET);
     return {
-      id: payload.id as string,
+      id: payload.id as number,
       name: payload.name as string,
       email: payload.email as string,
       phone: (payload.phone as string | null) || null,

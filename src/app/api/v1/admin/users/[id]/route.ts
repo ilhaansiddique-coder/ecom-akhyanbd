@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import { bumpVersion } from "@/lib/sync";
 
 export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }) => {
-  const { id } = await params;
+  const id = Number((await params).id);
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return notFound("User not found");
 
@@ -26,7 +26,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
       fullName: data.name,
       email: data.email,
       phone: data.phone ?? null,
-      isSuperAdmin: data.role === "admin",
+      role: data.role || "customer",
     };
 
     if (data.password) {
@@ -39,7 +39,7 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
     });
 
     const { passwordHash, ...userWithoutPassword } = user;
-    const isStaff = !!user.isSuperAdmin;
+    const isStaff = user.role === "admin";
     bumpVersion(isStaff ? "staff" : "customers", {
       kind: isStaff ? "staff.updated" : "customer.updated",
       title: isStaff ? "Staff updated" : "Customer updated",
@@ -55,13 +55,13 @@ export const PUT = withAdmin<{ params: Promise<{ id: string }> }>(async (request
 });
 
 export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }) => {
-  const { id } = await params;
+  const id = Number((await params).id);
   const existing = await prisma.user.findUnique({ where: { id } });
   if (!existing) return notFound("User not found");
 
   try {
     await prisma.user.delete({ where: { id } });
-    const wasStaff = !!existing.isSuperAdmin;
+    const wasStaff = existing.role === "admin";
     bumpVersion(wasStaff ? "staff" : "customers", {
       kind: wasStaff ? "staff.deleted" : "customer.deleted",
       title: wasStaff ? "Staff removed" : "Customer removed",

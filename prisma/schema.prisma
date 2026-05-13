@@ -9,20 +9,20 @@ datasource db {
 }
 
 model User {
-  id                  String    @id @default(uuid())
-  email               String    @unique
-  fullName            String?   @map("full_name")
-  passwordHash        String?   @map("password_hash")
-  phone               String?
-  address             String?
-  role                String    @default("customer")
-  image               String?
-  emailVerified       Boolean   @default(false) @map("email_verified")
-  isSuperAdmin        Boolean   @default(false) @map("is_super_admin")
-  mustResetPassword   Boolean   @default(false) @map("must_reset_password")
-  lastSignInAt        DateTime? @map("last_sign_in_at")
-  createdAt           DateTime? @default(now()) @map("created_at")
-  updatedAt           DateTime? @updatedAt @map("updated_at")
+  id              Int       @id @default(autoincrement())
+  email           String    @unique
+  fullName        String?   @map("name")
+  passwordHash    String?   @map("password")
+  phone           String?
+  address         String?
+  role            String    @default("customer")
+  image           String?   @map("avatar")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  provider        String?
+  providerId      String?   @map("provider_id")
+  rememberToken   String?   @map("remember_token")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
 
   orders    Order[]
   wishlists Wishlist[]
@@ -157,7 +157,7 @@ model FlashSaleProduct {
 
 model Order {
   id              Int       @id @default(autoincrement())
-  userId          String?   @map("user_id")
+  userId          Int?   @map("user_id")
   customerName    String    @map("customer_name")
   customerPhone   String    @map("customer_phone")
   customerEmail   String?   @map("customer_email")
@@ -321,7 +321,7 @@ model OrderItem {
 model Review {
   id           Int       @id @default(autoincrement())
   productId    Int       @map("product_id")
-  userId       String?   @map("user_id")
+  userId       Int?   @map("user_id")
   customerName String    @map("customer_name")
   rating       Int
   review       String
@@ -339,7 +339,7 @@ model Review {
 
 model Wishlist {
   id        Int       @id @default(autoincrement())
-  userId    String   @map("user_id")
+  userId    Int   @map("user_id")
   productId Int       @map("product_id")
   createdAt DateTime? @default(now()) @map("created_at")
   updatedAt DateTime? @updatedAt @map("updated_at")
@@ -383,7 +383,7 @@ model ShippingZone {
 
 model Address {
   id        Int       @id @default(autoincrement())
-  userId    String   @map("user_id")
+  userId    Int   @map("user_id")
   label     String
   name      String
   phone     String
@@ -521,7 +521,7 @@ model BlogPost {
   metaDescription String?   @map("meta_description") @db.Text
   metaKeywords    String?   @map("meta_keywords") @db.Text
   ogImage         String?   @map("og_image")
-  authorId        String?   @map("author_id")
+  authorId        Int?   @map("author_id")
   isPublished     Boolean   @default(false) @map("is_published")
   publishedAt     DateTime? @map("published_at")
   createdAt       DateTime? @default(now()) @map("created_at")
@@ -576,7 +576,7 @@ model IncompleteOrder {
   subtotal     Float     @default(0)
   shippingCost Float     @default(0) @map("shipping_cost")
   total        Float     @default(0)
-  userId          String?   @map("user_id")
+  userId          Int?   @map("user_id")
   source       String?   // "checkout" | "lp:slug" — which form captured it
   convertedAt  DateTime? @map("converted_at") // set when matching order placed
   createdAt    DateTime? @default(now()) @map("created_at")

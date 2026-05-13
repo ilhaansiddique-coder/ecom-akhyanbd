@@ -9,7 +9,7 @@ import { withAdmin } from "@/lib/auth-helpers";
 //             orders: OrderListItem[] } }
 export const GET = withAdmin<{ params: Promise<{ id: string }> }>(
   async (_request, { params }) => {
-    const { id } = await params;
+    const id = Number((await params).id);
 
     const user = await prisma.user.findUnique({
       where: { id },

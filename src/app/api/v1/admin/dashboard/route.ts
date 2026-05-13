@@ -118,7 +118,7 @@ const loadDashboardPayload = unstable_cache(
         _sum: { total: true, shippingCost: true },
         where: { status: "cancelled", ...createdAtFilter },
       }),
-      prisma.user.count({ where: { isSuperAdmin: false } }),
+      prisma.user.count({ where: { role: "customer" } }),
       prisma.product.count(),
       // activeProducts removed — not consumed by the frontend Stats interface
       prisma.order.count({ where: { status: "pending", ...createdAtFilter } }),

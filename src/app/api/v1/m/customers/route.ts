@@ -13,7 +13,7 @@ export const GET = withAdmin(async (request) => {
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 20));
   const q = searchParams.get("q")?.trim();
 
-  const where: Prisma.UserWhereInput = { isSuperAdmin: false };
+  const where: Prisma.UserWhereInput = { role: "customer" };
   if (q) {
     where.OR = [
       { fullName: { contains: q, mode: "insensitive" } },

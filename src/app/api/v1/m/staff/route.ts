@@ -8,19 +8,17 @@ import { bumpVersion } from "@/lib/sync";
 import { revalidateAll } from "@/lib/revalidate";
 
 type StaffRow = {
-  id: string;
+  id: number;
   fullName: string | null;
   email: string;
   phone: string | null;
   image: string | null;
   role: string;
-  isSuperAdmin: boolean;
   createdAt: Date | null;
 };
 
 function toStaffDto(u: StaffRow) {
-  // role: "admin" wins if isSuperAdmin even when the column says otherwise.
-  const role = u.isSuperAdmin ? "admin" : u.role;
+  const role = u.role === "admin" ? "admin" : u.role;
   return {
     id: u.id,
     name: u.fullName ?? "",
@@ -34,7 +32,7 @@ function toStaffDto(u: StaffRow) {
 
 export const GET = withAdmin(async (_request) => {
   const where: Prisma.UserWhereInput = {
-    OR: [{ role: { in: ["admin", "staff"] } }, { isSuperAdmin: true }],
+    role: { in: ["admin", "staff"] },
   };
 
   const users = await prisma.user.findMany({
@@ -47,7 +45,6 @@ export const GET = withAdmin(async (_request) => {
       phone: true,
       image: true,
       role: true,
-      isSuperAdmin: true,
       createdAt: true,
     },
   });
@@ -78,8 +75,7 @@ export const POST = withAdmin(async (request) => {
         email,
         passwordHash,
         phone: data.phone ?? null,
-        role: data.role,
-        isSuperAdmin: data.role === "admin",
+        role: data.role || "customer",
       },
       select: {
         id: true,
@@ -88,7 +84,6 @@ export const POST = withAdmin(async (request) => {
         phone: true,
         image: true,
         role: true,
-        isSuperAdmin: true,
         createdAt: true,
       },
     });

@@ -11,7 +11,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
-    select: { id: true, fullName: true, email: true, phone: true, role: true, isSuperAdmin: true, image: true, createdAt: true },
+    select: { id: true, fullName: true, email: true, phone: true, role: true, image: true, createdAt: true },
   });
 
   if (!user) return unauthorized();

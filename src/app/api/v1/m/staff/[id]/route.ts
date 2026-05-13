@@ -7,18 +7,17 @@ import { bumpVersion } from "@/lib/sync";
 import { revalidateAll } from "@/lib/revalidate";
 
 type StaffRow = {
-  id: string;
+  id: number;
   fullName: string | null;
   email: string;
   phone: string | null;
   image: string | null;
   role: string;
-  isSuperAdmin: boolean;
   createdAt: Date | null;
 };
 
 function toStaffDto(u: StaffRow) {
-  const role = u.isSuperAdmin ? "admin" : u.role;
+  const role = u.role === "admin" ? "admin" : u.role;
   return {
     id: u.id,
     name: u.fullName ?? "",
@@ -37,12 +36,11 @@ const staffSelect = {
   phone: true,
   image: true,
   role: true,
-  isSuperAdmin: true,
   createdAt: true,
 } satisfies Prisma.UserSelect;
 
 export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (request, { params }, admin) => {
-  const { id } = await params;
+  const id = Number((await params).id);
 
   const existing = await prisma.user.findUnique({ where: { id }, select: staffSelect });
   if (!existing) return notFound("Staff member not found");
@@ -67,7 +65,6 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
     if (input.phone !== undefined) data.phone = input.phone ?? null;
     if (input.role !== undefined) {
       data.role = input.role;
-      data.isSuperAdmin = input.role === "admin";
     }
 
     if (Object.keys(data).length === 0) return errorResponse("Nothing to update", 400);
@@ -88,7 +85,7 @@ export const PATCH = withAdmin<{ params: Promise<{ id: string }> }>(async (reque
 });
 
 export const DELETE = withAdmin<{ params: Promise<{ id: string }> }>(async (_request, { params }, admin) => {
-  const { id } = await params;
+  const id = Number((await params).id);
 
   if (id === admin.id) {
     return forbidden("You cannot delete yourself.");

@@ -57,6 +57,9 @@ export const productDetailSelect = {
   description: true,
   images: true,
   variationType: true,
+  categories: {
+    select: { id: true, name: true, slug: true },
+  },
   variants: {
     orderBy: { sortOrder: "asc" },
     select: {
@@ -123,6 +126,7 @@ export function shapeDetailProduct(p: ProductDetailRow) {
     description: p.description,
     images: p.images,
     variationType: p.variationType,
+    categories: p.categories,
     variants: p.variants.map((v) => ({
       id: v.id,
       productId: v.productId,

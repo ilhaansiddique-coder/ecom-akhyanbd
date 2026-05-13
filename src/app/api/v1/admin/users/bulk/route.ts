@@ -30,9 +30,9 @@ export const POST = withAdmin(async (request, _ctx, admin) => {
   }
   const { action, ids: rawIds = [], role } = parsed.data;
   const ids = rawIds
-    .map((x) => (typeof x === "string" ? x : String(x ?? "")))
-    .filter((s: string) => s.length > 0)
-    .filter((s: string) => s !== admin.id);
+    .map((x) => Number(typeof x === "string" ? x : String(x ?? "")))
+    .filter((n: number) => !isNaN(n) && n > 0)
+    .filter((n: number) => n !== admin.id);
 
   if (ids.length === 0) {
     return validationError({ ids: ["No valid ids provided (or only the current admin was selected)"] });
